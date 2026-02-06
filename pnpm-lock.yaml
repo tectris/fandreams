@@ -60,6 +60,9 @@ importers:
       '@types/jsonwebtoken':
         specifier: ^9.0.0
         version: 9.0.10
+      drizzle-kit:
+        specifier: ^0.30.0
+        version: 0.30.6
       tsup:
         specifier: ^8.3.0
         version: 8.5.1(jiti@2.6.1)(postcss@8.5.6)(tsx@4.21.0)(typescript@5.9.3)
