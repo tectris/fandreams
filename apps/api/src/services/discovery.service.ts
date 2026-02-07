@@ -72,11 +72,10 @@ export async function searchCreators(query: string, limit = 20) {
       subscriptionPrice: creatorProfiles.subscriptionPrice,
     })
     .from(users)
-    .innerJoin(creatorProfiles, eq(creatorProfiles.userId, users.id))
+    .leftJoin(creatorProfiles, eq(creatorProfiles.userId, users.id))
     .where(
       and(
         eq(users.isActive, true),
-        eq(users.role, 'creator'),
         or(ilike(users.username, searchTerm), ilike(users.displayName, searchTerm), ilike(users.bio, searchTerm)),
       ),
     )
