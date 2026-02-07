@@ -14,15 +14,21 @@ import fancoins from './routes/fancoins'
 import gamification from './routes/gamification'
 import discovery from './routes/discovery'
 import feed from './routes/feed'
+import upload from './routes/upload'
 
 const app = new Hono().basePath('/api/v1')
 
 app.use('*', logger())
 app.use('*', secureHeaders())
+const corsOrigins = [env.NEXT_PUBLIC_APP_URL, 'http://localhost:3000']
+if (env.CORS_ORIGINS) {
+  corsOrigins.push(...env.CORS_ORIGINS.split(',').map((o) => o.trim()))
+}
+
 app.use(
   '*',
   cors({
-    origin: [env.NEXT_PUBLIC_APP_URL, 'http://localhost:3000'],
+    origin: corsOrigins,
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization'],
@@ -38,6 +44,7 @@ app.route('/fancoins', fancoins)
 app.route('/gamification', gamification)
 app.route('/discover', discovery)
 app.route('/feed', feed)
+app.route('/upload', upload)
 
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }))
 
