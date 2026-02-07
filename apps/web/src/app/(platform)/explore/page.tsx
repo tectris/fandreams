@@ -20,11 +20,31 @@ export default function ExplorePage() {
   const { data: creators } = useQuery({
     queryKey: ['discover', searchQuery],
     queryFn: async () => {
-      const path = searchQuery ? `/discover/search?q=${encodeURIComponent(searchQuery)}` : '/discover'
+      const path = searchQuery
+        ? `/discover/search?q=${encodeURIComponent(searchQuery)}`
+        : '/discover'
       const res = await api.get<any[]>(path)
       return res.data
     },
   })
+
+  // Search all users (not just creators) when there's a search query
+  const { data: userResults } = useQuery({
+    queryKey: ['discover-users', searchQuery],
+    queryFn: async () => {
+      const res = await api.get<any[]>(`/discover/search/users?q=${encodeURIComponent(searchQuery)}`)
+      return res.data
+    },
+    enabled: searchQuery.length >= 2,
+  })
+
+  // Merge: show creator results first, then add any users not already in creator results
+  const searchResults = searchQuery && creators && userResults
+    ? [
+        ...creators,
+        ...userResults.filter((u: any) => !creators.some((c: any) => c.id === u.id)),
+      ]
+    : creators
 
   const { data: categories } = useQuery({
     queryKey: ['categories'],
@@ -86,22 +106,22 @@ export default function ExplorePage() {
         </div>
       )}
 
-      {/* All creators */}
+      {/* All creators / search results */}
       <div>
         <h2 className="flex items-center gap-2 text-lg font-bold mb-4">
           <Star className="w-5 h-5 text-primary" />
           {searchQuery ? 'Resultados' : 'Todos os criadores'}
         </h2>
-        {creators && creators.length > 0 ? (
+        {(searchQuery ? searchResults : creators) && (searchQuery ? searchResults : creators)!.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {creators.map((creator: any) => (
-              <CreatorCard key={creator.id} creator={creator} />
+            {(searchQuery ? searchResults : creators)!.map((item: any) => (
+              <CreatorCard key={item.id} creator={item} />
             ))}
           </div>
         ) : (
           <div className="text-center py-12 text-muted">
             <Compass className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>Nenhum criador encontrado</p>
+            <p>Nenhum usuario encontrado</p>
           </div>
         )}
       </div>

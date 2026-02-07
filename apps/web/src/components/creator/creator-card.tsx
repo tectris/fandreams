@@ -16,10 +16,10 @@ interface CreatorCardProps {
     avatarUrl: string | null
     coverUrl?: string | null
     bio?: string | null
-    category: string | null
-    subscriptionPrice: string | null
-    isVerified: boolean
-    totalSubscribers: number
+    category?: string | null
+    subscriptionPrice?: string | null
+    isVerified?: boolean | null
+    totalSubscribers?: number | null
   }
 }
 
@@ -37,7 +37,7 @@ export function CreatorCard({ creator }: CreatorCardProps) {
             src={creator.avatarUrl}
             alt={creator.displayName || creator.username}
             size="lg"
-            verified={creator.isVerified}
+            verified={!!creator.isVerified}
           />
           <div className="mt-2">
             <h3 className="font-semibold text-sm truncate">{creator.displayName || creator.username}</h3>
@@ -50,7 +50,7 @@ export function CreatorCard({ creator }: CreatorCardProps) {
             {creator.category && <Badge variant="primary">{creator.category}</Badge>}
             <span className="flex items-center gap-1 text-xs text-muted">
               <Users className="w-3 h-3" />
-              {formatNumber(creator.totalSubscribers)}
+              {formatNumber(creator.totalSubscribers || 0)}
             </span>
           </div>
           <div className="mt-3">
