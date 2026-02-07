@@ -78,6 +78,7 @@ export default function FeedPage() {
       api.post('/fancoins/tip', { creatorId, amount, referenceId: postId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fancoin-wallet'] })
+      queryClient.invalidateQueries({ queryKey: ['fancoin-transactions'] })
       queryClient.invalidateQueries({ queryKey: ['feed'] })
       toast.success('Tip enviado com sucesso!')
     },

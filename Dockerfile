@@ -3,21 +3,28 @@ RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
 WORKDIR /app
 
-# Copy everything
-COPY . .
+# Copy workspace config and package.json files first (for dependency caching)
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
+COPY apps/api/package.json ./apps/api/
+COPY packages/database/package.json ./packages/database/
+COPY packages/shared/package.json ./packages/shared/
 
-# Install dependencies (sharp needs native build tools)
+# Install dependencies (cached unless package.json/lockfile change)
 RUN pnpm install --frozen-lockfile
 
-# Force no cache on build step
-ARG CACHEBUST=1
+# Copy source code (invalidates cache when source changes)
+COPY packages/database/ ./packages/database/
+COPY packages/shared/ ./packages/shared/
+COPY apps/api/ ./apps/api/
 
 # Build API with workspace packages bundled inline
 WORKDIR /app/apps/api
 RUN npx tsup
 
-# Verify the bundle doesn't reference shared package at runtime
+# Verify the bundle is correct
 RUN node -e "const fs=require('fs');const f=fs.readFileSync('dist/index.js','utf8');if(f.includes('@myfans/shared')){console.error('ERROR: bundle still references @myfans/shared');process.exit(1)}else{console.log('OK: workspace packages bundled inline')}"
+RUN node -e "const fs=require('fs');const f=fs.readFileSync('dist/index.js','utf8');if(!f.includes('notifications')){console.error('ERROR: notifications route missing from bundle');process.exit(1)}else{console.log('OK: notifications route present in bundle')}"
 
 EXPOSE 3001
+ENV NODE_ENV=production
 CMD ["sh", "start.sh"]
