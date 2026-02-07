@@ -1,5 +1,4 @@
 import { createMiddleware } from 'hono/factory'
-import { Ratelimit } from '@upstash/ratelimit'
 import { getRedis } from '../config/redis'
 
 type RateLimitConfig = {
@@ -11,18 +10,35 @@ type RateLimitConfig = {
   prefix?: string
 }
 
-const limiters = new Map<string, Ratelimit>()
+let RatelimitClass: any = null
+let ratelimitLoaded = false
 
-function getLimiter(config: RateLimitConfig): Ratelimit | null {
-  const redis = getRedis()
+async function loadRatelimit() {
+  if (ratelimitLoaded) return
+  ratelimitLoaded = true
+  try {
+    const mod = await import('@upstash/ratelimit')
+    RatelimitClass = mod.Ratelimit
+  } catch {
+    console.warn('[@upstash/ratelimit] Not available — rate limiting disabled')
+  }
+}
+
+const limiters = new Map<string, any>()
+
+async function getLimiter(config: RateLimitConfig): Promise<any> {
+  await loadRatelimit()
+  if (!RatelimitClass) return null
+
+  const redis = await getRedis()
   if (!redis) return null
 
   const key = `${config.prefix || 'rl'}:${config.requests}:${config.window}`
   if (limiters.has(key)) return limiters.get(key)!
 
-  const limiter = new Ratelimit({
+  const limiter = new RatelimitClass({
     redis,
-    limiter: Ratelimit.slidingWindow(config.requests, config.window),
+    limiter: RatelimitClass.slidingWindow(config.requests, config.window),
     prefix: config.prefix || 'myfans_rl',
     analytics: true,
   })
@@ -42,11 +58,11 @@ function getClientIp(c: any): string {
 
 /**
  * Rate limiting middleware using Upstash Redis.
- * Gracefully degrades if Redis is not configured (no limiting applied).
+ * Gracefully degrades if Redis is not configured or packages unavailable.
  */
 export function rateLimit(config: RateLimitConfig) {
   return createMiddleware(async (c, next) => {
-    const limiter = getLimiter(config)
+    const limiter = await getLimiter(config)
 
     // Graceful degradation: if Redis not configured, skip rate limiting
     if (!limiter) {
