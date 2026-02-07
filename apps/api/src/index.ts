@@ -97,7 +97,7 @@ app.route('/admin', admin)
 app.route('/payments', paymentsRoute)
 app.route('/notifications', notificationsRoute)
 
-app.get('/health', (c) => c.json({ status: 'ok', version: '2.1.0', timestamp: new Date().toISOString() }))
+app.get('/health', (c) => c.json({ status: 'ok', version: '2.2.0', timestamp: new Date().toISOString() }))
 
 app.onError((err, c) => {
   console.error('Unhandled error:', err)
@@ -118,7 +118,8 @@ app.notFound((c) => {
 })
 
 const port = Number(process.env.PORT) || env.PORT
-console.log(`MyFans API running on 0.0.0.0:${port}`)
+console.log(`MyFans API v2.2.0 running on 0.0.0.0:${port}`)
+console.log('Registered routes: auth, users, creators, posts, subscriptions, fancoins, gamification, discover, feed, upload, video, media, kyc, admin, payments, notifications')
 serve({ fetch: app.fetch, port, hostname: '0.0.0.0' })
 
 export default app
