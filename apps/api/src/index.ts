@@ -14,6 +14,7 @@ import fancoins from './routes/fancoins'
 import gamification from './routes/gamification'
 import discovery from './routes/discovery'
 import feed from './routes/feed'
+import upload from './routes/upload'
 import media from './routes/media'
 import kyc from './routes/kyc'
 import admin from './routes/admin'
@@ -30,6 +31,7 @@ const allowedOrigins = [
 
 app.use('*', logger())
 app.use('*', secureHeaders())
+
 app.use(
   '*',
   cors({
@@ -52,6 +54,7 @@ app.route('/fancoins', fancoins)
 app.route('/gamification', gamification)
 app.route('/discover', discovery)
 app.route('/feed', feed)
+app.route('/upload', upload)
 app.route('/media', media)
 app.route('/kyc', kyc)
 app.route('/admin', admin)
