@@ -18,6 +18,7 @@ import feed from './routes/feed'
 import media from './routes/media'
 import kyc from './routes/kyc'
 import admin from './routes/admin'
+import paymentsRoute from './routes/payments'
 
 const app = new Hono().basePath('/api/v1')
 
@@ -87,6 +88,7 @@ app.route('/feed', feed)
 app.route('/media', media)
 app.route('/kyc', kyc)
 app.route('/admin', admin)
+app.route('/payments', paymentsRoute)
 
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }))
 

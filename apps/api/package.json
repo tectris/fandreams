@@ -20,6 +20,7 @@
     "@myfans/shared": "workspace:*",
     "drizzle-orm": "^0.38.0",
     "@neondatabase/serverless": "^0.10.0",
+    "mercadopago": "^2.0.15",
     "@upstash/redis": "^1.34.0",
     "@upstash/ratelimit": "^2.0.0",
     "bcryptjs": "^2.4.3",

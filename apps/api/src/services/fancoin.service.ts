@@ -119,6 +119,35 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
   return { sent: amount, creatorReceived: creatorAmount, platformFee: platformCut }
 }
 
+/**
+ * Credit FanCoins after a confirmed payment.
+ * Called by the payment webhook handler.
+ */
+export async function creditPurchase(userId: string, totalCoins: number, label: string, paymentId: string) {
+  const wallet = await getWallet(userId)
+  const newBalance = wallet.balance + totalCoins
+
+  await db
+    .update(fancoinWallets)
+    .set({
+      balance: newBalance,
+      totalEarned: sql`${fancoinWallets.totalEarned} + ${totalCoins}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(fancoinWallets.userId, userId))
+
+  await db.insert(fancoinTransactions).values({
+    userId,
+    type: 'purchase',
+    amount: totalCoins,
+    balanceAfter: newBalance,
+    referenceId: paymentId,
+    description: `Compra de ${label}`,
+  })
+
+  return { newBalance, credited: totalCoins }
+}
+
 export async function rewardEngagement(userId: string, type: string, amount: number) {
   const wallet = await getWallet(userId)
   const newBalance = wallet.balance + amount
