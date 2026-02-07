@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { authMiddleware, adminMiddleware } from '../middleware/auth'
 import * as adminService from '../services/admin.service'
+import * as kycService from '../services/kyc.service'
 import { success, error, paginated } from '../utils/response'
 import { AppError } from '../services/auth.service'
 
@@ -27,6 +28,44 @@ admin.patch('/users/:id', async (c) => {
     const body = await c.req.json()
     const updated = await adminService.updateUser(userId, body)
     return success(c, updated)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+// KYC Management
+admin.get('/kyc', async (c) => {
+  const page = Number(c.req.query('page') || 1)
+  const limit = Number(c.req.query('limit') || 20)
+  const status = c.req.query('status') || 'pending'
+  const result = await adminService.getKycSubmissions(page, limit, status)
+  return success(c, result)
+})
+
+admin.get('/kyc/:id', async (c) => {
+  try {
+    const documentId = c.req.param('id')
+    const doc = await adminService.getKycDocument(documentId)
+    return success(c, doc)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+admin.post('/kyc/:id/review', async (c) => {
+  try {
+    const documentId = c.req.param('id')
+    const { userId } = c.get('user')
+    const { approved, rejectedReason } = await c.req.json()
+
+    if (typeof approved !== 'boolean') {
+      return error(c, 400, 'INVALID_INPUT', 'Campo "approved" obrigatorio (true/false)')
+    }
+
+    const result = await kycService.reviewKyc(documentId, userId, approved, rejectedReason)
+    return success(c, result)
   } catch (e) {
     if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
     throw e

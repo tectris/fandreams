@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { authMiddleware } from '../middleware/auth'
+import { uploadRateLimit } from '../middleware/rateLimit'
 import { success, error } from '../utils/response'
 import * as storage from '../services/storage.service'
 import * as mediaService from '../services/media.service'
@@ -11,7 +12,7 @@ const media = new Hono()
  * Upload media file to R2 (images) or Bunny Stream (videos)
  * Returns the public URL as `key` for use in post creation
  */
-media.post('/upload', authMiddleware, async (c) => {
+media.post('/upload', authMiddleware, uploadRateLimit, async (c) => {
   const { userId } = c.get('user')
   const body = await c.req.parseBody()
   const file = body['file']

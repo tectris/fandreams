@@ -19,6 +19,8 @@ const envSchema = z.object({
   BUNNY_CDN_HOSTNAME: z.string().optional(),
   MERCADOPAGO_ACCESS_TOKEN: z.string().optional(),
   MERCADOPAGO_WEBHOOK_SECRET: z.string().optional(),
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('MyFans <noreply@myfans.my>'),
   NEXT_PUBLIC_APP_URL: z.string().default('http://localhost:3000'),
   CORS_ORIGINS: z.string().optional(),
   PLATFORM_FEE_PERCENT: z.coerce.number().default(12),

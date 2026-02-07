@@ -4,6 +4,7 @@ import { logger } from 'hono/logger'
 import { secureHeaders } from 'hono/secure-headers'
 import { serve } from '@hono/node-server'
 import { env } from './config/env'
+import { apiRateLimit } from './middleware/rateLimit'
 
 import auth from './routes/auth'
 import usersRoute from './routes/users'
@@ -19,6 +20,7 @@ import video from './routes/video'
 import media from './routes/media'
 import kyc from './routes/kyc'
 import admin from './routes/admin'
+import paymentsRoute from './routes/payments'
 
 const app = new Hono().basePath('/api/v1')
 
@@ -74,6 +76,9 @@ app.use(
   }),
 )
 
+// Global rate limit (100 req/min per IP, graceful if Redis unavailable)
+app.use('*', apiRateLimit)
+
 app.route('/auth', auth)
 app.route('/users', usersRoute)
 app.route('/creators', creators)
@@ -88,6 +93,7 @@ app.route('/video', video)
 app.route('/media', media)
 app.route('/kyc', kyc)
 app.route('/admin', admin)
+app.route('/payments', paymentsRoute)
 
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }))
 
