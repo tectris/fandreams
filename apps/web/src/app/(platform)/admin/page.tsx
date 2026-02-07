@@ -5,7 +5,7 @@ import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Shield, Users, FileText, Star } from 'lucide-react'
+import { Shield, Users, FileText, Star, UserCheck } from 'lucide-react'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
 import { useRouter } from 'next/navigation'
@@ -107,6 +107,40 @@ export default function AdminDashboardPage() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Quick links */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+        <Link href="/admin/users">
+          <Card className="hover:border-primary/50 transition-colors cursor-pointer">
+            <CardContent className="pt-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-sm">
+                  <Users className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium">Gerenciar Usuarios</p>
+                  <p className="text-xs text-muted">Roles, ativacao e busca</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/admin/kyc">
+          <Card className="hover:border-warning/50 transition-colors cursor-pointer">
+            <CardContent className="pt-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-warning/10 rounded-sm">
+                  <UserCheck className="w-5 h-5 text-warning" />
+                </div>
+                <div>
+                  <p className="font-medium">Verificacao KYC</p>
+                  <p className="text-xs text-muted">Revisar documentos de identidade</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Recent users */}

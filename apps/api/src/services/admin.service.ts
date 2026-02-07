@@ -1,5 +1,5 @@
-import { eq, desc, like, or, count, sql } from 'drizzle-orm'
-import { users, posts, creatorProfiles } from '@myfans/database'
+import { eq, desc, like, or, count } from 'drizzle-orm'
+import { users, posts, creatorProfiles, kycDocuments } from '@myfans/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 
@@ -106,6 +106,89 @@ export async function updateUser(
 
   if (!updated) throw new AppError('NOT_FOUND', 'Usuario nao encontrado', 404)
   return updated
+}
+
+export async function getKycSubmissions(page: number, limit: number, status?: string) {
+  const offset = (page - 1) * limit
+
+  const whereClause = status && status !== 'all' ? eq(kycDocuments.status, status as any) : undefined
+
+  const submissions = await db
+    .select({
+      id: kycDocuments.id,
+      userId: kycDocuments.userId,
+      documentFrontKey: kycDocuments.documentFrontKey,
+      documentBackKey: kycDocuments.documentBackKey,
+      selfieKey: kycDocuments.selfieKey,
+      status: kycDocuments.status,
+      rejectedReason: kycDocuments.rejectedReason,
+      submittedAt: kycDocuments.submittedAt,
+      reviewedAt: kycDocuments.reviewedAt,
+      username: users.username,
+      displayName: users.displayName,
+      email: users.email,
+      avatarUrl: users.avatarUrl,
+    })
+    .from(kycDocuments)
+    .innerJoin(users, eq(kycDocuments.userId, users.id))
+    .where(whereClause)
+    .orderBy(desc(kycDocuments.submittedAt))
+    .limit(limit)
+    .offset(offset)
+
+  const [totalResult] = await db.select({ count: count() }).from(kycDocuments).where(whereClause)
+
+  // Count by status for tabs
+  const [pendingCount] = await db
+    .select({ count: count() })
+    .from(kycDocuments)
+    .where(eq(kycDocuments.status, 'pending'))
+  const [approvedCount] = await db
+    .select({ count: count() })
+    .from(kycDocuments)
+    .where(eq(kycDocuments.status, 'approved'))
+  const [rejectedCount] = await db
+    .select({ count: count() })
+    .from(kycDocuments)
+    .where(eq(kycDocuments.status, 'rejected'))
+
+  return {
+    submissions,
+    total: totalResult.count,
+    counts: {
+      pending: pendingCount.count,
+      approved: approvedCount.count,
+      rejected: rejectedCount.count,
+      all: totalResult.count,
+    },
+  }
+}
+
+export async function getKycDocument(documentId: string) {
+  const [doc] = await db
+    .select({
+      id: kycDocuments.id,
+      userId: kycDocuments.userId,
+      documentFrontKey: kycDocuments.documentFrontKey,
+      documentBackKey: kycDocuments.documentBackKey,
+      selfieKey: kycDocuments.selfieKey,
+      status: kycDocuments.status,
+      rejectedReason: kycDocuments.rejectedReason,
+      reviewedBy: kycDocuments.reviewedBy,
+      submittedAt: kycDocuments.submittedAt,
+      reviewedAt: kycDocuments.reviewedAt,
+      username: users.username,
+      displayName: users.displayName,
+      email: users.email,
+      avatarUrl: users.avatarUrl,
+    })
+    .from(kycDocuments)
+    .innerJoin(users, eq(kycDocuments.userId, users.id))
+    .where(eq(kycDocuments.id, documentId))
+    .limit(1)
+
+  if (!doc) throw new AppError('NOT_FOUND', 'Documento nao encontrado', 404)
+  return doc
 }
 
 export async function deactivateUser(userId: string) {
