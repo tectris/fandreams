@@ -36,8 +36,8 @@ export default function RegisterPage() {
       api.setToken(res.data.accessToken)
       localStorage.setItem('refreshToken', res.data.refreshToken)
       setUser(res.data.user)
-      toast.success('Conta criada com sucesso!')
-      router.push('/kyc')
+      toast.success('Conta criada! Verifique seu email.')
+      router.push('/verify-email')
     } catch (e: any) {
       toast.error(e.message || 'Erro ao criar conta')
     } finally {

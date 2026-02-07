@@ -1,8 +1,11 @@
 import { eq } from 'drizzle-orm'
+import jwt from 'jsonwebtoken'
 import { users, userSettings, fancoinWallets, userGamification } from '@myfans/database'
 import { db } from '../config/database'
+import { env } from '../config/env'
 import { hashPassword, verifyPassword } from '../utils/password'
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '../utils/tokens'
+import { sendVerificationEmail, sendPasswordResetEmail } from './email.service'
 import type { RegisterInput, LoginInput } from '@myfans/shared'
 
 export async function register(input: RegisterInput) {
@@ -94,6 +97,12 @@ export async function register(input: RegisterInput) {
 
   const accessToken = generateAccessToken(user.id, user.role)
   const refreshToken = generateRefreshToken(user.id)
+
+  // Send verification email (non-blocking)
+  const verifyToken = generateEmailVerifyToken(user.id, user.email)
+  sendVerificationEmail(user.email, verifyToken).catch((err) =>
+    console.error('Failed to send verification email:', err),
+  )
 
   return { user, accessToken, refreshToken }
 }
@@ -225,6 +234,113 @@ export async function refreshTokens(token: string) {
   const newRefreshToken = generateRefreshToken(user.id)
 
   return { accessToken, refreshToken: newRefreshToken }
+}
+
+// ── Email Verification ──
+
+function generateEmailVerifyToken(userId: string, email: string): string {
+  return jwt.sign({ sub: userId, email, type: 'email_verify' }, env.JWT_SECRET, { expiresIn: '24h' })
+}
+
+function verifyEmailToken(token: string): { sub: string; email: string } | null {
+  try {
+    const payload = jwt.verify(token, env.JWT_SECRET) as any
+    if (payload.type !== 'email_verify') return null
+    return { sub: payload.sub, email: payload.email }
+  } catch {
+    return null
+  }
+}
+
+export async function sendEmailVerification(userId: string) {
+  const [user] = await db
+    .select({ id: users.id, email: users.email, emailVerified: users.emailVerified })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+
+  if (!user) throw new AppError('NOT_FOUND', 'Usuario nao encontrado', 404)
+  if (user.emailVerified) throw new AppError('ALREADY_VERIFIED', 'Email ja verificado', 400)
+
+  const token = generateEmailVerifyToken(user.id, user.email)
+  await sendVerificationEmail(user.email, token)
+
+  return { sent: true }
+}
+
+export async function verifyEmail(token: string) {
+  const payload = verifyEmailToken(token)
+  if (!payload) throw new AppError('INVALID_TOKEN', 'Token invalido ou expirado', 400)
+
+  const [user] = await db
+    .select({ id: users.id, emailVerified: users.emailVerified })
+    .from(users)
+    .where(eq(users.id, payload.sub))
+    .limit(1)
+
+  if (!user) throw new AppError('NOT_FOUND', 'Usuario nao encontrado', 404)
+  if (user.emailVerified) return { verified: true, alreadyVerified: true }
+
+  await db
+    .update(users)
+    .set({ emailVerified: true, updatedAt: new Date() })
+    .where(eq(users.id, user.id))
+
+  return { verified: true, alreadyVerified: false }
+}
+
+// ── Password Reset ──
+
+function generatePasswordResetToken(userId: string): string {
+  return jwt.sign({ sub: userId, type: 'password_reset' }, env.JWT_SECRET, { expiresIn: '1h' })
+}
+
+function verifyPasswordResetToken(token: string): { sub: string } | null {
+  try {
+    const payload = jwt.verify(token, env.JWT_SECRET) as any
+    if (payload.type !== 'password_reset') return null
+    return { sub: payload.sub }
+  } catch {
+    return null
+  }
+}
+
+export async function forgotPassword(email: string) {
+  const [user] = await db
+    .select({ id: users.id, email: users.email, isActive: users.isActive })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1)
+
+  // Always return success to prevent email enumeration
+  if (!user || !user.isActive) return { sent: true }
+
+  const token = generatePasswordResetToken(user.id)
+  await sendPasswordResetEmail(user.email, token)
+
+  return { sent: true }
+}
+
+export async function resetPassword(token: string, newPassword: string) {
+  const payload = verifyPasswordResetToken(token)
+  if (!payload) throw new AppError('INVALID_TOKEN', 'Token invalido ou expirado', 400)
+
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.id, payload.sub))
+    .limit(1)
+
+  if (!user) throw new AppError('NOT_FOUND', 'Usuario nao encontrado', 404)
+
+  const passwordHash = await hashPassword(newPassword)
+
+  await db
+    .update(users)
+    .set({ passwordHash, updatedAt: new Date() })
+    .where(eq(users.id, user.id))
+
+  return { reset: true }
 }
 
 export class AppError extends Error {
