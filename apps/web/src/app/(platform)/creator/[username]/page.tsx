@@ -95,6 +95,15 @@ export default function CreatorProfilePage() {
     onError: (e: any) => toast.error(e.message || 'Erro ao comentar'),
   })
 
+  const toggleVisibilityMutation = useMutation({
+    mutationFn: (postId: string) => api.patch(`/posts/${postId}/toggle-visibility`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['creator-posts'] })
+      toast.success('Visibilidade atualizada!')
+    },
+    onError: (e: any) => toast.error(e.message || 'Erro ao alterar visibilidade'),
+  })
+
   const tipMutation = useMutation({
     mutationFn: ({ postId, creatorId, amount }: { postId: string; creatorId: string; amount: number }) =>
       api.post('/fancoins/tip', { creatorId, amount, referenceId: postId }),
@@ -399,6 +408,7 @@ export default function CreatorProfilePage() {
                 currentUserId={user?.id}
                 isAuthenticated={isAuthenticated}
                 onEdit={(postId, data) => editMutation.mutate({ postId, data })}
+                onToggleVisibility={(postId) => toggleVisibilityMutation.mutate(postId)}
                 onDelete={(postId) => deleteMutation.mutate(postId)}
                 onLike={(postId) => likeMutation.mutate(postId)}
                 onBookmark={(postId) => bookmarkMutation.mutate(postId)}
@@ -422,6 +432,7 @@ function CreatorPostCard({
   currentUserId,
   isAuthenticated,
   onEdit,
+  onToggleVisibility,
   onDelete,
   onLike,
   onBookmark,
@@ -432,6 +443,7 @@ function CreatorPostCard({
   currentUserId?: string | null
   isAuthenticated: boolean
   onEdit: (postId: string, data: Record<string, unknown>) => void
+  onToggleVisibility: (postId: string) => void
   onDelete: (postId: string) => void
   onLike: (postId: string) => void
   onBookmark: (postId: string) => void
@@ -454,6 +466,7 @@ function CreatorPostCard({
       currentUserId={currentUserId}
       isAuthenticated={isAuthenticated}
       onEdit={onEdit}
+      onToggleVisibility={onToggleVisibility}
       onDelete={onDelete}
       onLike={onLike}
       onBookmark={onBookmark}

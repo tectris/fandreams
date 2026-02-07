@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm'
-import { fancoinWallets, fancoinTransactions, creatorProfiles, users } from '@myfans/database'
+import { fancoinWallets, fancoinTransactions, creatorProfiles, users, posts } from '@myfans/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import { FANCOIN_PACKAGES, PLATFORM_FEES } from '@myfans/shared'
@@ -130,6 +130,10 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
       description: `Tip recebido de @${senderUsername}`,
     },
   ])
+
+  if (referenceId) {
+    await db.update(posts).set({ tipCount: sql`${posts.tipCount} + 1` }).where(eq(posts.id, referenceId))
+  }
 
   return { sent: amount, creatorReceived: creatorAmount, platformFee: platformCut }
 }
