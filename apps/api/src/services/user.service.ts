@@ -1,5 +1,5 @@
-import { eq } from 'drizzle-orm'
-import { users, userSettings, creatorProfiles, userGamification, fancoinWallets } from '@myfans/database'
+import { eq, and, sql } from 'drizzle-orm'
+import { users, userSettings, creatorProfiles, userGamification, fancoinWallets, follows, posts } from '@myfans/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import { hashPassword, verifyPassword } from '../utils/password'
@@ -62,7 +62,24 @@ export async function getPublicProfile(username: string) {
     .where(eq(userGamification.userId, user.id))
     .limit(1)
 
-  return { ...user, creator, gamification }
+  // Stats: followers, following, total posts
+  const [followerCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(follows)
+    .where(eq(follows.followingId, user.id))
+
+  const [postCount] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(posts)
+    .where(and(eq(posts.creatorId, user.id), eq(posts.isArchived, false), eq(posts.isVisible, true)))
+
+  return {
+    ...user,
+    creator,
+    gamification,
+    followerCount: followerCount?.count || 0,
+    postCount: postCount?.count || 0,
+  }
 }
 
 export async function updateProfile(userId: string, input: UpdateProfileInput) {

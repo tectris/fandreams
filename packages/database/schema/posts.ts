@@ -20,6 +20,7 @@ export const posts = pgTable(
     likeCount: integer('like_count').default(0).notNull(),
     commentCount: integer('comment_count').default(0).notNull(),
     tipCount: integer('tip_count').default(0).notNull(),
+    shareCount: integer('share_count').default(0).notNull(),
     viewCount: integer('view_count').default(0).notNull(),
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
     publishedAt: timestamp('published_at', { withTimezone: true }).defaultNow().notNull(),

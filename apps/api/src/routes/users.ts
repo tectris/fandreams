@@ -3,6 +3,7 @@ import { updateProfileSchema, updateSettingsSchema } from '@myfans/shared'
 import { validateBody } from '../middleware/validation'
 import { authMiddleware } from '../middleware/auth'
 import * as userService from '../services/user.service'
+import * as followService from '../services/follow.service'
 import { success, error } from '../utils/response'
 import { AppError } from '../services/auth.service'
 
@@ -61,6 +62,43 @@ usersRoute.patch('/me/settings', authMiddleware, validateBody(updateSettingsSche
   const body = c.req.valid('json')
   const updated = await userService.updateSettings(userId, body)
   return success(c, updated)
+})
+
+// Follow / Unfollow
+usersRoute.post('/:userId/follow', authMiddleware, async (c) => {
+  try {
+    const { userId: followerId } = c.get('user')
+    const followingId = c.req.param('userId')
+    const result = await followService.followUser(followerId, followingId)
+    return success(c, result)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+usersRoute.delete('/:userId/follow', authMiddleware, async (c) => {
+  try {
+    const { userId: followerId } = c.get('user')
+    const followingId = c.req.param('userId')
+    const result = await followService.unfollowUser(followerId, followingId)
+    return success(c, result)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+usersRoute.get('/:userId/follow', authMiddleware, async (c) => {
+  try {
+    const { userId: followerId } = c.get('user')
+    const followingId = c.req.param('userId')
+    const isFollowing = await followService.checkFollow(followerId, followingId)
+    return success(c, { isFollowing })
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
 })
 
 usersRoute.get('/:username', async (c) => {

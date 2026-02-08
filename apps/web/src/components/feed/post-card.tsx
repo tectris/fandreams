@@ -16,6 +16,8 @@ import {
   Pin,
   Eye,
   EyeOff,
+  Share2,
+  Flag,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { VideoPlayer } from '@/components/ui/video-player'
@@ -23,6 +25,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { formatNumber, timeAgo, formatCurrency } from '@/lib/utils'
+import { api } from '@/lib/api'
+import { toast } from 'sonner'
 import Link from 'next/link'
 
 interface PostCardProps {
@@ -36,6 +40,7 @@ interface PostCardProps {
     isVisible?: boolean
     likeCount: number
     commentCount: number
+    shareCount?: number
     viewCount: number
     publishedAt: string
     creatorId?: string
@@ -101,6 +106,9 @@ export function PostCard({
   const [liked, setLiked] = useState(post.isLiked || false)
   const [likeCount, setLikeCount] = useState(post.likeCount)
   const [bookmarked, setBookmarked] = useState(post.isBookmarked || false)
+  const [shareCount, setShareCount] = useState(post.shareCount || 0)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportReason, setReportReason] = useState('')
 
   function handleLike() {
     if (!isAuthenticated) {
@@ -178,6 +186,49 @@ export function PostCard({
     if (!showTip) setShowComments(false)
   }
 
+  async function handleShare() {
+    const url = `${window.location.origin}/creator/${post.creatorUsername}`
+    const shareData = {
+      title: `Post de ${post.creatorDisplayName || post.creatorUsername}`,
+      text: post.contentText || `Confira este post no MyFans!`,
+      url,
+    }
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share(shareData)
+      } else {
+        await navigator.clipboard.writeText(url)
+        toast.success('Link copiado!')
+      }
+      setShareCount((c) => c + 1)
+      api.post(`/posts/${post.id}/share`, {}).catch(() => {})
+    } catch {
+      // User cancelled share dialog
+    }
+  }
+
+  async function handleReport() {
+    if (!reportReason.trim()) {
+      toast.error('Selecione um motivo')
+      return
+    }
+    try {
+      await api.post(`/posts/${post.id}/report`, { reason: reportReason })
+      toast.success('Denuncia enviada. Obrigado!')
+      setShowReportModal(false)
+      setReportReason('')
+      setMenuOpen(false)
+    } catch (e: any) {
+      if (e.code === 'ALREADY_REPORTED') {
+        toast.info('Voce ja denunciou este post')
+      } else {
+        toast.error(e.message || 'Erro ao denunciar')
+      }
+      setShowReportModal(false)
+    }
+  }
+
   return (
     <Card className={`mb-4 ${isHidden ? 'opacity-50 grayscale' : ''}`}>
       {/* Hidden indicator */}
@@ -207,70 +258,86 @@ export function PostCard({
         {post.visibility === 'ppv' && post.ppvPrice && (
           <Badge variant="warning">{formatCurrency(post.ppvPrice)}</Badge>
         )}
-        {isOwner && (
-          <div className="relative">
-            <button
-              onClick={() => {
-                setMenuOpen(!menuOpen)
-                setConfirmDelete(false)
-              }}
-              className="p-1.5 rounded-sm text-muted hover:text-foreground hover:bg-surface-light transition-colors"
-            >
-              <MoreHorizontal className="w-5 h-5" />
-            </button>
-            {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 z-20 bg-surface border border-border rounded-sm shadow-lg py-1 min-w-[160px]">
+
+        {/* More menu */}
+        <div className="relative">
+          <button
+            onClick={() => {
+              setMenuOpen(!menuOpen)
+              setConfirmDelete(false)
+            }}
+            className="p-1.5 rounded-sm text-muted hover:text-foreground hover:bg-surface-light transition-colors"
+          >
+            <MoreHorizontal className="w-5 h-5" />
+          </button>
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 z-20 bg-surface border border-border rounded-sm shadow-lg py-1 min-w-[160px]">
+                {isOwner && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setEditing(true)
+                        setMenuOpen(false)
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-surface-light transition-colors"
+                    >
+                      <Pencil className="w-4 h-4" />
+                      Editar
+                    </button>
+                    <button
+                      onClick={handlePin}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-surface-light transition-colors"
+                    >
+                      <Pin className="w-4 h-4" />
+                      {post.isPinned ? 'Desafixar' : 'Fixar'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        onToggleVisibility?.(post.id)
+                        setMenuOpen(false)
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-surface-light transition-colors"
+                    >
+                      {isHidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      {isHidden ? 'Tornar visivel' : 'Ocultar post'}
+                    </button>
+                    {!confirmDelete ? (
+                      <button
+                        onClick={() => setConfirmDelete(true)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-error hover:bg-surface-light transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Excluir
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleDelete}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-error font-semibold hover:bg-error/10 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Confirmar exclusao
+                      </button>
+                    )}
+                  </>
+                )}
+                {!isOwner && isAuthenticated && (
                   <button
                     onClick={() => {
-                      setEditing(true)
+                      setShowReportModal(true)
                       setMenuOpen(false)
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-surface-light transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-error hover:bg-surface-light transition-colors"
                   >
-                    <Pencil className="w-4 h-4" />
-                    Editar
+                    <Flag className="w-4 h-4" />
+                    Denunciar
                   </button>
-                  <button
-                    onClick={handlePin}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-surface-light transition-colors"
-                  >
-                    <Pin className="w-4 h-4" />
-                    {post.isPinned ? 'Desafixar' : 'Fixar'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      onToggleVisibility?.(post.id)
-                      setMenuOpen(false)
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-surface-light transition-colors"
-                  >
-                    {isHidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                    {isHidden ? 'Tornar visivel' : 'Ocultar post'}
-                  </button>
-                  {!confirmDelete ? (
-                    <button
-                      onClick={() => setConfirmDelete(true)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-error hover:bg-surface-light transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Excluir
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleDelete}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-error font-semibold hover:bg-error/10 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Confirmar exclusao
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        )}
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Content */}
@@ -343,8 +410,16 @@ export function PostCard({
         </div>
       )}
 
+      {/* Stats bar (views) */}
+      {post.viewCount > 0 && (
+        <div className="px-4 pt-2 flex items-center gap-1 text-xs text-muted">
+          <Eye className="w-3.5 h-3.5" />
+          <span>{formatNumber(post.viewCount)} visualizacoes</span>
+        </div>
+      )}
+
       {/* Actions */}
-      <div className="px-4 py-3 flex items-center gap-6">
+      <div className="px-4 py-3 flex items-center gap-5">
         <button onClick={handleLike} className="flex items-center gap-1.5 text-sm text-muted hover:text-error transition-colors group">
           <Heart
             className={`w-5 h-5 group-hover:scale-110 transition-transform ${liked ? 'fill-error text-error' : ''}`}
@@ -358,6 +433,14 @@ export function PostCard({
         >
           <MessageCircle className={`w-5 h-5 ${showComments ? 'text-primary' : ''}`} />
           <span>{formatNumber(post.commentCount)}</span>
+        </button>
+
+        <button
+          onClick={handleShare}
+          className="flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors"
+        >
+          <Share2 className="w-5 h-5" />
+          <span>{shareCount > 0 ? formatNumber(shareCount) : ''}</span>
         </button>
 
         {!isOwner && (
@@ -406,6 +489,45 @@ export function PostCard({
             <Coins className="w-4 h-4 mr-1" />
             Enviar
           </Button>
+        </div>
+      )}
+
+      {/* Report modal */}
+      {showReportModal && (
+        <div className="px-4 pb-3">
+          <div className="p-3 rounded-sm border border-border bg-surface-light">
+            <p className="text-sm font-medium mb-2">Denunciar post</p>
+            <div className="space-y-1.5 mb-3">
+              {[
+                { value: 'spam', label: 'Spam' },
+                { value: 'inappropriate', label: 'Conteudo inapropriado' },
+                { value: 'harassment', label: 'Assedio ou bullying' },
+                { value: 'violence', label: 'Violencia' },
+                { value: 'copyright', label: 'Violacao de direitos autorais' },
+                { value: 'other', label: 'Outro' },
+              ].map((r) => (
+                <label key={r.value} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="report-reason"
+                    value={r.value}
+                    checked={reportReason === r.value}
+                    onChange={(e) => setReportReason(e.target.value)}
+                    className="accent-primary"
+                  />
+                  {r.label}
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleReport}>
+                Enviar
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => { setShowReportModal(false); setReportReason('') }}>
+                Cancelar
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -173,6 +173,7 @@ export async function getFeed(userId: string, page = 1, limit = 20) {
       likeCount: posts.likeCount,
       commentCount: posts.commentCount,
       tipCount: posts.tipCount,
+      shareCount: posts.shareCount,
       viewCount: posts.viewCount,
       publishedAt: posts.publishedAt,
       creatorUsername: users.username,
@@ -259,6 +260,7 @@ export async function getPublicFeed(page = 1, limit = 20) {
       visibility: posts.visibility,
       likeCount: posts.likeCount,
       commentCount: posts.commentCount,
+      shareCount: posts.shareCount,
       viewCount: posts.viewCount,
       publishedAt: posts.publishedAt,
       creatorUsername: users.username,
@@ -487,6 +489,11 @@ export async function addComment(postId: string, userId: string, content: string
   await db.update(posts).set({ commentCount: sql`${posts.commentCount} + 1` }).where(eq(posts.id, postId))
 
   return comment
+}
+
+export async function sharePost(postId: string) {
+  await db.update(posts).set({ shareCount: sql`${posts.shareCount} + 1` }).where(eq(posts.id, postId))
+  return { shared: true }
 }
 
 export async function addMediaToPost(postId: string, mediaData: { mediaType: string; storageKey: string; thumbnailUrl?: string; duration?: number; width?: number; height?: number; fileSize?: number; isPreview?: boolean; sortOrder?: number; blurhash?: string }) {

@@ -10,6 +10,7 @@ import * as gamification from './schema/gamification'
 import * as messages from './schema/messages'
 import * as notifications from './schema/notifications'
 import * as reports from './schema/reports'
+import * as follows from './schema/follows'
 
 export const schema = {
   ...users,
@@ -22,6 +23,7 @@ export const schema = {
   ...messages,
   ...notifications,
   ...reports,
+  ...follows,
 }
 
 export function createDb(databaseUrl: string) {
@@ -41,3 +43,4 @@ export * from './schema/gamification'
 export * from './schema/messages'
 export * from './schema/notifications'
 export * from './schema/reports'
+export * from './schema/follows'
