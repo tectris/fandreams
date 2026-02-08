@@ -2,10 +2,10 @@
 
 **Branch:** `claude/fix-feed-user-search-Ej3xm`
 **Periodo:** 07/02/2026 - 08/02/2026
-**Total de commits:** 32 (22 commits de codigo + 10 merge commits)
-**Arquivos modificados:** 54
-**Linhas adicionadas:** ~3.775
-**Linhas removidas:** ~217
+**Total de commits:** 34 (24 commits de codigo + 10 merge commits)
+**Arquivos modificados:** 55
+**Linhas adicionadas:** ~4.100
+**Linhas removidas:** ~220
 
 ---
 
@@ -42,6 +42,8 @@ Esta branch concentrou uma grande sprint de features e correções na plataforma
 | 21 | `4680537` | fix | Share modal for desktop, subscribe button, view counts |
 | 22 | `5ffcf87` | feat | View tracking, multi-image gallery, lightbox, profile views, admin creator profile |
 | 23 | `bc36662` | feat | Anti-manipulation view tracking with deduplication |
+| 24 | `89ba57d` | docs | Add branch report with full changelog and feature documentation |
+| 25 | `b859c68` | fix | Post view dedup - only increment on confirmed unique view, 10s video threshold |
 
 *+ 9 merge commits de PRs (#34 a #40) e merge de main*
 
@@ -171,19 +173,20 @@ Esta branch concentrou uma grande sprint de features e correções na plataforma
 - Exibicao de views do perfil na pagina do criador
 
 ### 14. Anti-Manipulacao de Views (Deduplicacao)
-**Commit:** `bc36662`
+**Commits:** `bc36662`, `b859c68`
 **Arquivos:** `packages/database/schema/views.ts`, `apps/api/src/services/post.service.ts`, `apps/api/src/services/user.service.ts`, `apps/api/src/routes/posts.ts`, `apps/api/src/routes/users.ts`, `apps/web/src/components/feed/post-card.tsx`
 
 **Tabelas criadas:**
 - `post_views`: registra postId, userId, ipAddress, viewedAt
 - `profile_view_logs`: registra profileUserId, viewerUserId, ipAddress, viewedAt
 
-**Regras de deduplicacao:**
+**Regras de deduplicacao (posts E perfis):**
 - Janela de 24 horas: mesmo usuario/IP so conta 1 view por conteudo por dia
 - Dedup por userId (autenticado) OU ipAddress (anonimo)
 - Views do proprio perfil nao sao contadas
-- Videos exigem 3 segundos de reproducao antes de contar
-- Timer cancelado se usuario pausar antes dos 3s
+- Videos exigem **10 segundos** de reproducao antes de contar
+- Timer cancelado se usuario pausar antes dos 10s
+- Frontend so incrementa contador local quando backend confirma `counted: true`
 - Indices otimizados para consultas de dedup
 
 ### 15. Perfil do Criador - Estatisticas
@@ -310,7 +313,7 @@ Esta branch concentrou uma grande sprint de features e correções na plataforma
 
 2. **View deduplication**: Janela de 24h por usuario/IP em vez de lifetime para balancear precisao vs crescimento de tabela. Indices otimizados para queries frequentes.
 
-3. **Video view threshold**: 3 segundos de reproducao minima, inspirado no Instagram (3s) como compromisso entre YouTube (30s) e TikTok (~1s).
+3. **Video view threshold**: 10 segundos de reproducao minima. Timer cancelado no pause para evitar contagem de views acidentais. Inicialmente 3s, aumentado para 10s para maior rigor anti-manipulacao.
 
 4. **Profile view tracking**: Fire-and-forget com `.then().catch()` para nao bloquear a resposta da API. Own profile views ignoradas.
 
@@ -320,8 +323,11 @@ Esta branch concentrou uma grande sprint de features e correções na plataforma
 
 7. **Admin creator profile**: `create-admin.ts` agora cria entrada em `creator_profiles` para o admin, garantindo que botao "Assinar" apareca no perfil.
 
+8. **View counter confirmado pelo backend**: Frontend so incrementa o contador visual quando o backend retorna `counted: true`. Evita incremento falso quando a view e duplicada (dedup ativo). O usuario so ve +1 se a view realmente foi contada.
+
 ---
 
 *Relatorio gerado em 08/02/2026*
+*Ultima atualizacao: 08/02/2026*
 *Branch: claude/fix-feed-user-search-Ej3xm*
-*Ultimo commit: bc36662 (feat: anti-manipulation view tracking with deduplication)*
+*Ultimo commit: b859c68 (fix: post view dedup - only increment on confirmed unique view, 10s video threshold)*
