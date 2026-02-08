@@ -48,3 +48,15 @@ body {
   background-color: var(--color-primary);
   color: white;
 }
+
+/* Light theme overrides */
+html.light {
+  --color-surface: #FFFFFF;
+  --color-surface-light: #F5F5F7;
+  --color-surface-dark: #E8E8ED;
+  --color-background: #F0F0F3;
+  --color-foreground: #1A1A2E;
+  --color-muted: #6B7280;
+  --color-border: #E2E2E8;
+  --color-obsidian: #F5F5F7;
+}

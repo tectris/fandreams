@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Flame, Coins, Trophy, Zap, ArrowRight } from 'lucide-react'
+import { Flame, Coins, Trophy, Zap, ArrowRight, CreditCard, Bitcoin, Wallet } from 'lucide-react'
 
 export default function LandingPage() {
   return (
@@ -136,6 +136,29 @@ export default function LandingPage() {
           >
             Criar minha conta gratis <ArrowRight className="w-5 h-5" />
           </Link>
+        </div>
+      </section>
+
+      {/* Payment methods */}
+      <section className="py-16 border-t border-border/50">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <p className="text-sm text-muted mb-8">Formas de pagamento aceitas</p>
+          <div className="flex items-center justify-center gap-8 flex-wrap">
+            <div className="flex items-center gap-2 text-muted">
+              <Wallet className="w-5 h-5" />
+              <span className="text-sm font-medium">PIX via Mercado Pago</span>
+            </div>
+            <div className="w-px h-5 bg-border hidden sm:block" />
+            <div className="flex items-center gap-2 text-muted">
+              <CreditCard className="w-5 h-5" />
+              <span className="text-sm font-medium">PayPal</span>
+            </div>
+            <div className="w-px h-5 bg-border hidden sm:block" />
+            <div className="flex items-center gap-2 text-muted">
+              <Bitcoin className="w-5 h-5" />
+              <span className="text-sm font-medium">Crypto</span>
+            </div>
+          </div>
         </div>
       </section>
 

@@ -3,8 +3,16 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState, useEffect, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
-import { useAuthStore } from './store'
+import { useAuthStore, useThemeStore } from './store'
 import { api } from './api'
+
+function ThemeHydrator() {
+  const hydrate = useThemeStore((s) => s.hydrate)
+  useEffect(() => {
+    hydrate()
+  }, [hydrate])
+  return null
+}
 
 function AuthHydrator() {
   const { hydrate, setUser, logout, hydrated } = useAuthStore()
@@ -33,6 +41,24 @@ function AuthHydrator() {
   return null
 }
 
+function ToasterWithTheme() {
+  const theme = useThemeStore((s) => s.theme)
+  return (
+    <Toaster
+      theme={theme}
+      position="top-right"
+      richColors
+      toastOptions={theme === 'dark' ? {
+        style: {
+          background: '#1A1A2E',
+          border: '1px solid #2D2D44',
+          color: '#F5F5F5',
+        },
+      } : undefined}
+    />
+  )
+}
+
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
     () =>
@@ -48,20 +74,10 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeHydrator />
       <AuthHydrator />
       {children}
-      <Toaster
-        theme="dark"
-        position="top-right"
-        richColors
-        toastOptions={{
-          style: {
-            background: '#1A1A2E',
-            border: '1px solid #2D2D44',
-            color: '#F5F5F5',
-          },
-        }}
-      />
+      <ToasterWithTheme />
     </QueryClientProvider>
   )
 }
