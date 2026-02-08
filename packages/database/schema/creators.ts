@@ -18,6 +18,7 @@ export const creatorProfiles = pgTable('creator_profiles', {
   creatorScore: decimal('creator_score', { precision: 5, scale: 2 }).default('0').notNull(),
   isFeatured: boolean('is_featured').default(false).notNull(),
   welcomeMessage: text('welcome_message'),
+  messagesEnabled: boolean('messages_enabled').default(true).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })

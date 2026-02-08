@@ -25,6 +25,7 @@ import admin from './routes/admin'
 import paymentsRoute from './routes/payments'
 import withdrawals from './routes/withdrawals'
 import notificationsRoute from './routes/notifications'
+import messagesRoute from './routes/messages'
 
 const app = new Hono().basePath('/api/v1')
 
@@ -111,6 +112,7 @@ app.route('/admin', admin)
 app.route('/payments', paymentsRoute)
 app.route('/withdrawals', withdrawals)
 app.route('/notifications', notificationsRoute)
+app.route('/messages', messagesRoute)
 
 // Health check — hide version in production
 app.get('/health', (c) => {
