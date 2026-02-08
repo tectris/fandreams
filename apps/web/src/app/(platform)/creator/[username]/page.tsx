@@ -14,7 +14,7 @@ import { SubscribeDrawer } from '@/components/subscription/subscribe-drawer'
 import { PpvUnlockDrawer } from '@/components/feed/ppv-unlock-drawer'
 import { LevelBadge } from '@/components/gamification/level-badge'
 import { formatCurrency, formatNumber } from '@/lib/utils'
-import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, Share2, FileText, Eye, Image, Video, AlertTriangle, Tag } from 'lucide-react'
+import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, Share2, FileText, Eye, Image, Video, AlertTriangle, Tag, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { useState, useRef, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -405,6 +405,14 @@ export default function CreatorProfilePage() {
                     <Crown className="w-4 h-4 mr-1" />
                     Ativo ate {new Date(subscription.subscription.currentPeriodEnd!).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
                   </Button>
+                )}
+                {/* Send Message */}
+                {profile.creator?.messagesEnabled !== false && (
+                  <Link href={`/messages?to=${profile.id}`}>
+                    <Button variant="outline" size="sm" className="p-2" title="Enviar mensagem">
+                      <MessageCircle className="w-4 h-4" />
+                    </Button>
+                  </Link>
                 )}
               </>
             )}

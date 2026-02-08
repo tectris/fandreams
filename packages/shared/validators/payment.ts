@@ -28,7 +28,8 @@ export const createTierSchema = z.object({
 })
 
 export const updateSubscriptionPriceSchema = z.object({
-  subscriptionPrice: z.number().min(5).max(5000),
+  subscriptionPrice: z.number().min(5).max(5000).optional(),
+  messagesEnabled: z.boolean().optional(),
 })
 
 export const createPromoSchema = z.object({
