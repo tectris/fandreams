@@ -70,6 +70,7 @@ interface PostCardProps {
   onComment?: (postId: string, content: string) => void
   onTip?: (postId: string, creatorId: string, amount: number) => void
   onPpvUnlock?: (post: PostCardProps['post']) => void
+  onSubscribe?: (post: PostCardProps['post']) => void
   comments?: Array<{
     id: string
     content: string
@@ -92,6 +93,7 @@ export function PostCard({
   onComment,
   onTip,
   onPpvUnlock,
+  onSubscribe,
   comments,
 }: PostCardProps) {
   const hasMedia = post.media && post.media.length > 0
@@ -430,10 +432,20 @@ export function PostCard({
       {isLocked && !hasMedia && (
         <div className="mx-5 mb-3 py-4 rounded-md bg-surface-dark flex flex-col items-center justify-center gap-2">
           <Lock className="w-6 h-6 text-primary" />
-          <p className="text-sm font-medium">Conteudo exclusivo para assinantes</p>
-          <Link href={`/creator/${post.creatorUsername}`}>
-            <Button size="sm">Assinar para desbloquear</Button>
-          </Link>
+          {post.visibility === 'ppv' && post.ppvPrice ? (
+            <>
+              <p className="text-sm font-medium">Conteudo pago (PPV)</p>
+              <Button size="sm" onClick={() => onPpvUnlock?.(post)}>
+                <Coins className="w-4 h-4 mr-1" />
+                Desbloquear por {formatCurrency(post.ppvPrice)}
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium">Conteudo exclusivo para assinantes</p>
+              <Button size="sm" onClick={() => onSubscribe?.(post)}>Assinar para desbloquear</Button>
+            </>
+          )}
         </div>
       )}
 
@@ -536,9 +548,7 @@ export function PostCard({
                 ) : (
                   <>
                     <p className="text-sm font-medium">Conteudo exclusivo para assinantes</p>
-                    <Link href={`/creator/${post.creatorUsername}`}>
-                      <Button size="sm">Assinar para desbloquear</Button>
-                    </Link>
+                    <Button size="sm" onClick={() => onSubscribe?.(post)}>Assinar para desbloquear</Button>
                   </>
                 )}
               </div>

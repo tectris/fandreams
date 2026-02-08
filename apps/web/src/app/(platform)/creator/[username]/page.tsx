@@ -511,12 +511,13 @@ export default function CreatorProfilePage() {
                 onComment={(postId, content) => commentMutation.mutate({ postId, content })}
                 onTip={(postId, creatorId, amount) => tipMutation.mutate({ postId, creatorId, amount })}
                 onPpvUnlock={handlePpvUnlock}
+                onSubscribe={() => handleSubscribe()}
               />
             ))}
           </div>
         ) : (
           <div className="text-center py-12 text-muted">
-            <p>{isOwner ? 'Voce ainda nao publicou nenhum post' : 'Nenhum post publico disponivel'}</p>
+            <p>{isOwner ? 'Voce ainda nao publicou nenhum post' : 'Nenhum post disponivel'}</p>
           </div>
         )}
       </div>
@@ -570,6 +571,7 @@ function CreatorPostCard({
   onComment,
   onTip,
   onPpvUnlock,
+  onSubscribe,
 }: {
   post: any
   currentUserId?: string | null
@@ -582,6 +584,7 @@ function CreatorPostCard({
   onComment: (postId: string, content: string) => void
   onTip: (postId: string, creatorId: string, amount: number) => void
   onPpvUnlock: (post: any) => void
+  onSubscribe: () => void
 }) {
   const { data: commentsData } = useQuery({
     queryKey: ['comments', post.id],
@@ -606,6 +609,7 @@ function CreatorPostCard({
       onComment={onComment}
       onTip={onTip}
       onPpvUnlock={onPpvUnlock}
+      onSubscribe={onSubscribe}
       comments={Array.isArray(comments) ? comments : []}
     />
   )
