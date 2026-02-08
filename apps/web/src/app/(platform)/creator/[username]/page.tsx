@@ -14,7 +14,8 @@ import { LevelBadge } from '@/components/gamification/level-badge'
 import { formatCurrency, formatNumber } from '@/lib/utils'
 import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, Share2, FileText, Eye, Image, Video } from 'lucide-react'
 import { toast } from 'sonner'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 
 export default function CreatorProfilePage() {
   const { username } = useParams<{ username: string }>()
@@ -23,6 +24,15 @@ export default function CreatorProfilePage() {
   const [subscribing, setSubscribing] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
+  const searchParams = useSearchParams()
+  const subscriptionStatus = searchParams.get('subscription')
+
+  useEffect(() => {
+    if (subscriptionStatus === 'pending') {
+      toast.info('Assinatura em processamento. Voce sera notificado quando for confirmada.')
+      queryClient.invalidateQueries({ queryKey: ['subscription-check'] })
+    }
+  }, [subscriptionStatus, queryClient])
 
   const { data: profile } = useQuery({
     queryKey: ['profile', username],
@@ -203,14 +213,26 @@ export default function CreatorProfilePage() {
     }
   }
 
-  async function handleSubscribe() {
+  async function handleSubscribe(tierId?: string) {
     if (!isAuthenticated) {
       window.location.href = '/login'
       return
     }
     setSubscribing(true)
     try {
-      await api.post('/subscriptions', { creatorId: profile.id })
+      const res = await api.post<any>('/subscriptions', {
+        creatorId: profile.id,
+        tierId,
+        paymentMethod: 'credit_card',
+      })
+      const data = res.data
+
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl
+        return
+      }
+
+      // Free subscription — activated directly
       queryClient.invalidateQueries({ queryKey: ['subscription-check', profile?.id] })
       toast.success(`Voce agora assina ${profile.displayName || profile.username}!`)
     } catch (e: any) {
@@ -347,7 +369,7 @@ export default function CreatorProfilePage() {
                   </Button>
                 )}
                 {profile.creator && !isSubscribed && (
-                  <Button onClick={handleSubscribe} loading={subscribing}>
+                  <Button onClick={() => handleSubscribe()} loading={subscribing}>
                     <Crown className="w-4 h-4 mr-1" />
                     {Number(profile.creator.subscriptionPrice || 0) > 0
                       ? `Assinar ${formatCurrency(profile.creator.subscriptionPrice)}/mes`
@@ -450,7 +472,7 @@ export default function CreatorProfilePage() {
                       </div>
                       {tier.description && <p className="text-sm text-muted mb-4">{tier.description}</p>}
                       {tier.benefits && (
-                        <ul className="text-sm space-y-2">
+                        <ul className="text-sm space-y-2 mb-4">
                           {(tier.benefits as string[]).map((b, i) => (
                             <li key={i} className="flex items-center gap-2">
                               <Star className={`w-3.5 h-3.5 ${accent} shrink-0`} />
@@ -459,6 +481,14 @@ export default function CreatorProfilePage() {
                           ))}
                         </ul>
                       )}
+                      <Button
+                        className="w-full mt-2"
+                        onClick={() => handleSubscribe(tier.id)}
+                        loading={subscribing}
+                      >
+                        <Crown className="w-4 h-4 mr-1" />
+                        Assinar {formatCurrency(tier.price)}/mes
+                      </Button>
                     </CardContent>
                   </div>
                 </Card>

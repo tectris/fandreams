@@ -9,13 +9,15 @@ import * as fancoinService from './fancoin.service'
 // ── MercadoPago ──
 
 function getMpApi() {
-  return env.MERCADOPAGO_SANDBOX === 'true'
-    ? 'https://api.mercadopago.com'
-    : 'https://api.mercadopago.com'
+  return 'https://api.mercadopago.com'
 }
 
 function isMpSandbox() {
   return env.MERCADOPAGO_SANDBOX === 'true'
+}
+
+function getWebhookBaseUrl() {
+  return env.API_URL || 'https://api.fandreams.app'
 }
 
 async function mpFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -49,6 +51,22 @@ type MpPaymentInfo = {
   external_reference: string
   transaction_amount: number
   payment_method_id: string
+}
+type MpPreapproval = {
+  id: string
+  init_point: string
+  sandbox_init_point: string
+  status: string
+  external_reference: string
+  payer_id: number
+}
+type MpAuthorizedPayment = {
+  id: number
+  preapproval_id: string
+  status: string
+  transaction_amount: number
+  date_created: string
+  external_reference: string
 }
 
 // ── NOWPayments ──
@@ -180,7 +198,7 @@ export async function createFancoinPayment(
 // ── MercadoPago Payment ──
 
 async function createMpPayment(payment: any, pkg: any, paymentMethod: string, appUrl: string) {
-  const apiUrl = env.NEXT_PUBLIC_APP_URL?.replace('://www.', '://api.').replace('://', '://api.') || 'https://api.fandreams.app'
+  const webhookUrl = getWebhookBaseUrl()
 
   const preference = await mpFetch<MpPreference>('/checkout/preferences', {
     method: 'POST',
@@ -205,7 +223,7 @@ async function createMpPayment(payment: any, pkg: any, paymentMethod: string, ap
         pending: `${appUrl}/wallet?payment=pending&provider=mercadopago`,
       },
       auto_return: 'approved',
-      notification_url: `https://api.fandreams.app/api/v1/payments/webhook/mercadopago`,
+      notification_url: `${webhookUrl}/api/v1/payments/webhook/mercadopago`,
       statement_descriptor: 'FANDREAMS',
     }),
   })
@@ -241,7 +259,7 @@ async function createNpPayment(payment: any, pkg: any, appUrl: string) {
       price_currency: 'usd',
       order_id: payment.id,
       order_description: `${pkg.coins.toLocaleString()} FanCoins - FanDreams`,
-      ipn_callback_url: `https://api.fandreams.app/api/v1/payments/webhook/nowpayments`,
+      ipn_callback_url: `${getWebhookBaseUrl()}/api/v1/payments/webhook/nowpayments`,
       success_url: `${appUrl}/wallet?payment=success&provider=nowpayments`,
       cancel_url: `${appUrl}/wallet?payment=failure&provider=nowpayments`,
     }),
@@ -311,8 +329,19 @@ async function createPpPayment(payment: any, pkg: any, appUrl: string) {
 // ── Webhooks ──
 
 export async function handleMercadoPagoWebhook(type: string, dataId: string) {
-  if (type !== 'payment') return { processed: false }
+  if (type === 'payment') {
+    return handleMpPaymentWebhook(dataId)
+  }
+  if (type === 'subscription_preapproval') {
+    return handleMpPreapprovalWebhook(dataId)
+  }
+  if (type === 'subscription_authorized_payment') {
+    return handleMpAuthorizedPaymentWebhook(dataId)
+  }
+  return { processed: false }
+}
 
+async function handleMpPaymentWebhook(dataId: string) {
   const mpPayment = await mpFetch<MpPaymentInfo>(`/v1/payments/${dataId}`)
 
   if (!mpPayment.external_reference) {
@@ -330,6 +359,16 @@ export async function handleMercadoPagoWebhook(type: string, dataId: string) {
       mpPaymentMethod: mpPayment.payment_method_id,
     },
   )
+}
+
+async function handleMpPreapprovalWebhook(preapprovalId: string) {
+  const preapproval = await mpFetch<MpPreapproval>(`/preapproval/${preapprovalId}`)
+  return { processed: true, type: 'preapproval', preapprovalId, status: preapproval.status, externalReference: preapproval.external_reference }
+}
+
+async function handleMpAuthorizedPaymentWebhook(authorizedPaymentId: string) {
+  const authPayment = await mpFetch<MpAuthorizedPayment>(`/authorized_payments/${authorizedPaymentId}`)
+  return { processed: true, type: 'authorized_payment', authorizedPaymentId, preapprovalId: authPayment.preapproval_id, status: authPayment.status, amount: authPayment.transaction_amount }
 }
 
 export async function handleNowPaymentsWebhook(body: any) {
@@ -485,4 +524,55 @@ export async function getPaymentStatus(paymentId: string, userId: string) {
 
   if (!payment) throw new AppError('NOT_FOUND', 'Pagamento nao encontrado', 404)
   return payment
+}
+
+// ── MercadoPago Subscription (Preapproval) ──
+
+export async function createMpSubscription(params: {
+  subscriptionId: string
+  payerEmail: string
+  creatorName: string
+  tierName?: string
+  amount: number
+  backUrl: string
+}) {
+  const webhookUrl = getWebhookBaseUrl()
+  const reason = params.tierName
+    ? `Assinatura ${params.tierName} - ${params.creatorName} - FanDreams`
+    : `Assinatura - ${params.creatorName} - FanDreams`
+
+  const preapproval = await mpFetch<MpPreapproval>('/preapproval', {
+    method: 'POST',
+    body: JSON.stringify({
+      reason,
+      external_reference: params.subscriptionId,
+      payer_email: params.payerEmail,
+      auto_recurring: {
+        frequency: 1,
+        frequency_type: 'months',
+        transaction_amount: params.amount,
+        currency_id: 'BRL',
+      },
+      back_url: params.backUrl,
+      notification_url: `${webhookUrl}/api/v1/payments/webhook/mercadopago`,
+      status: 'pending',
+    }),
+  })
+
+  return {
+    preapprovalId: preapproval.id,
+    checkoutUrl: isMpSandbox() ? preapproval.sandbox_init_point : preapproval.init_point,
+    sandbox: isMpSandbox(),
+  }
+}
+
+export async function cancelMpSubscription(preapprovalId: string) {
+  await mpFetch(`/preapproval/${preapprovalId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ status: 'cancelled' }),
+  })
+}
+
+export async function getMpPreapproval(preapprovalId: string) {
+  return mpFetch<MpPreapproval>(`/preapproval/${preapprovalId}`)
 }

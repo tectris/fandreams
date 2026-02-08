@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { authMiddleware } from '../middleware/auth'
 import * as paymentService from '../services/payment.service'
+import * as subscriptionService from '../services/subscription.service'
 import { success, error } from '../utils/response'
 import { AppError } from '../services/auth.service'
 import { env } from '../config/env'
@@ -67,6 +68,33 @@ paymentsRoute.post('/paypal/capture', authMiddleware, async (c) => {
 
 // ── Webhooks (no auth) ──
 
+async function processMpWebhookEvent(type: string, dataId: string) {
+  // Route payment service first (handles payment + preapproval + authorized_payment)
+  const result = await paymentService.handleMercadoPagoWebhook(type, String(dataId))
+
+  // If it's a subscription event, also update the subscription
+  if (result.processed && (result as any).type === 'preapproval') {
+    const preapprovalResult = result as any
+    const subResult = await subscriptionService.activateSubscriptionFromWebhook(
+      preapprovalResult.preapprovalId,
+      preapprovalResult.status,
+    )
+    return { ...result, subscription: subResult }
+  }
+
+  if (result.processed && (result as any).type === 'authorized_payment') {
+    const authResult = result as any
+    const subResult = await subscriptionService.recordSubscriptionPayment(
+      authResult.preapprovalId,
+      authResult.status,
+      authResult.amount,
+    )
+    return { ...result, subscription: subResult }
+  }
+
+  return result
+}
+
 // MercadoPago webhook
 paymentsRoute.post('/webhook/mercadopago', async (c) => {
   try {
@@ -105,7 +133,7 @@ paymentsRoute.post('/webhook/mercadopago', async (c) => {
             return c.json({ received: true, error: 'invalid_signature' }, 200)
           }
 
-          const result = await paymentService.handleMercadoPagoWebhook(bodyJson.type, String(dataId))
+          const result = await processMpWebhookEvent(bodyJson.type, String(dataId))
           return c.json({ received: true, ...result }, 200)
         } else if (isProduction) {
           console.warn('Webhook: malformed signature in production — rejecting')
@@ -123,7 +151,7 @@ paymentsRoute.post('/webhook/mercadopago', async (c) => {
     const type = body?.type || body?.action
 
     if (dataId) {
-      const result = await paymentService.handleMercadoPagoWebhook(type, String(dataId))
+      const result = await processMpWebhookEvent(type, String(dataId))
       return c.json({ received: true, ...result }, 200)
     }
 
@@ -141,7 +169,7 @@ paymentsRoute.post('/webhook', async (c) => {
     const dataId = body?.data?.id
     const type = body?.type || body?.action
     if (dataId) {
-      const result = await paymentService.handleMercadoPagoWebhook(type, String(dataId))
+      const result = await processMpWebhookEvent(type, String(dataId))
       return c.json({ received: true, ...result }, 200)
     }
     return c.json({ received: true }, 200)

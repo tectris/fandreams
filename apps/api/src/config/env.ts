@@ -19,6 +19,7 @@ const envSchema = z.object({
   BUNNY_API_KEY: z.string().optional(),
   BUNNY_LIBRARY_ID: z.string().optional(),
   BUNNY_CDN_HOSTNAME: z.string().optional(),
+  API_URL: z.string().optional(),
   MERCADOPAGO_ACCESS_TOKEN: z.string().optional(),
   MERCADOPAGO_WEBHOOK_SECRET: z.string().min(1, 'MERCADOPAGO_WEBHOOK_SECRET is required in production').optional(),
   MERCADOPAGO_SANDBOX: z.enum(['true', 'false']).default('true'),
