@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { X, Crown, CreditCard, QrCode, Loader2, CheckCircle, ExternalLink } from 'lucide-react'
+import { X, Crown, CreditCard, Loader2, CheckCircle, ExternalLink } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -33,7 +33,6 @@ type DrawerState = 'choose' | 'processing' | 'waiting' | 'success' | 'error'
 export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawerProps) {
   const queryClient = useQueryClient()
   const [state, setState] = useState<DrawerState>('choose')
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('credit_card')
   const [error, setError] = useState('')
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const popupRef = useRef<Window | null>(null)
@@ -80,12 +79,12 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
       const res = await api.post<any>('/subscriptions', {
         creatorId: creator.id,
         tierId: tier?.id,
-        paymentMethod,
+        paymentMethod: 'credit_card',
       })
       const data = res.data
 
       if (data.checkoutUrl) {
-        // Open MP in popup window
+        // Open MP in popup window (Preapproval - credit card only)
         const popup = window.open(data.checkoutUrl, 'mp_checkout', 'width=600,height=700,scrollbars=yes')
         popupRef.current = popup
         setState('waiting')
@@ -172,39 +171,15 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
             )}
           </div>
 
-          {/* State: Choose payment */}
+          {/* State: Choose payment (paid) */}
           {state === 'choose' && !isFree && (
             <>
-              <h4 className="font-semibold text-sm mb-3">Forma de pagamento</h4>
-              <div className="space-y-2 mb-5">
-                <button
-                  onClick={() => setPaymentMethod('credit_card')}
-                  className={`w-full flex items-center gap-3 p-4 rounded-sm border transition-colors ${
-                    paymentMethod === 'credit_card'
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/50'
-                  }`}
-                >
-                  <CreditCard className={`w-5 h-5 ${paymentMethod === 'credit_card' ? 'text-primary' : 'text-muted'}`} />
-                  <div className="text-left">
-                    <p className="font-medium text-sm">Cartao de Credito</p>
-                    <p className="text-xs text-muted">Parcele em ate 12x</p>
-                  </div>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod('pix')}
-                  className={`w-full flex items-center gap-3 p-4 rounded-sm border transition-colors ${
-                    paymentMethod === 'pix'
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/50'
-                  }`}
-                >
-                  <QrCode className={`w-5 h-5 ${paymentMethod === 'pix' ? 'text-primary' : 'text-muted'}`} />
-                  <div className="text-left">
-                    <p className="font-medium text-sm">PIX</p>
-                    <p className="text-xs text-muted">Aprovacao instantanea</p>
-                  </div>
-                </button>
+              <div className="flex items-center gap-3 p-4 rounded-sm border border-primary bg-primary/5 mb-5">
+                <CreditCard className="w-5 h-5 text-primary" />
+                <div className="text-left">
+                  <p className="font-medium text-sm">Cartao de Credito</p>
+                  <p className="text-xs text-muted">Assinatura recorrente mensal</p>
+                </div>
               </div>
               <Button className="w-full" onClick={handleSubscribe}>
                 <Crown className="w-4 h-4 mr-2" />
@@ -254,7 +229,6 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
                   if (popupRef.current && !popupRef.current.closed) {
                     popupRef.current.focus()
                   } else {
-                    // Re-trigger
                     handleSubscribe()
                   }
                 }}

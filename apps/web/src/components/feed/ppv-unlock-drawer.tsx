@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { X, Lock, Coins, CreditCard, QrCode, Loader2, CheckCircle, ExternalLink } from 'lucide-react'
+import { X, Lock, Coins, CreditCard, QrCode, Loader2, CheckCircle, ExternalLink, Copy } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -22,13 +22,21 @@ interface PpvUnlockDrawerProps {
   }
 }
 
-type DrawerState = 'choose' | 'processing' | 'waiting' | 'success' | 'error'
+type PixData = {
+  qrCodeBase64: string
+  qrCode: string
+  ticketUrl: string
+  expiresAt: string
+}
+
+type DrawerState = 'choose' | 'processing' | 'pix' | 'waiting' | 'success' | 'error'
 
 export function PpvUnlockDrawer({ open, onClose, onUnlocked, post }: PpvUnlockDrawerProps) {
   const queryClient = useQueryClient()
   const [state, setState] = useState<DrawerState>('choose')
   const [error, setError] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<'fancoins' | 'pix' | 'credit_card'>('fancoins')
+  const [pixData, setPixData] = useState<PixData | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [paymentId, setPaymentId] = useState<string | null>(null)
 
@@ -50,6 +58,7 @@ export function PpvUnlockDrawer({ open, onClose, onUnlocked, post }: PpvUnlockDr
       setState('choose')
       setError('')
       setPaymentId(null)
+      setPixData(null)
       if (pollRef.current) clearInterval(pollRef.current)
       pollRef.current = null
     }
@@ -65,6 +74,7 @@ export function PpvUnlockDrawer({ open, onClose, onUnlocked, post }: PpvUnlockDr
         const res = await api.get<{ status: string }>(`/payments/status/${pId}`)
         if (res.data?.status === 'completed') {
           setState('success')
+          setPixData(null)
           if (pollRef.current) clearInterval(pollRef.current)
           queryClient.invalidateQueries({ queryKey: ['creator-posts'] })
           queryClient.invalidateQueries({ queryKey: ['feed'] })
@@ -103,7 +113,14 @@ export function PpvUnlockDrawer({ open, onClose, onUnlocked, post }: PpvUnlockDr
       })
       const data = res.data
 
-      if (data.checkoutUrl) {
+      if (data.pixData) {
+        // PIX Transparent Checkout: show QR code inline
+        setPaymentId(data.paymentId)
+        setPixData(data.pixData)
+        setState('pix')
+        startPolling(data.paymentId)
+      } else if (data.checkoutUrl) {
+        // Card Checkout Pro: open popup
         setPaymentId(data.paymentId)
         window.open(data.checkoutUrl, 'mp_ppv_checkout', 'width=600,height=700,scrollbars=yes')
         setState('waiting')
@@ -112,6 +129,13 @@ export function PpvUnlockDrawer({ open, onClose, onUnlocked, post }: PpvUnlockDr
     } catch (e: any) {
       setState('error')
       setError(e.message || 'Erro ao criar pagamento')
+    }
+  }
+
+  function copyPixCode() {
+    if (pixData?.qrCode) {
+      navigator.clipboard.writeText(pixData.qrCode)
+      toast.success('Codigo PIX copiado!')
     }
   }
 
@@ -171,22 +195,6 @@ export function PpvUnlockDrawer({ open, onClose, onUnlocked, post }: PpvUnlockDr
                   {hasEnoughCoins && <Badge variant="success" className="text-xs">Disponivel</Badge>}
                 </button>
 
-                {/* Credit Card option */}
-                <button
-                  onClick={() => setPaymentMethod('credit_card')}
-                  className={`w-full flex items-center gap-3 p-4 rounded-sm border transition-colors ${
-                    paymentMethod === 'credit_card'
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/50'
-                  }`}
-                >
-                  <CreditCard className={`w-5 h-5 ${paymentMethod === 'credit_card' ? 'text-primary' : 'text-muted'}`} />
-                  <div className="text-left">
-                    <p className="font-medium text-sm">Cartao de Credito</p>
-                    <p className="text-xs text-muted">{formatCurrency(post.ppvPrice)} — parcele em ate 12x</p>
-                  </div>
-                </button>
-
                 {/* PIX option */}
                 <button
                   onClick={() => setPaymentMethod('pix')}
@@ -200,6 +208,22 @@ export function PpvUnlockDrawer({ open, onClose, onUnlocked, post }: PpvUnlockDr
                   <div className="text-left">
                     <p className="font-medium text-sm">PIX</p>
                     <p className="text-xs text-muted">{formatCurrency(post.ppvPrice)} — aprovacao instantanea</p>
+                  </div>
+                </button>
+
+                {/* Credit Card option */}
+                <button
+                  onClick={() => setPaymentMethod('credit_card')}
+                  className={`w-full flex items-center gap-3 p-4 rounded-sm border transition-colors ${
+                    paymentMethod === 'credit_card'
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-primary/50'
+                  }`}
+                >
+                  <CreditCard className={`w-5 h-5 ${paymentMethod === 'credit_card' ? 'text-primary' : 'text-muted'}`} />
+                  <div className="text-left">
+                    <p className="font-medium text-sm">Cartao de Credito</p>
+                    <p className="text-xs text-muted">{formatCurrency(post.ppvPrice)} — parcele em ate 12x</p>
                   </div>
                 </button>
               </div>
@@ -243,7 +267,50 @@ export function PpvUnlockDrawer({ open, onClose, onUnlocked, post }: PpvUnlockDr
             </div>
           )}
 
-          {/* State: Waiting for MP payment */}
+          {/* State: PIX QR Code */}
+          {state === 'pix' && pixData && (
+            <div className="flex flex-col items-center gap-4 py-4">
+              <div className="bg-white rounded-lg p-4">
+                <img
+                  src={`data:image/png;base64,${pixData.qrCodeBase64}`}
+                  alt="QR Code PIX"
+                  className="w-52 h-52"
+                />
+              </div>
+              <div className="w-full">
+                <p className="text-sm font-medium text-center mb-2">Escaneie o QR Code ou copie o codigo</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={pixData.qrCode}
+                    className="flex-1 text-xs bg-surface-light border border-border rounded px-2 py-2 font-mono truncate"
+                  />
+                  <Button size="sm" variant="outline" onClick={copyPixCode}>
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                <p className="text-xs text-muted">Aguardando pagamento...</p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setState('choose')
+                  setPixData(null)
+                  setPaymentId(null)
+                  if (pollRef.current) clearInterval(pollRef.current)
+                }}
+              >
+                Cancelar
+              </Button>
+            </div>
+          )}
+
+          {/* State: Waiting for MP payment (card popup) */}
           {state === 'waiting' && (
             <div className="flex flex-col items-center gap-4 py-6">
               <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">

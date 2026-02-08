@@ -3,9 +3,9 @@ import { subscriptions, creatorProfiles, subscriptionTiers, payments, users } fr
 import { db } from '../config/database'
 import { env } from '../config/env'
 import { AppError } from './auth.service'
-import { PLATFORM_FEES } from '@fandreams/shared'
 import * as paymentService from './payment.service'
 import * as fancoinService from './fancoin.service'
+import { getPlatformFeeRate } from './withdrawal.service'
 
 // ── Create subscription with MP checkout ──
 
@@ -95,7 +95,8 @@ export async function createSubscriptionCheckout(
     .returning()
 
   // Create pending payment record
-  const platformFee = amount * PLATFORM_FEES.subscription
+  const feeRate = await getPlatformFeeRate()
+  const platformFee = amount * feeRate
   const creatorAmount = amount - platformFee
 
   await db.insert(payments).values({
@@ -145,7 +146,8 @@ async function activateSubscription(fanId: string, creatorId: string, tierId?: s
   periodEnd.setMonth(periodEnd.getMonth() + 1)
 
   const amount = Number(price || 0)
-  const platformFee = amount * PLATFORM_FEES.subscription
+  const feeRate = await getPlatformFeeRate()
+  const platformFee = amount * feeRate
   const creatorAmount = amount - platformFee
 
   const [sub] = await db
@@ -243,7 +245,8 @@ export async function activateSubscriptionFromWebhook(
 
     // Credit creator earnings as FanCoins
     const amount = Number(sub.pricePaid || 0)
-    const platformFee = amount * PLATFORM_FEES.subscription
+    const webhookFeeRate = await getPlatformFeeRate()
+    const platformFee = amount * webhookFeeRate
     const creatorAmount = amount - platformFee
 
     if (creatorAmount > 0) {
@@ -334,7 +337,8 @@ export async function recordSubscriptionPayment(
       .where(eq(subscriptions.id, sub.id))
 
     // Record payment
-    const platformFee = amount * PLATFORM_FEES.subscription
+    const recurringFeeRate = await getPlatformFeeRate()
+    const platformFee = amount * recurringFeeRate
     const creatorAmount = amount - platformFee
 
     await db.insert(payments).values({

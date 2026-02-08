@@ -30,6 +30,13 @@ export async function setSetting(key: string, value: any, updatedBy: string) {
     })
 }
 
+// ── Platform Fee ──
+
+export async function getPlatformFeeRate(): Promise<number> {
+  const percent = await getSetting<number>('platform_fee_percent', 8)
+  return percent / 100
+}
+
 // ── Anti-Fraud Checks ──
 
 type RiskResult = { score: number; flags: string[]; blocked: boolean }
@@ -409,6 +416,7 @@ export async function getPaymentSettings() {
     'cooldown_hours',
     'min_payout',
     'fancoin_to_brl',
+    'platform_fee_percent',
   ]
 
   const settings: Record<string, any> = {
@@ -418,6 +426,7 @@ export async function getPaymentSettings() {
     cooldown_hours: PAYOUT_CONFIG.cooldownHours,
     min_payout: PAYOUT_CONFIG.minPayout,
     fancoin_to_brl: PAYOUT_CONFIG.fancoinToBrl,
+    platform_fee_percent: 8,
   }
 
   try {
@@ -443,6 +452,7 @@ export async function updatePaymentSettings(updates: Record<string, any>, adminI
     'cooldown_hours',
     'min_payout',
     'fancoin_to_brl',
+    'platform_fee_percent',
   ]
 
   try {
