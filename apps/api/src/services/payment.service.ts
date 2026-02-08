@@ -488,16 +488,18 @@ async function processPaymentConfirmation(
     }
 
     if (payment.type === 'ppv' && payment.recipientId) {
-      // Credit creator earnings
+      // Credit creator earnings as FanCoins (Option A: all earnings → FanCoins)
       const creatorAmount = Number(payment.creatorAmount || 0)
       if (creatorAmount > 0) {
-        const { creatorProfiles } = await import('@fandreams/database')
-        await db
-          .update(creatorProfiles)
-          .set({ totalEarnings: sql`${creatorProfiles.totalEarnings} + ${creatorAmount}` })
-          .where(eq(creatorProfiles.userId, payment.recipientId))
+        await fancoinService.creditEarnings(
+          payment.recipientId,
+          creatorAmount,
+          'ppv_received',
+          `PPV recebido - pagamento via ${meta?.paymentMethod || 'MP'}`,
+          meta?.postId,
+        )
       }
-      console.log(`PPV unlocked for user ${payment.userId}, post ${meta?.postId}`)
+      console.log(`PPV unlocked for user ${payment.userId}, post ${meta?.postId}, creator credited ${creatorAmount} BRL as FanCoins`)
     }
   }
 

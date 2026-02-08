@@ -279,6 +279,51 @@ export async function unlockPpv(userId: string, postId: string) {
   return { unlocked: true, fancoinsSpent: priceInCoins, newBalance }
 }
 
+/**
+ * Credit creator earnings as FanCoins from external payments (MP subscriptions, PPV via MP).
+ * Converts BRL creator amount (already minus platform fee) to FanCoins.
+ * R$0.01 = 1 FanCoin → R$1.00 = 100 FanCoins
+ */
+export async function creditEarnings(
+  creatorId: string,
+  creatorAmountBrl: number,
+  type: 'ppv_received' | 'subscription_earned',
+  description: string,
+  referenceId?: string,
+) {
+  const coinsEarned = Math.round(creatorAmountBrl * 100)
+  if (coinsEarned <= 0) return { credited: 0, newBalance: 0 }
+
+  const wallet = await getWallet(creatorId)
+  const newBalance = wallet.balance + coinsEarned
+
+  await db
+    .update(fancoinWallets)
+    .set({
+      balance: newBalance,
+      totalEarned: sql`${fancoinWallets.totalEarned} + ${coinsEarned}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(fancoinWallets.userId, creatorId))
+
+  await db.insert(fancoinTransactions).values({
+    userId: creatorId,
+    type,
+    amount: coinsEarned,
+    balanceAfter: newBalance,
+    referenceId,
+    description,
+  })
+
+  // Also update BRL totalEarnings on creator profile
+  await db
+    .update(creatorProfiles)
+    .set({ totalEarnings: sql`${creatorProfiles.totalEarnings} + ${creatorAmountBrl}` })
+    .where(eq(creatorProfiles.userId, creatorId))
+
+  return { credited: coinsEarned, newBalance }
+}
+
 export async function rewardEngagement(userId: string, type: string, amount: number) {
   const wallet = await getWallet(userId)
   const newBalance = wallet.balance + amount

@@ -5,6 +5,7 @@ import { env } from '../config/env'
 import { AppError } from './auth.service'
 import { PLATFORM_FEES } from '@fandreams/shared'
 import * as paymentService from './payment.service'
+import * as fancoinService from './fancoin.service'
 
 // ── Create subscription with MP checkout ──
 
@@ -183,13 +184,21 @@ async function activateSubscription(fanId: string, creatorId: string, tierId?: s
       status: 'completed',
       metadata: { subscriptionId: sub?.id, tierId },
     })
+
+    // Credit creator earnings as FanCoins
+    await fancoinService.creditEarnings(
+      creatorId,
+      creatorAmount,
+      'subscription_earned',
+      'Assinatura recebida',
+      sub?.id,
+    )
   }
 
   await db
     .update(creatorProfiles)
     .set({
       totalSubscribers: sql`${creatorProfiles.totalSubscribers} + 1`,
-      totalEarnings: sql`${creatorProfiles.totalEarnings} + ${creatorAmount}`,
     })
     .where(eq(creatorProfiles.userId, creatorId))
 
@@ -232,16 +241,25 @@ export async function activateSubscriptionFromWebhook(
       })
       .where(eq(subscriptions.id, sub.id))
 
-    // Update creator stats
+    // Credit creator earnings as FanCoins
     const amount = Number(sub.pricePaid || 0)
     const platformFee = amount * PLATFORM_FEES.subscription
     const creatorAmount = amount - platformFee
+
+    if (creatorAmount > 0) {
+      await fancoinService.creditEarnings(
+        sub.creatorId,
+        creatorAmount,
+        'subscription_earned',
+        'Assinatura recebida via Mercado Pago',
+        sub.id,
+      )
+    }
 
     await db
       .update(creatorProfiles)
       .set({
         totalSubscribers: sql`${creatorProfiles.totalSubscribers} + 1`,
-        totalEarnings: sql`${creatorProfiles.totalEarnings} + ${creatorAmount}`,
       })
       .where(eq(creatorProfiles.userId, sub.creatorId))
 
@@ -332,14 +350,18 @@ export async function recordSubscriptionPayment(
       metadata: { subscriptionId: sub.id, recurring: true },
     })
 
-    await db
-      .update(creatorProfiles)
-      .set({
-        totalEarnings: sql`${creatorProfiles.totalEarnings} + ${creatorAmount}`,
-      })
-      .where(eq(creatorProfiles.userId, sub.creatorId))
+    // Credit creator earnings as FanCoins
+    if (creatorAmount > 0) {
+      await fancoinService.creditEarnings(
+        sub.creatorId,
+        creatorAmount,
+        'subscription_earned',
+        'Assinatura mensal recebida via Mercado Pago',
+        sub.id,
+      )
+    }
 
-    console.log(`Recurring payment recorded for subscription ${sub.id}`)
+    console.log(`Recurring payment recorded for subscription ${sub.id}, creator credited ${creatorAmount} BRL as FanCoins`)
     return { processed: true, status: 'payment_recorded', subscriptionId: sub.id }
   }
 
