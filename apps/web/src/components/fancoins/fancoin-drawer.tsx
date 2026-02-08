@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
   X, Coins, ShoppingCart, ArrowRightLeft, ArrowDownToLine,
-  QrCode, CreditCard, Loader2, CheckCircle2, ExternalLink,
+  QrCode, CreditCard, Loader2, CheckCircle2, ExternalLink, Copy,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
@@ -36,6 +36,13 @@ type Package = {
   bonusPercent: number
 }
 
+type PixData = {
+  qrCodeBase64: string
+  qrCode: string
+  ticketUrl: string
+  expiresAt: string
+}
+
 interface FancoinDrawerProps {
   open: boolean
   onClose: () => void
@@ -45,8 +52,9 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
   const queryClient = useQueryClient()
   const user = useAuthStore((s) => s.user)
   const [tab, setTab] = useState<'wallet' | 'buy' | 'history'>('wallet')
-  const [buyState, setBuyState] = useState<'choose' | 'processing' | 'waiting' | 'success'>('choose')
+  const [buyState, setBuyState] = useState<'choose' | 'processing' | 'pix' | 'waiting' | 'success'>('choose')
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null)
+  const [pixData, setPixData] = useState<PixData | null>(null)
   const popupRef = useRef<Window | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -77,8 +85,16 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
     },
     onSuccess: (data) => {
       setPendingPaymentId(data.paymentId)
-      setBuyState('waiting')
-      popupRef.current = window.open(data.checkoutUrl, 'mp_checkout', 'width=600,height=700,scrollbars=yes')
+
+      if (data.pixData) {
+        // PIX Transparent Checkout: show QR code inline
+        setPixData(data.pixData)
+        setBuyState('pix')
+      } else if (data.checkoutUrl) {
+        // Card Checkout Pro: open popup
+        setBuyState('waiting')
+        popupRef.current = window.open(data.checkoutUrl, 'mp_checkout', 'width=600,height=700,scrollbars=yes')
+      }
     },
     onError: (e: any) => {
       setBuyState('choose')
@@ -88,7 +104,7 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
 
   // Poll for payment completion
   useEffect(() => {
-    if (buyState !== 'waiting' || !pendingPaymentId) return
+    if ((buyState !== 'waiting' && buyState !== 'pix') || !pendingPaymentId) return
 
     pollRef.current = setInterval(async () => {
       try {
@@ -97,6 +113,7 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
           clearInterval(pollRef.current!)
           pollRef.current = null
           setBuyState('success')
+          setPixData(null)
           queryClient.invalidateQueries({ queryKey: ['fancoin-wallet'] })
           queryClient.invalidateQueries({ queryKey: ['fancoin-transactions'] })
           if (popupRef.current && !popupRef.current.closed) {
@@ -106,6 +123,7 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
           clearInterval(pollRef.current!)
           pollRef.current = null
           setBuyState('choose')
+          setPixData(null)
           toast.error('Pagamento nao aprovado. Tente novamente.')
         }
       } catch {
@@ -126,6 +144,7 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
     if (!open) {
       setBuyState('choose')
       setPendingPaymentId(null)
+      setPixData(null)
       if (pollRef.current) {
         clearInterval(pollRef.current)
         pollRef.current = null
@@ -136,6 +155,13 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
   function handleBuy(packageId: string, method: 'pix' | 'credit_card') {
     setBuyState('processing')
     checkoutMutation.mutate({ packageId, paymentMethod: method, provider: 'mercadopago' })
+  }
+
+  function copyPixCode() {
+    if (pixData?.qrCode) {
+      navigator.clipboard.writeText(pixData.qrCode)
+      toast.success('Codigo PIX copiado!')
+    }
   }
 
   const wallet = walletData?.data
@@ -257,6 +283,53 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
 
           {tab === 'buy' && (
             <div className="space-y-3">
+              {/* PIX QR Code State */}
+              {buyState === 'pix' && pixData && (
+                <div className="text-center space-y-4">
+                  <div className="bg-white rounded-lg p-4 inline-block mx-auto">
+                    <img
+                      src={`data:image/png;base64,${pixData.qrCodeBase64}`}
+                      alt="QR Code PIX"
+                      className="w-48 h-48 mx-auto"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium mb-2">Escaneie o QR Code ou copie o codigo</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={pixData.qrCode}
+                        className="flex-1 text-xs bg-surface-light border border-border rounded px-2 py-2 font-mono truncate"
+                      />
+                      <Button size="sm" variant="outline" onClick={copyPixCode}>
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    <p className="text-xs text-muted">Aguardando pagamento...</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setBuyState('choose')
+                      setPendingPaymentId(null)
+                      setPixData(null)
+                      if (pollRef.current) {
+                        clearInterval(pollRef.current)
+                        pollRef.current = null
+                      }
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              )}
+
+              {/* Card Waiting State (popup) */}
               {buyState === 'waiting' && (
                 <div className="text-center py-6 space-y-3">
                   <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />

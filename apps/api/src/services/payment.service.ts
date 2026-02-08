@@ -1,10 +1,11 @@
 import { eq, and, sql } from 'drizzle-orm'
-import { payments, posts } from '@fandreams/database'
+import { payments, posts, users } from '@fandreams/database'
 import { db } from '../config/database'
 import { env } from '../config/env'
 import { AppError } from './auth.service'
-import { FANCOIN_PACKAGES, PLATFORM_FEES } from '@fandreams/shared'
+import { FANCOIN_PACKAGES } from '@fandreams/shared'
 import * as fancoinService from './fancoin.service'
+import { getPlatformFeeRate } from './withdrawal.service'
 import { sendPaymentConfirmedEmail, sendSubscriptionActivatedEmail } from './email.service'
 
 // ── MercadoPago ──
@@ -68,6 +69,21 @@ type MpAuthorizedPayment = {
   transaction_amount: number
   date_created: string
   external_reference: string
+}
+type MpPixPaymentResponse = {
+  id: number
+  status: string
+  status_detail: string
+  transaction_amount: number
+  date_of_expiration: string
+  external_reference: string
+  point_of_interaction: {
+    transaction_data: {
+      qr_code_base64: string
+      qr_code: string
+      ticket_url: string
+    }
+  }
 }
 
 // ── NOWPayments ──
@@ -167,6 +183,8 @@ export async function createFancoinPayment(
   const pkg = FANCOIN_PACKAGES.find((p) => p.id === packageId)
   if (!pkg) throw new AppError('NOT_FOUND', 'Pacote nao encontrado', 404)
 
+  const feeRate = await getPlatformFeeRate()
+
   // Create internal payment record
   const [payment] = await db
     .insert(payments)
@@ -175,7 +193,7 @@ export async function createFancoinPayment(
       type: 'fancoin_purchase',
       amount: String(pkg.price),
       currency: provider === 'nowpayments' ? 'USD' : 'BRL',
-      platformFee: String(pkg.price * PLATFORM_FEES.fancoin_purchase),
+      platformFee: String(pkg.price * feeRate),
       paymentProvider: provider,
       status: 'pending',
       metadata: { packageId, coins: pkg.coins, bonus: pkg.bonus, paymentMethod, provider },
@@ -186,6 +204,10 @@ export async function createFancoinPayment(
 
   switch (provider) {
     case 'mercadopago':
+      // PIX → Transparent Checkout (QR code in-app), Card → Checkout Pro (redirect)
+      if (paymentMethod === 'pix') {
+        return createMpPixPayment(payment, pkg, userId, appUrl)
+      }
       return createMpPayment(payment, pkg, paymentMethod, appUrl)
     case 'nowpayments':
       return createNpPayment(payment, pkg, appUrl)
@@ -250,10 +272,71 @@ async function createMpPayment(payment: any, pkg: any, paymentMethod: string, ap
   }
 }
 
+// ── MercadoPago PIX (Transparent Checkout) ──
+
+async function createMpPixPayment(payment: any, pkg: any, userId: string, appUrl: string) {
+  const webhookUrl = getWebhookBaseUrl()
+
+  // Fetch payer email (required by MP)
+  const [user] = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+
+  if (!user?.email) throw new AppError('MISSING_EMAIL', 'Email do usuario nao encontrado', 400)
+
+  // PIX payments expire in 30 minutes
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
+
+  const mpPayment = await mpFetch<MpPixPaymentResponse>('/v1/payments', {
+    method: 'POST',
+    body: JSON.stringify({
+      transaction_amount: pkg.price,
+      description: `${pkg.coins.toLocaleString()} FanCoins${pkg.bonus > 0 ? ` (+${pkg.bonus} bonus)` : ''} - FanDreams`,
+      payment_method_id: 'pix',
+      payer: {
+        email: user.email,
+      },
+      external_reference: payment.id,
+      notification_url: `${webhookUrl}/api/v1/payments/webhook/mercadopago`,
+      date_of_expiration: expiresAt.toISOString(),
+      statement_descriptor: 'FANDREAMS',
+    }),
+  })
+
+  await db
+    .update(payments)
+    .set({ providerTxId: String(mpPayment.id) })
+    .where(eq(payments.id, payment.id))
+
+  return {
+    paymentId: payment.id,
+    provider: 'mercadopago' as const,
+    pixData: {
+      qrCodeBase64: mpPayment.point_of_interaction.transaction_data.qr_code_base64,
+      qrCode: mpPayment.point_of_interaction.transaction_data.qr_code,
+      ticketUrl: mpPayment.point_of_interaction.transaction_data.ticket_url,
+      expiresAt: expiresAt.toISOString(),
+    },
+    package: pkg,
+    sandbox: isMpSandbox(),
+  }
+}
+
 // ── NOWPayments Payment ──
 
 async function createNpPayment(payment: any, pkg: any, appUrl: string) {
-  const priceUsd = pkg.price / 5.0 // Approximate BRL to USD (configurable later via admin)
+  // Convert BRL to USD using NOWPayments estimate or fallback rate
+  let priceUsd = pkg.price / 5.5
+  try {
+    const estimate = await npFetch<{ estimated_amount: number }>(
+      `/estimate?amount=${pkg.price}&currency_from=brl&currency_to=usd`,
+    )
+    if (estimate.estimated_amount > 0) priceUsd = estimate.estimated_amount
+  } catch {
+    // Fallback to approximate rate
+  }
 
   const invoice = await npFetch<{
     id: string
@@ -480,16 +563,18 @@ async function processPaymentConfirmation(
     }
 
     if (payment.type === 'ppv' && payment.recipientId) {
-      // Credit creator earnings
+      // Credit creator earnings as FanCoins (Option A: all earnings → FanCoins)
       const creatorAmount = Number(payment.creatorAmount || 0)
       if (creatorAmount > 0) {
-        const { creatorProfiles } = await import('@fandreams/database')
-        await db
-          .update(creatorProfiles)
-          .set({ totalEarnings: sql`${creatorProfiles.totalEarnings} + ${creatorAmount}` })
-          .where(eq(creatorProfiles.userId, payment.recipientId))
+        await fancoinService.creditEarnings(
+          payment.recipientId,
+          creatorAmount,
+          'ppv_received',
+          `PPV recebido - pagamento via ${meta?.paymentMethod || 'MP'}`,
+          meta?.postId,
+        )
       }
-      console.log(`PPV unlocked for user ${payment.userId}, post ${meta?.postId}`)
+      console.log(`PPV unlocked for user ${payment.userId}, post ${meta?.postId}, creator credited ${creatorAmount} BRL as FanCoins`)
     }
 
     // Promo subscription: activate subscription for the promo duration
@@ -708,8 +793,9 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
     .limit(1)
   if (existing) throw new AppError('ALREADY_UNLOCKED', 'Voce ja desbloqueou este post', 409)
 
+  const feeRate = await getPlatformFeeRate()
   const amount = Number(post.ppvPrice)
-  const platformFee = amount * PLATFORM_FEES.ppv
+  const platformFee = amount * feeRate
   const creatorAmount = amount - platformFee
   const appUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   const webhookUrl = getWebhookBaseUrl()
@@ -733,6 +819,50 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
     ? `PPV: ${post.contentText.slice(0, 60)}${post.contentText.length > 60 ? '...' : ''}`
     : 'Conteudo PPV - FanDreams'
 
+  // PIX → Transparent Checkout (QR code in-app)
+  if (paymentMethod === 'pix') {
+    const [user] = await db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+
+    if (!user?.email) throw new AppError('MISSING_EMAIL', 'Email do usuario nao encontrado', 400)
+
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
+
+    const mpPayment = await mpFetch<MpPixPaymentResponse>('/v1/payments', {
+      method: 'POST',
+      body: JSON.stringify({
+        transaction_amount: amount,
+        description,
+        payment_method_id: 'pix',
+        payer: { email: user.email },
+        external_reference: payment.id,
+        notification_url: `${webhookUrl}/api/v1/payments/webhook/mercadopago`,
+        date_of_expiration: expiresAt.toISOString(),
+        statement_descriptor: 'FANDREAMS',
+      }),
+    })
+
+    await db
+      .update(payments)
+      .set({ providerTxId: String(mpPayment.id) })
+      .where(eq(payments.id, payment.id))
+
+    return {
+      paymentId: payment.id,
+      pixData: {
+        qrCodeBase64: mpPayment.point_of_interaction.transaction_data.qr_code_base64,
+        qrCode: mpPayment.point_of_interaction.transaction_data.qr_code,
+        ticketUrl: mpPayment.point_of_interaction.transaction_data.ticket_url,
+        expiresAt: expiresAt.toISOString(),
+      },
+      sandbox: isMpSandbox(),
+    }
+  }
+
+  // Credit Card → Checkout Pro (redirect)
   const preference = await mpFetch<MpPreference>('/checkout/preferences', {
     method: 'POST',
     body: JSON.stringify({
@@ -746,16 +876,10 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
         },
       ],
       external_reference: payment.id,
-      payment_methods: paymentMethod === 'pix'
-        ? {
-            excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }, { id: 'ticket' }],
-            default_payment_method_id: 'pix',
-            installments: 1,
-          }
-        : {
-            excluded_payment_types: [{ id: 'bank_transfer' }, { id: 'ticket' }],
-            installments: 12,
-          },
+      payment_methods: {
+        excluded_payment_types: [{ id: 'bank_transfer' }, { id: 'ticket' }],
+        installments: 12,
+      },
       back_urls: {
         success: `${appUrl}/feed?ppv=success&postId=${postId}`,
         failure: `${appUrl}/feed?ppv=failure&postId=${postId}`,

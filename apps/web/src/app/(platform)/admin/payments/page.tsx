@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS = {
   cooldown_hours: 24,
   min_payout: 50,
   fancoin_to_brl: 0.01,
+  platform_fee_percent: 8,
 }
 
 function SettingsTab({ providers, loadingProviders, settings, loadingSettings, settingsMutation }: {
@@ -85,6 +86,53 @@ function SettingsTab({ providers, loadingProviders, settings, loadingSettings, s
                 )
               })}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Platform Fee */}
+      <Card>
+        <CardHeader>
+          <h2 className="font-bold flex items-center gap-2">
+            <DollarSign className="w-5 h-5 text-primary" /> Taxa da Plataforma
+          </h2>
+          <p className="text-xs text-muted mt-1">Percentual retido pela FanDreams em todas as transacoes (assinaturas, tips, PPV, compra de FanCoins)</p>
+        </CardHeader>
+        <CardContent>
+          {loadingSettings ? (
+            <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+          ) : (
+            <form className="space-y-4" onSubmit={(e) => {
+              e.preventDefault()
+              const form = new FormData(e.currentTarget)
+              const fee = Number(form.get('platform_fee_percent'))
+              if (fee < 0 || fee > 50) {
+                return
+              }
+              settingsMutation.mutate({ platform_fee_percent: fee })
+            }}>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <Input
+                    label="Taxa da plataforma (%)"
+                    name="platform_fee_percent"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="50"
+                    defaultValue={effectiveSettings.platform_fee_percent}
+                  />
+                </div>
+                <div className="pt-5">
+                  <Button type="submit" loading={settingsMutation.isPending}>
+                    Salvar
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted">
+                Atual: <span className="font-bold text-foreground">{effectiveSettings.platform_fee_percent}%</span> — Criador recebe <span className="font-bold text-success">{100 - effectiveSettings.platform_fee_percent}%</span> de cada transacao
+              </p>
+            </form>
           )}
         </CardContent>
       </Card>

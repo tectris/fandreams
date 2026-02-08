@@ -2,7 +2,8 @@ import { eq, and, sql } from 'drizzle-orm'
 import { fancoinWallets, fancoinTransactions, creatorProfiles, users, posts, payments } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
-import { FANCOIN_PACKAGES, PLATFORM_FEES } from '@fandreams/shared'
+import { FANCOIN_PACKAGES } from '@fandreams/shared'
+import { getPlatformFeeRate } from './withdrawal.service'
 
 export async function getWallet(userId: string) {
   const [wallet] = await db
@@ -94,7 +95,8 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
     })
     .where(eq(fancoinWallets.userId, fromUserId))
 
-  const platformCut = Math.floor(amount * PLATFORM_FEES.tip)
+  const feeRate = await getPlatformFeeRate()
+  const platformCut = Math.floor(amount * feeRate)
   const creatorAmount = amount - platformCut
 
   const creatorWallet = await getWallet(toCreatorId)
@@ -208,7 +210,8 @@ export async function unlockPpv(userId: string, postId: string) {
   }
 
   const newBalance = wallet.balance - priceInCoins
-  const platformCut = Math.floor(priceInCoins * PLATFORM_FEES.ppv)
+  const ppvFeeRate = await getPlatformFeeRate()
+  const platformCut = Math.floor(priceInCoins * ppvFeeRate)
   const creatorAmount = priceInCoins - platformCut
 
   // Deduct from buyer
@@ -257,26 +260,72 @@ export async function unlockPpv(userId: string, postId: string) {
   ])
 
   // Record in payments table for access tracking
+  const ppvBrlFee = Number(post.ppvPrice) * ppvFeeRate
   await db.insert(payments).values({
     userId,
     recipientId: post.creatorId,
     type: 'ppv',
     amount: post.ppvPrice,
-    platformFee: String(Number(post.ppvPrice) * PLATFORM_FEES.ppv),
-    creatorAmount: String(Number(post.ppvPrice) - Number(post.ppvPrice) * PLATFORM_FEES.ppv),
+    platformFee: String(ppvBrlFee),
+    creatorAmount: String(Number(post.ppvPrice) - ppvBrlFee),
     paymentProvider: 'fancoins',
     status: 'completed',
     metadata: { postId, method: 'fancoins', fancoinsSpent: priceInCoins },
   })
 
   // Update creator earnings
-  const creatorAmountBrl = Number(post.ppvPrice) - Number(post.ppvPrice) * PLATFORM_FEES.ppv
+  const creatorAmountBrl = Number(post.ppvPrice) - ppvBrlFee
   await db
     .update(creatorProfiles)
     .set({ totalEarnings: sql`${creatorProfiles.totalEarnings} + ${creatorAmountBrl}` })
     .where(eq(creatorProfiles.userId, post.creatorId))
 
   return { unlocked: true, fancoinsSpent: priceInCoins, newBalance }
+}
+
+/**
+ * Credit creator earnings as FanCoins from external payments (MP subscriptions, PPV via MP).
+ * Converts BRL creator amount (already minus platform fee) to FanCoins.
+ * R$0.01 = 1 FanCoin → R$1.00 = 100 FanCoins
+ */
+export async function creditEarnings(
+  creatorId: string,
+  creatorAmountBrl: number,
+  type: 'ppv_received' | 'subscription_earned',
+  description: string,
+  referenceId?: string,
+) {
+  const coinsEarned = Math.round(creatorAmountBrl * 100)
+  if (coinsEarned <= 0) return { credited: 0, newBalance: 0 }
+
+  const wallet = await getWallet(creatorId)
+  const newBalance = wallet.balance + coinsEarned
+
+  await db
+    .update(fancoinWallets)
+    .set({
+      balance: newBalance,
+      totalEarned: sql`${fancoinWallets.totalEarned} + ${coinsEarned}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(fancoinWallets.userId, creatorId))
+
+  await db.insert(fancoinTransactions).values({
+    userId: creatorId,
+    type,
+    amount: coinsEarned,
+    balanceAfter: newBalance,
+    referenceId,
+    description,
+  })
+
+  // Also update BRL totalEarnings on creator profile
+  await db
+    .update(creatorProfiles)
+    .set({ totalEarnings: sql`${creatorProfiles.totalEarnings} + ${creatorAmountBrl}` })
+    .where(eq(creatorProfiles.userId, creatorId))
+
+  return { credited: coinsEarned, newBalance }
 }
 
 export async function rewardEngagement(userId: string, type: string, amount: number) {

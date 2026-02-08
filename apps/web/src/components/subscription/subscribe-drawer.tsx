@@ -59,8 +59,8 @@ function getDiscount(monthlyPrice: string, promoPrice: string, days: number) {
 export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawerProps) {
   const queryClient = useQueryClient()
   const [state, setState] = useState<DrawerState>('choose')
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('credit_card')
   const [error, setError] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('credit_card')
   const [selectedPromo, setSelectedPromo] = useState<Promo | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const popupRef = useRef<Window | null>(null)
@@ -234,7 +234,7 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
             )}
           </div>
 
-          {/* State: Choose payment */}
+          {/* State: Choose payment (paid) */}
           {state === 'choose' && !isFree && (
             <>
               {/* Subscription plan selection (monthly + promos) */}
@@ -374,7 +374,6 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
                   if (popupRef.current && !popupRef.current.closed) {
                     popupRef.current.focus()
                   } else {
-                    // Re-trigger
                     handleSubscribe()
                   }
                 }}
