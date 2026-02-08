@@ -1,5 +1,5 @@
 import { eq, and, sql, lt, ne } from 'drizzle-orm'
-import { subscriptions, creatorProfiles, subscriptionTiers, payments, users } from '@fandreams/database'
+import { subscriptions, creatorProfiles, subscriptionTiers, subscriptionPromos, payments, users } from '@fandreams/database'
 import { db } from '../config/database'
 import { env } from '../config/env'
 import { AppError } from './auth.service'
@@ -13,6 +13,7 @@ export async function createSubscriptionCheckout(
   creatorId: string,
   tierId?: string,
   paymentMethod?: string,
+  promoId?: string,
 ) {
   if (fanId === creatorId) {
     throw new AppError('INVALID', 'Voce nao pode assinar a si mesmo', 400)
@@ -28,10 +29,24 @@ export async function createSubscriptionCheckout(
     throw new AppError('ALREADY_SUBSCRIBED', 'Voce ja esta inscrito neste criador', 409)
   }
 
+  // Check if promo subscription
+  let promo: any = null
+  if (promoId) {
+    const [p] = await db
+      .select()
+      .from(subscriptionPromos)
+      .where(and(eq(subscriptionPromos.id, promoId), eq(subscriptionPromos.creatorId, creatorId), eq(subscriptionPromos.isActive, true)))
+      .limit(1)
+    if (!p) throw new AppError('NOT_FOUND', 'Promocao nao encontrada ou inativa', 404)
+    promo = p
+  }
+
   // Get price
   let price: string
   let tierName: string | undefined
-  if (tierId) {
+  if (promo) {
+    price = promo.price
+  } else if (tierId) {
     const [tier] = await db.select().from(subscriptionTiers).where(eq(subscriptionTiers.id, tierId)).limit(1)
     if (!tier) throw new AppError('NOT_FOUND', 'Tier nao encontrado', 404)
     price = tier.price
@@ -64,8 +79,94 @@ export async function createSubscriptionCheckout(
     .limit(1)
   const creatorName = creator?.displayName || creator?.username || 'Criador'
 
-  // Create pending subscription record
   const now = new Date()
+  const appUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const creatorUsername = creator?.username || creatorId
+
+  // ── Promo subscription: one-time payment for extended period ──
+  if (promo) {
+    const durationDays = promo.durationDays as number
+    const periodEnd = new Date(now)
+    periodEnd.setDate(periodEnd.getDate() + durationDays)
+
+    const [sub] = await db
+      .insert(subscriptions)
+      .values({
+        fanId,
+        creatorId,
+        tierId,
+        status: 'pending',
+        pricePaid: price,
+        paymentProvider: 'mercadopago',
+        currentPeriodStart: now,
+        currentPeriodEnd: now,
+        autoRenew: false, // promo subscriptions don't auto-renew
+      })
+      .onConflictDoUpdate({
+        target: [subscriptions.fanId, subscriptions.creatorId],
+        set: {
+          status: 'pending',
+          tierId,
+          pricePaid: price,
+          paymentProvider: 'mercadopago',
+          cancelledAt: null,
+          autoRenew: false,
+          updatedAt: now,
+        },
+      })
+      .returning()
+
+    const platformFee = amount * PLATFORM_FEES.subscription
+    const creatorAmount = amount - platformFee
+
+    const [payment] = await db
+      .insert(payments)
+      .values({
+        userId: fanId,
+        recipientId: creatorId,
+        type: 'subscription',
+        amount: price,
+        platformFee: String(platformFee),
+        creatorAmount: String(creatorAmount),
+        paymentProvider: 'mercadopago',
+        status: 'pending',
+        metadata: {
+          subscriptionId: sub.id,
+          tierId,
+          promoId,
+          durationDays,
+          paymentMethod,
+          isPromo: true,
+        },
+      })
+      .returning()
+
+    const durationLabel = durationDays === 90 ? '3 meses' : durationDays === 180 ? '6 meses' : '12 meses'
+
+    const mpResult = await paymentService.createPromoSubscriptionPayment({
+      paymentId: payment.id,
+      creatorName,
+      durationLabel,
+      amount,
+      paymentMethod: paymentMethod || 'pix',
+      backUrl: `${appUrl}/creator/${creatorUsername}?subscription=pending`,
+    })
+
+    await db
+      .update(payments)
+      .set({ providerTxId: mpResult.preferenceId })
+      .where(eq(payments.id, payment.id))
+
+    return {
+      subscription: sub,
+      checkoutUrl: mpResult.checkoutUrl,
+      paymentId: payment.id,
+      sandbox: mpResult.sandbox,
+      isPromo: true,
+    }
+  }
+
+  // ── Standard monthly subscription: MP preapproval ──
   const [sub] = await db
     .insert(subscriptions)
     .values({
@@ -110,9 +211,6 @@ export async function createSubscriptionCheckout(
   })
 
   // Create MP preapproval
-  const appUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  const creatorUsername = creator?.username || creatorId
-
   const mpResult = await paymentService.createMpSubscription({
     subscriptionId: sub.id,
     payerEmail: fan.email,

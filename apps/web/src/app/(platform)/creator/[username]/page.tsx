@@ -14,7 +14,7 @@ import { SubscribeDrawer } from '@/components/subscription/subscribe-drawer'
 import { PpvUnlockDrawer } from '@/components/feed/ppv-unlock-drawer'
 import { LevelBadge } from '@/components/gamification/level-badge'
 import { formatCurrency, formatNumber } from '@/lib/utils'
-import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, Share2, FileText, Eye, Image, Video, AlertTriangle } from 'lucide-react'
+import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, Share2, FileText, Eye, Image, Video, AlertTriangle, Tag } from 'lucide-react'
 import { toast } from 'sonner'
 import { useState, useRef, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -512,6 +512,48 @@ export default function CreatorProfilePage() {
                       >
                         <Crown className="w-4 h-4 mr-1" />
                         Assinar {formatCurrency(tier.price)}/mes
+                      </Button>
+                    </CardContent>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Promotional offers */}
+      {profile.creator?.promos && profile.creator.promos.length > 0 && !isOwner && !isSubscribed && (
+        <div className="mb-10">
+          <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
+            <Tag className="w-5 h-5 text-success" />
+            Ofertas promocionais
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {profile.creator.promos.map((promo: any) => {
+              const monthlyPrice = Number(profile.creator.subscriptionPrice || 0)
+              const durationLabel = promo.durationDays === 90 ? '3 meses' : promo.durationDays === 180 ? '6 meses' : '12 meses'
+              const normalTotal = monthlyPrice * (promo.durationDays / 30)
+              const discount = normalTotal > 0 ? Math.round(((normalTotal - Number(promo.price)) / normalTotal) * 100) : 0
+              const monthlyEq = (Number(promo.price) / (promo.durationDays / 30)).toFixed(2)
+              return (
+                <Card key={promo.id} hover>
+                  <div className="bg-gradient-to-br from-success/10 to-emerald-600/5">
+                    <CardContent>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-bold">{durationLabel}</h3>
+                        {discount > 0 && <Badge variant="success">-{discount}%</Badge>}
+                      </div>
+                      <p className="text-success font-bold text-xl mb-1">{formatCurrency(promo.price)}</p>
+                      <p className="text-xs text-muted mb-4">
+                        {formatCurrency(monthlyEq)}/mes - pagamento unico
+                      </p>
+                      <Button
+                        className="w-full"
+                        onClick={() => handleSubscribe()}
+                      >
+                        <Crown className="w-4 h-4 mr-1" />
+                        Assinar {durationLabel}
                       </Button>
                     </CardContent>
                   </div>

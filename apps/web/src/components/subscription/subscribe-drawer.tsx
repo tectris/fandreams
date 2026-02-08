@@ -1,13 +1,20 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { X, Crown, CreditCard, QrCode, Loader2, CheckCircle, ExternalLink } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { toast } from 'sonner'
+
+interface Promo {
+  id: string
+  durationDays: number
+  price: string
+  isActive: boolean
+}
 
 interface SubscribeDrawerProps {
   open: boolean
@@ -30,23 +37,56 @@ interface SubscribeDrawerProps {
 
 type DrawerState = 'choose' | 'processing' | 'waiting' | 'success' | 'error'
 
+function getDurationLabel(days: number) {
+  if (days === 90) return '3 meses'
+  if (days === 180) return '6 meses'
+  if (days === 360) return '12 meses'
+  return `${days} dias`
+}
+
+function getMonthlyEquivalent(price: string, days: number) {
+  const months = days / 30
+  return (Number(price) / months).toFixed(2)
+}
+
+function getDiscount(monthlyPrice: string, promoPrice: string, days: number) {
+  const normalTotal = Number(monthlyPrice) * (days / 30)
+  if (normalTotal <= 0) return 0
+  const discount = ((normalTotal - Number(promoPrice)) / normalTotal) * 100
+  return Math.round(discount)
+}
+
 export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawerProps) {
   const queryClient = useQueryClient()
   const [state, setState] = useState<DrawerState>('choose')
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('credit_card')
   const [error, setError] = useState('')
+  const [selectedPromo, setSelectedPromo] = useState<Promo | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const popupRef = useRef<Window | null>(null)
+  const paymentIdRef = useRef<string | null>(null)
 
   const price = tier ? tier.price : creator.subscriptionPrice || '0'
   const amount = Number(price)
   const isFree = amount <= 0
   const displayName = creator.displayName || creator.username
 
+  // Fetch promos for this creator
+  const { data: promos } = useQuery({
+    queryKey: ['creator-promos', creator.id],
+    queryFn: async () => {
+      const res = await api.get<Promo[]>(`/creators/${creator.id}/promos`)
+      return res.data || []
+    },
+    enabled: open && !isFree,
+  })
+
   useEffect(() => {
     if (!open) {
       setState('choose')
       setError('')
+      setSelectedPromo(null)
+      paymentIdRef.current = null
       if (pollRef.current) clearInterval(pollRef.current)
       pollRef.current = null
     }
@@ -59,13 +99,26 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
     if (pollRef.current) clearInterval(pollRef.current)
     pollRef.current = setInterval(async () => {
       try {
+        // For promo subscriptions, poll payment status
+        if (paymentIdRef.current) {
+          const res = await api.get<{ status: string }>(`/payments/status/${paymentIdRef.current}`)
+          if (res.data?.status === 'completed') {
+            setState('success')
+            if (pollRef.current) clearInterval(pollRef.current)
+            queryClient.invalidateQueries({ queryKey: ['subscription-status', creator.id] })
+            queryClient.invalidateQueries({ queryKey: ['profile'] })
+            toast.success('Assinatura ativada!')
+            return
+          }
+        }
+        // Also check subscription status
         const res = await api.get<{ isSubscribed: boolean }>(`/subscriptions/check/${creator.id}`)
         if (res.data?.isSubscribed) {
           setState('success')
           if (pollRef.current) clearInterval(pollRef.current)
           queryClient.invalidateQueries({ queryKey: ['subscription-status', creator.id] })
           queryClient.invalidateQueries({ queryKey: ['profile'] })
-          toast.success(`Assinatura ativada!`)
+          toast.success('Assinatura ativada!')
         }
       } catch {
         // ignore polling errors
@@ -80,12 +133,15 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
       const res = await api.post<any>('/subscriptions', {
         creatorId: creator.id,
         tierId: tier?.id,
+        promoId: selectedPromo?.id,
         paymentMethod,
       })
       const data = res.data
 
       if (data.checkoutUrl) {
-        // Open MP in popup window
+        if (data.paymentId) {
+          paymentIdRef.current = data.paymentId
+        }
         const popup = window.open(data.checkoutUrl, 'mp_checkout', 'width=600,height=700,scrollbars=yes')
         popupRef.current = popup
         setState('waiting')
@@ -114,6 +170,12 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
       setError(e.message || 'Erro ao criar assinatura')
     }
   }
+
+  const activePrice = selectedPromo ? selectedPromo.price : price
+  const activeAmount = Number(activePrice)
+  const activeLabel = selectedPromo
+    ? `${formatCurrency(activePrice)} por ${getDurationLabel(selectedPromo.durationDays)}`
+    : `${formatCurrency(price)}/mes`
 
   if (!open) return null
 
@@ -175,6 +237,63 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
           {/* State: Choose payment */}
           {state === 'choose' && !isFree && (
             <>
+              {/* Subscription plan selection (monthly + promos) */}
+              {promos && promos.length > 0 && (
+                <>
+                  <h4 className="font-semibold text-sm mb-3">Escolha o periodo</h4>
+                  <div className="space-y-2 mb-5">
+                    {/* Monthly option */}
+                    <button
+                      onClick={() => setSelectedPromo(null)}
+                      className={`w-full flex items-center justify-between p-4 rounded-sm border transition-colors ${
+                        !selectedPromo
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                    >
+                      <div className="text-left">
+                        <p className="font-medium text-sm">Mensal</p>
+                        <p className="text-xs text-muted">Renovacao automatica</p>
+                      </div>
+                      <span className="font-bold text-sm">{formatCurrency(price)}/mes</span>
+                    </button>
+
+                    {/* Promo options */}
+                    {promos.map((promo) => {
+                      const discount = getDiscount(price, promo.price, promo.durationDays)
+                      const monthlyEq = getMonthlyEquivalent(promo.price, promo.durationDays)
+                      return (
+                        <button
+                          key={promo.id}
+                          onClick={() => setSelectedPromo(promo)}
+                          className={`w-full flex items-center justify-between p-4 rounded-sm border transition-colors ${
+                            selectedPromo?.id === promo.id
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border hover:border-primary/50'
+                          }`}
+                        >
+                          <div className="text-left">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-sm">{getDurationLabel(promo.durationDays)}</p>
+                              {discount > 0 && (
+                                <Badge variant="success" className="text-xs">-{discount}%</Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted">
+                              {formatCurrency(monthlyEq)}/mes
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-bold text-sm">{formatCurrency(promo.price)}</span>
+                            <p className="text-xs text-muted">pagamento unico</p>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+
               <h4 className="font-semibold text-sm mb-3">Forma de pagamento</h4>
               <div className="space-y-2 mb-5">
                 <button
@@ -208,11 +327,12 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
               </div>
               <Button className="w-full" onClick={handleSubscribe}>
                 <Crown className="w-4 h-4 mr-2" />
-                Assinar por {formatCurrency(price)}/mes
+                Assinar por {activeLabel}
               </Button>
               <p className="text-xs text-muted text-center mt-3">
-                Voce sera redirecionado ao Mercado Pago para autorizar a assinatura recorrente.
-                Cancele quando quiser.
+                {selectedPromo
+                  ? `Pagamento unico de ${formatCurrency(activePrice)} por ${getDurationLabel(selectedPromo.durationDays)} de acesso.`
+                  : 'Voce sera redirecionado ao Mercado Pago para autorizar a assinatura recorrente. Cancele quando quiser.'}
               </p>
             </>
           )}

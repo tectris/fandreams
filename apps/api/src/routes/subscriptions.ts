@@ -18,6 +18,7 @@ subscriptionsRoute.post('/', authMiddleware, validateBody(createSubscriptionSche
       body.creatorId,
       body.tierId,
       body.paymentMethod,
+      body.promoId,
     )
 
     await gamificationService.addXp(userId, 'subscription_made')
