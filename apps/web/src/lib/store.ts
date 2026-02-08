@@ -74,3 +74,30 @@ export const useUIStore = create<UIStore>((set) => ({
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
 }))
+
+type ThemeStore = {
+  theme: 'dark' | 'light'
+  toggleTheme: () => void
+  hydrate: () => void
+}
+
+export const useThemeStore = create<ThemeStore>((set, get) => ({
+  theme: 'dark',
+  toggleTheme: () => {
+    const next = get().theme === 'dark' ? 'light' : 'dark'
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('theme', next)
+      document.documentElement.classList.remove('dark', 'light')
+      document.documentElement.classList.add(next)
+    }
+    set({ theme: next })
+  },
+  hydrate: () => {
+    if (typeof window === 'undefined') return
+    const stored = localStorage.getItem('theme') as 'dark' | 'light' | null
+    const theme = stored || 'dark'
+    document.documentElement.classList.remove('dark', 'light')
+    document.documentElement.classList.add(theme)
+    set({ theme })
+  },
+}))

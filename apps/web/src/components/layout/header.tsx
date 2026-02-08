@@ -8,7 +8,8 @@ import { api } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { FancoinDrawer } from '@/components/fancoins/fancoin-drawer'
-import { Search, Bell, MessageCircle, Flame, Coins, X } from 'lucide-react'
+import { Search, Bell, MessageCircle, Flame, Coins, X, Sun, Moon } from 'lucide-react'
+import { useThemeStore } from '@/lib/store'
 
 function useDebounce(value: string, delay: number) {
   const [debounced, setDebounced] = useState(value)
@@ -21,6 +22,7 @@ function useDebounce(value: string, delay: number) {
 
 export function Header() {
   const { user, isAuthenticated } = useAuthStore()
+  const { theme, toggleTheme } = useThemeStore()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
@@ -152,6 +154,13 @@ export function Header() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-full hover:bg-surface-light transition-colors text-muted hover:text-foreground"
+              title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+            >
+              {theme === 'dark' ? <Sun className="w-4.5 h-4.5" /> : <Moon className="w-4.5 h-4.5" />}
+            </button>
             {isAuthenticated ? (
               <>
                 <button

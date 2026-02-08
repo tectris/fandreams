@@ -18,6 +18,7 @@ import {
   EyeOff,
   Share2,
   Flag,
+  ShieldAlert,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { VideoPlayer } from '@/components/ui/video-player'
@@ -93,6 +94,10 @@ export function PostCard({
 }: PostCardProps) {
   const hasMedia = post.media && post.media.length > 0
   const isLocked = post.visibility !== 'public' && !post.hasAccess
+  const [ageVerified, setAgeVerified] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('age_verified') === 'true'
+  })
   const isOwner = currentUserId && post.creatorId === currentUserId
   const isHidden = post.isVisible === false
   const [menuOpen, setMenuOpen] = useState(false)
@@ -451,15 +456,56 @@ export function PostCard({
       {/* Media */}
       {hasMedia && (
         <div className="relative">
-          {isLocked ? (
-            <div className="aspect-video bg-surface-dark flex flex-col items-center justify-center gap-3">
-              <div className="w-16 h-16 rounded-full bg-surface flex items-center justify-center">
-                <Lock className="w-8 h-8 text-muted" />
+          {/* Age verification gate for non-verified users */}
+          {!ageVerified && !isOwner ? (
+            <div className="aspect-video bg-surface-dark flex flex-col items-center justify-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-error/10 flex items-center justify-center">
+                <ShieldAlert className="w-8 h-8 text-error" />
               </div>
-              <p className="text-sm text-muted">Conteudo exclusivo para assinantes</p>
-              <Link href={`/creator/${post.creatorUsername}`}>
-                <Button size="sm">Assinar para desbloquear</Button>
-              </Link>
+              <div className="text-center px-4">
+                <p className="font-semibold text-sm mb-1">Conteudo para maiores de 18 anos</p>
+                <p className="text-xs text-muted">Voce confirma que tem 18 anos ou mais?</p>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    localStorage.setItem('age_verified', 'true')
+                    setAgeVerified(true)
+                  }}
+                >
+                  Sim, tenho 18+
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    window.location.href = 'https://www.google.com'
+                  }}
+                >
+                  Nao
+                </Button>
+              </div>
+            </div>
+          ) : isLocked ? (
+            <div className="aspect-video bg-surface-dark relative overflow-hidden flex flex-col items-center justify-center gap-3">
+              {/* Blurred thumbnail preview if available */}
+              {post.media![0]?.thumbnailUrl && (
+                <img
+                  src={post.media![0].thumbnailUrl}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-30"
+                />
+              )}
+              <div className="relative z-10 flex flex-col items-center gap-3">
+                <div className="w-14 h-14 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center">
+                  <Lock className="w-7 h-7 text-primary" />
+                </div>
+                <p className="text-sm font-medium">Conteudo exclusivo para assinantes</p>
+                <Link href={`/creator/${post.creatorUsername}`}>
+                  <Button size="sm">Assinar para desbloquear</Button>
+                </Link>
+              </div>
             </div>
           ) : post.media!.length === 1 ? (
             // Single media

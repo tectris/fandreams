@@ -12,7 +12,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { PostCard } from '@/components/feed/post-card'
 import { LevelBadge } from '@/components/gamification/level-badge'
 import { formatCurrency, formatNumber } from '@/lib/utils'
-import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, Share2, FileText, Eye } from 'lucide-react'
+import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, Share2, FileText, Eye, Image, Video } from 'lucide-react'
 import { toast } from 'sonner'
 import { useState, useRef } from 'react'
 
@@ -254,6 +254,20 @@ export default function CreatorProfilePage() {
   const isSubscribed = subscription?.isSubscribed
   const isFollowing = followData?.isFollowing
 
+  // Count media from posts
+  const mediaStats = (postsData?.posts || []).reduce(
+    (acc: { photos: number; videos: number }, post: any) => {
+      if (post.media) {
+        for (const m of post.media) {
+          if (m.mediaType === 'image') acc.photos++
+          if (m.mediaType === 'video') acc.videos++
+        }
+      }
+      return acc
+    },
+    { photos: 0, videos: 0 },
+  )
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       {/* Cover */}
@@ -363,6 +377,18 @@ export default function CreatorProfilePage() {
             <FileText className="w-4 h-4" />
             {formatNumber(profile.postCount || 0)} posts
           </span>
+          {mediaStats.photos > 0 && (
+            <span className="flex items-center gap-1">
+              <Image className="w-4 h-4" />
+              {formatNumber(mediaStats.photos)} fotos
+            </span>
+          )}
+          {mediaStats.videos > 0 && (
+            <span className="flex items-center gap-1">
+              <Video className="w-4 h-4" />
+              {formatNumber(mediaStats.videos)} videos
+            </span>
+          )}
           <span className="flex items-center gap-1">
             <Users className="w-4 h-4" />
             {formatNumber(profile.followerCount || 0)} seguidores
