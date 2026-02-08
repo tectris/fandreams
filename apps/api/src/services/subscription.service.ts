@@ -5,6 +5,7 @@ import { env } from '../config/env'
 import { AppError } from './auth.service'
 import { PLATFORM_FEES } from '@fandreams/shared'
 import * as paymentService from './payment.service'
+import { sendSubscriptionCancelledEmail } from './email.service'
 
 // ── Create subscription with MP checkout ──
 
@@ -491,6 +492,31 @@ export async function cancelSubscription(subscriptionId: string, fanId: string) 
     })
     .where(eq(subscriptions.id, subscriptionId))
     .returning()
+
+  // Send cancellation email (non-blocking)
+  if (updated) {
+    const [fan] = await db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, fanId))
+      .limit(1)
+
+    const [creator] = await db
+      .select({ displayName: users.displayName, username: users.username })
+      .from(users)
+      .where(eq(users.id, sub.creatorId))
+      .limit(1)
+
+    if (fan && creator) {
+      const accessUntil = updated.currentPeriodEnd
+        ? new Date(updated.currentPeriodEnd).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+        : 'fim do periodo'
+      sendSubscriptionCancelledEmail(fan.email, {
+        creatorName: creator.displayName || creator.username,
+        accessUntil,
+      }).catch((e) => console.error('Failed to send subscription cancelled email:', e))
+    }
+  }
 
   return updated
 }

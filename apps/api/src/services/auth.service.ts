@@ -5,7 +5,7 @@ import { db } from '../config/database'
 import { env } from '../config/env'
 import { hashPassword, verifyPassword } from '../utils/password'
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken, blacklistRefreshToken, isRefreshTokenBlacklisted } from '../utils/tokens'
-import { sendVerificationEmail, sendPasswordResetEmail } from './email.service'
+import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from './email.service'
 import { recordFailedLogin, isAccountLocked, clearLoginAttempts } from '../middleware/rateLimit'
 import type { RegisterInput, LoginInput } from '@fandreams/shared'
 
@@ -108,10 +108,13 @@ export async function register(input: RegisterInput) {
   const accessToken = generateAccessToken(user.id, user.role)
   const refreshToken = generateRefreshToken(user.id)
 
-  // Send verification email (non-blocking)
+  // Send verification + welcome emails (non-blocking)
   const verifyToken = generateEmailVerifyToken(user.id, user.email)
   sendVerificationEmail(user.email, verifyToken).catch((err) =>
     console.error('Failed to send verification email:', err),
+  )
+  sendWelcomeEmail(user.email, user.displayName || user.username).catch((err) =>
+    console.error('Failed to send welcome email:', err),
   )
 
   return { user, accessToken, refreshToken }
