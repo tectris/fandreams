@@ -9,7 +9,7 @@ import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
-import { ImagePlus, Video, Send, Eye, Lock, DollarSign, X, Loader2, Shield, ArrowRight } from 'lucide-react'
+import { ImagePlus, Video, Send, Eye, Lock, DollarSign, X, Loader2, Shield, ArrowRight, Star } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/store'
 import Link from 'next/link'
@@ -27,6 +27,7 @@ export default function CreateContentPage() {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [mediaFiles, setMediaFiles] = useState<UploadedMedia[]>([])
+  const [coverIndex, setCoverIndex] = useState(0)
   const imageInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
 
@@ -62,22 +63,39 @@ export default function CreateContentPage() {
     }
   }
 
+  async function handleMultiImageUpload(files: FileList) {
+    for (const file of Array.from(files)) {
+      await handleFileUpload(file)
+    }
+  }
+
   function removeMedia(index: number) {
     setMediaFiles((prev) => {
       const removed = prev[index]
       if (removed) URL.revokeObjectURL(removed.previewUrl)
       return prev.filter((_, i) => i !== index)
     })
+    setCoverIndex((prev) => {
+      if (index === prev) return 0
+      if (index < prev) return prev - 1
+      return prev
+    })
   }
 
   async function onSubmit(data: CreatePostInput) {
     setLoading(true)
     try {
+      // Reorder so cover image comes first
+      const ordered = [...mediaFiles]
+      if (coverIndex > 0 && coverIndex < ordered.length) {
+        const [cover] = ordered.splice(coverIndex, 1)
+        ordered.unshift(cover)
+      }
       const payload: CreatePostInput = {
         ...data,
         media:
-          mediaFiles.length > 0
-            ? mediaFiles.map((m) => ({ key: api.getMediaUrl(m.key), mediaType: m.mediaType }))
+          ordered.length > 0
+            ? ordered.map((m) => ({ key: api.getMediaUrl(m.key), mediaType: m.mediaType }))
             : undefined,
       }
       await api.post('/posts', payload)
@@ -108,23 +126,43 @@ export default function CreateContentPage() {
 
             {/* Media previews */}
             {mediaFiles.length > 0 && (
-              <div className="grid grid-cols-2 gap-2">
-                {mediaFiles.map((m, i) => (
-                  <div key={m.key} className="relative rounded-sm overflow-hidden border border-border">
-                    {m.mediaType === 'image' ? (
-                      <img src={m.previewUrl} alt="" className="w-full h-40 object-cover" />
-                    ) : (
-                      <video src={m.previewUrl} className="w-full h-40 object-cover" />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => removeMedia(i)}
-                      className="absolute top-1 right-1 p-1 bg-black/70 rounded-full text-white hover:bg-black/90"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+              <div>
+                {mediaFiles.filter((m) => m.mediaType === 'image').length > 1 && (
+                  <p className="text-xs text-muted mb-1.5">Clique na estrela para escolher a capa</p>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  {mediaFiles.map((m, i) => (
+                    <div key={m.key} className={`relative rounded-sm overflow-hidden border-2 ${i === coverIndex && m.mediaType === 'image' && mediaFiles.filter((f) => f.mediaType === 'image').length > 1 ? 'border-primary' : 'border-border'}`}>
+                      {m.mediaType === 'image' ? (
+                        <img src={m.previewUrl} alt="" className="w-full h-40 object-cover" />
+                      ) : (
+                        <video src={m.previewUrl} className="w-full h-40 object-cover" />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeMedia(i)}
+                        className="absolute top-1 right-1 p-1 bg-black/70 rounded-full text-white hover:bg-black/90"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                      {m.mediaType === 'image' && mediaFiles.filter((f) => f.mediaType === 'image').length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setCoverIndex(i)}
+                          className={`absolute top-1 left-1 p-1 rounded-full ${i === coverIndex ? 'bg-primary text-white' : 'bg-black/70 text-white/70 hover:text-white'}`}
+                          title="Definir como capa"
+                        >
+                          <Star className={`w-4 h-4 ${i === coverIndex ? 'fill-white' : ''}`} />
+                        </button>
+                      )}
+                      {i === coverIndex && m.mediaType === 'image' && mediaFiles.filter((f) => f.mediaType === 'image').length > 1 && (
+                        <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-primary/90 rounded text-white text-[10px] font-medium">
+                          Capa
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -135,10 +173,11 @@ export default function CreateContentPage() {
                   ref={imageInputRef}
                   type="file"
                   accept="image/*"
+                  multiple
                   className="hidden"
                   onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) handleFileUpload(file)
+                    const files = e.target.files
+                    if (files && files.length > 0) handleMultiImageUpload(files)
                     e.target.value = ''
                   }}
                 />
@@ -160,7 +199,7 @@ export default function CreateContentPage() {
                   className="flex items-center gap-2 px-4 py-2 rounded-sm border border-border text-sm text-muted hover:text-foreground hover:border-primary transition-colors disabled:opacity-50"
                 >
                   {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
-                  Imagem
+                  Imagens
                 </button>
                 <button
                   type="button"

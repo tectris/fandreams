@@ -7,9 +7,10 @@ interface VideoPlayerProps {
   src: string
   className?: string
   poster?: string
+  onPlay?: () => void
 }
 
-export function VideoPlayer({ src, className = '', poster }: VideoPlayerProps) {
+export function VideoPlayer({ src, className = '', poster, onPlay }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
 
@@ -56,6 +57,7 @@ export function VideoPlayer({ src, className = '', poster }: VideoPlayerProps) {
       playsInline
       poster={poster}
       className={className}
+      onPlay={onPlay}
     />
   )
 }

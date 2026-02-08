@@ -12,7 +12,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { PostCard } from '@/components/feed/post-card'
 import { LevelBadge } from '@/components/gamification/level-badge'
 import { formatCurrency, formatNumber } from '@/lib/utils'
-import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, Share2, FileText, X, Link2, Mail } from 'lucide-react'
+import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, Share2, FileText, X, Link2, Mail, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import { useState, useRef } from 'react'
 
@@ -403,6 +403,10 @@ export default function CreatorProfilePage() {
               {formatNumber(profile.creator.totalSubscribers || 0)} assinantes
             </span>
           )}
+          <span className="flex items-center gap-1">
+            <Eye className="w-4 h-4" />
+            {formatNumber(profile.profileViews || 0)} visualizacoes
+          </span>
           <span className="flex items-center gap-1">
             <Calendar className="w-4 h-4" />
             Desde {new Date(profile.createdAt).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}
