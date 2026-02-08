@@ -204,7 +204,7 @@ function WalletContent() {
             <div className="flex items-center gap-2 mb-4 text-xs text-muted">
               <Shield className="w-3 h-3" />
               Metodos: {providers.map((p) => (
-                <Badge key={p.id} variant="outline" className="text-xs">
+                <Badge key={p.id} variant="default" className="text-xs">
                   {p.label}{p.sandbox ? ' (sandbox)' : ''}
                 </Badge>
               ))}
