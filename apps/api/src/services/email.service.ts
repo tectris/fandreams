@@ -44,7 +44,79 @@ export async function sendEmail(payload: EmailPayload): Promise<boolean> {
   return true
 }
 
+// ── Base template ──
+
 const appUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+
+function baseTemplate(content: string): string {
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FanDreams</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0c0c0f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #0c0c0f;">
+    <tr>
+      <td align="center" style="padding: 32px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 520px; background-color: #141419; border-radius: 12px; border: 1px solid #23232d;">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 28px 32px 20px; text-align: center; border-bottom: 1px solid #23232d;">
+              <span style="font-size: 24px; font-weight: 800; color: #e11d48; letter-spacing: -0.5px;">FanDreams</span>
+            </td>
+          </tr>
+          <!-- Content -->
+          <tr>
+            <td style="padding: 32px;">
+              ${content}
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 32px 28px; border-top: 1px solid #23232d; text-align: center;">
+              <p style="margin: 0 0 8px; font-size: 12px; color: #6b6b7b;">
+                Voce recebeu este email porque tem uma conta no FanDreams.
+              </p>
+              <a href="${appUrl}" style="font-size: 12px; color: #e11d48; text-decoration: none;">fandreams.app</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+}
+
+function button(text: string, href: string): string {
+  return `<a href="${href}" style="display: inline-block; background: #e11d48; color: #ffffff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px; text-align: center;">${text}</a>`
+}
+
+function heading(text: string): string {
+  return `<h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 700; color: #f0f0f5;">${text}</h2>`
+}
+
+function paragraph(text: string): string {
+  return `<p style="margin: 0 0 16px; font-size: 15px; line-height: 1.6; color: #b0b0c0;">${text}</p>`
+}
+
+function highlight(text: string): string {
+  return `<span style="color: #f0f0f5; font-weight: 600;">${text}</span>`
+}
+
+function infoBox(text: string): string {
+  return `<div style="background: #1a1a23; border: 1px solid #23232d; border-radius: 8px; padding: 16px; margin: 16px 0;">
+    <p style="margin: 0; font-size: 14px; color: #b0b0c0; line-height: 1.5;">${text}</p>
+  </div>`
+}
+
+function divider(): string {
+  return `<hr style="border: none; border-top: 1px solid #23232d; margin: 24px 0;" />`
+}
+
+// ── Email functions ──
 
 export async function sendVerificationEmail(to: string, token: string): Promise<boolean> {
   const verifyUrl = `${appUrl}/verify-email?token=${token}`
@@ -52,18 +124,15 @@ export async function sendVerificationEmail(to: string, token: string): Promise<
   return sendEmail({
     to,
     subject: 'Verifique seu email - FanDreams',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #e11d48;">FanDreams</h2>
-        <p>Bem-vindo ao FanDreams! Clique no botao abaixo para verificar seu email:</p>
-        <a href="${verifyUrl}" style="display: inline-block; background: #e11d48; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; margin: 16px 0;">
-          Verificar Email
-        </a>
-        <p style="color: #666; font-size: 14px;">Ou copie e cole este link no navegador:</p>
-        <p style="color: #666; font-size: 12px; word-break: break-all;">${verifyUrl}</p>
-        <p style="color: #999; font-size: 12px; margin-top: 24px;">Este link expira em 24 horas.</p>
+    html: baseTemplate(`
+      ${heading('Verifique seu email')}
+      ${paragraph('Para completar seu cadastro no FanDreams, confirme seu endereco de email clicando no botao abaixo.')}
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Verificar Email', verifyUrl)}
       </div>
-    `,
+      ${infoBox(`Ou copie e cole este link no navegador:<br /><a href="${verifyUrl}" style="color: #e11d48; word-break: break-all; font-size: 13px;">${verifyUrl}</a>`)}
+      ${paragraph(`Este link expira em ${highlight('24 horas')}.`)}
+    `),
   })
 }
 
@@ -73,17 +142,201 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
   return sendEmail({
     to,
     subject: 'Redefinir senha - FanDreams',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #e11d48;">FanDreams</h2>
-        <p>Voce solicitou a redefinicao de senha. Clique no botao abaixo:</p>
-        <a href="${resetUrl}" style="display: inline-block; background: #e11d48; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; margin: 16px 0;">
-          Redefinir Senha
-        </a>
-        <p style="color: #666; font-size: 14px;">Ou copie e cole este link no navegador:</p>
-        <p style="color: #666; font-size: 12px; word-break: break-all;">${resetUrl}</p>
-        <p style="color: #999; font-size: 12px; margin-top: 24px;">Este link expira em 1 hora. Se voce nao solicitou esta redefinicao, ignore este email.</p>
+    html: baseTemplate(`
+      ${heading('Redefinir sua senha')}
+      ${paragraph('Voce solicitou a redefinicao de senha da sua conta FanDreams. Clique no botao abaixo para criar uma nova senha.')}
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Redefinir Senha', resetUrl)}
       </div>
-    `,
+      ${infoBox(`Ou copie e cole este link no navegador:<br /><a href="${resetUrl}" style="color: #e11d48; word-break: break-all; font-size: 13px;">${resetUrl}</a>`)}
+      ${paragraph(`Este link expira em ${highlight('1 hora')}. Se voce nao solicitou esta redefinicao, ignore este email — sua senha permanece inalterada.`)}
+    `),
+  })
+}
+
+export async function sendWelcomeEmail(to: string, displayName: string): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: `Bem-vindo ao FanDreams, ${displayName}!`,
+    html: baseTemplate(`
+      ${heading(`Bem-vindo, ${displayName}! 🎉`)}
+      ${paragraph('Estamos muito felizes em ter voce no FanDreams! Aqui voce pode acompanhar seus criadores favoritos, acessar conteudo exclusivo e fazer parte de uma comunidade incrivel.')}
+      ${divider()}
+      ${paragraph(`${highlight('O que voce pode fazer agora:')}`)}<ul style="margin: 0 0 16px; padding-left: 20px; color: #b0b0c0; font-size: 14px; line-height: 2;">
+        <li>Explore criadores na aba ${highlight('Descobrir')}</li>
+        <li>Siga seus criadores favoritos</li>
+        <li>Assine para acessar conteudo exclusivo</li>
+        <li>Envie mensagens diretas para criadores</li>
+      </ul>
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Explorar FanDreams', `${appUrl}/explore`)}
+      </div>
+      ${paragraph('Se tiver qualquer duvida, estamos aqui para ajudar!')}
+    `),
+  })
+}
+
+export async function sendPaymentConfirmedEmail(
+  to: string,
+  data: { type: string; amount: string; description: string },
+): Promise<boolean> {
+  const typeLabels: Record<string, string> = {
+    ppv: 'Conteudo PPV',
+    fancoin_purchase: 'Compra de FanCoins',
+    subscription: 'Assinatura',
+    tip: 'Gorjeta',
+  }
+
+  const typeLabel = typeLabels[data.type] || 'Pagamento'
+
+  return sendEmail({
+    to,
+    subject: `Pagamento confirmado - ${typeLabel} - FanDreams`,
+    html: baseTemplate(`
+      ${heading('Pagamento confirmado')}
+      ${paragraph('Seu pagamento foi processado com sucesso!')}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #1a1a23; border: 1px solid #23232d; border-radius: 8px; margin: 16px 0;">
+        <tr>
+          <td style="padding: 16px; border-bottom: 1px solid #23232d;">
+            <span style="font-size: 13px; color: #6b6b7b;">Tipo</span><br />
+            <span style="font-size: 15px; color: #f0f0f5; font-weight: 600;">${typeLabel}</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 16px; border-bottom: 1px solid #23232d;">
+            <span style="font-size: 13px; color: #6b6b7b;">Descricao</span><br />
+            <span style="font-size: 15px; color: #f0f0f5;">${data.description}</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 16px;">
+            <span style="font-size: 13px; color: #6b6b7b;">Valor</span><br />
+            <span style="font-size: 20px; color: #22c55e; font-weight: 700;">R$ ${data.amount}</span>
+          </td>
+        </tr>
+      </table>
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Ver minha conta', `${appUrl}/wallet`)}
+      </div>
+    `),
+  })
+}
+
+export async function sendSubscriptionActivatedEmail(
+  to: string,
+  data: { creatorName: string; price: string; periodEnd: string; isPromo?: boolean; durationLabel?: string },
+): Promise<boolean> {
+  const periodLabel = data.isPromo && data.durationLabel
+    ? `Plano promocional de ${data.durationLabel}`
+    : 'Assinatura mensal'
+
+  return sendEmail({
+    to,
+    subject: `Assinatura ativada - ${data.creatorName} - FanDreams`,
+    html: baseTemplate(`
+      ${heading('Assinatura ativada!')}
+      ${paragraph(`Sua assinatura de ${highlight(data.creatorName)} esta ativa. Aproveite todo o conteudo exclusivo!`)}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #1a1a23; border: 1px solid #23232d; border-radius: 8px; margin: 16px 0;">
+        <tr>
+          <td style="padding: 16px; border-bottom: 1px solid #23232d;">
+            <span style="font-size: 13px; color: #6b6b7b;">Criador</span><br />
+            <span style="font-size: 15px; color: #f0f0f5; font-weight: 600;">${data.creatorName}</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 16px; border-bottom: 1px solid #23232d;">
+            <span style="font-size: 13px; color: #6b6b7b;">Plano</span><br />
+            <span style="font-size: 15px; color: #f0f0f5;">${periodLabel}</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 16px; border-bottom: 1px solid #23232d;">
+            <span style="font-size: 13px; color: #6b6b7b;">Valor</span><br />
+            <span style="font-size: 15px; color: #f0f0f5; font-weight: 600;">R$ ${data.price}</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 16px;">
+            <span style="font-size: 13px; color: #6b6b7b;">Acesso ate</span><br />
+            <span style="font-size: 15px; color: #f0f0f5;">${data.periodEnd}</span>
+          </td>
+        </tr>
+      </table>
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Ver conteudo', `${appUrl}/feed`)}
+      </div>
+    `),
+  })
+}
+
+export async function sendSubscriptionCancelledEmail(
+  to: string,
+  data: { creatorName: string; accessUntil: string },
+): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: `Assinatura cancelada - ${data.creatorName} - FanDreams`,
+    html: baseTemplate(`
+      ${heading('Assinatura cancelada')}
+      ${paragraph(`Sua assinatura de ${highlight(data.creatorName)} foi cancelada conforme solicitado.`)}
+      ${infoBox(`Seu acesso ao conteudo exclusivo continua ativo ate ${highlight(data.accessUntil)}. Apos essa data, nenhuma nova cobranca sera realizada.`)}
+      ${paragraph('Voce pode reassinar a qualquer momento voltando ao perfil do criador.')}
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Explorar criadores', `${appUrl}/explore`)}
+      </div>
+    `),
+  })
+}
+
+export async function sendNewMessageEmail(
+  to: string,
+  data: { senderName: string; preview: string },
+): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: `Nova mensagem de ${data.senderName} - FanDreams`,
+    html: baseTemplate(`
+      ${heading('Nova mensagem')}
+      ${paragraph(`${highlight(data.senderName)} te enviou uma mensagem:`)}
+      ${infoBox(`"${data.preview.length > 150 ? data.preview.substring(0, 150) + '...' : data.preview}"`)}
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Responder', `${appUrl}/messages`)}
+      </div>
+    `),
+  })
+}
+
+export async function sendKycApprovedEmail(to: string, displayName: string): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: 'Verificacao de identidade aprovada - FanDreams',
+    html: baseTemplate(`
+      ${heading('Verificacao aprovada! ✅')}
+      ${paragraph(`Parabens, ${highlight(displayName)}! Sua verificacao de identidade (KYC) foi aprovada com sucesso.`)}
+      ${paragraph('Agora voce tem acesso completo a todas as funcionalidades da plataforma, incluindo saques e pagamentos.')}
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Ir para o Dashboard', `${appUrl}/creator/dashboard`)}
+      </div>
+    `),
+  })
+}
+
+export async function sendKycRejectedEmail(
+  to: string,
+  data: { displayName: string; reason?: string },
+): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: 'Verificacao de identidade recusada - FanDreams',
+    html: baseTemplate(`
+      ${heading('Verificacao recusada')}
+      ${paragraph(`${highlight(data.displayName)}, infelizmente sua verificacao de identidade (KYC) nao foi aprovada.`)}
+      ${data.reason ? infoBox(`${highlight('Motivo:')} ${data.reason}`) : ''}
+      ${paragraph('Voce pode enviar novos documentos para uma nova analise. Certifique-se de que as imagens estejam nítidas e os dados visiveis.')}
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Enviar novos documentos', `${appUrl}/settings`)}
+      </div>
+      ${paragraph('Se precisar de ajuda, entre em contato com nosso suporte.')}
+    `),
   })
 }

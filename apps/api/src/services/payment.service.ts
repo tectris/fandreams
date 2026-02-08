@@ -5,6 +5,7 @@ import { env } from '../config/env'
 import { AppError } from './auth.service'
 import { FANCOIN_PACKAGES, PLATFORM_FEES } from '@fandreams/shared'
 import * as fancoinService from './fancoin.service'
+import { sendPaymentConfirmedEmail, sendSubscriptionActivatedEmail } from './email.service'
 
 // ── MercadoPago ──
 
@@ -516,6 +517,52 @@ async function processPaymentConfirmation(
       }
 
       console.log(`Promo subscription ${meta.subscriptionId} activated for ${durationDays} days`)
+
+      // Send subscription activated email (non-blocking)
+      const { users } = await import('@fandreams/database')
+      const [fan] = await db
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, payment.userId))
+        .limit(1)
+      if (fan && payment.recipientId) {
+        const [creator] = await db
+          .select({ displayName: users.displayName, username: users.username })
+          .from(users)
+          .where(eq(users.id, payment.recipientId))
+          .limit(1)
+        if (creator) {
+          const dLabel = durationDays === 90 ? '3 meses' : durationDays === 180 ? '6 meses' : durationDays === 360 ? '12 meses' : `${durationDays} dias`
+          sendSubscriptionActivatedEmail(fan.email, {
+            creatorName: creator.displayName || creator.username,
+            price: Number(payment.amount).toFixed(2),
+            periodEnd: periodEnd.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }),
+            isPromo: true,
+            durationLabel: dLabel,
+          }).catch((e) => console.error('Failed to send subscription activated email:', e))
+        }
+      }
+    }
+
+    // Send payment confirmation email for all completed payments (non-blocking)
+    const { users: usersTable } = await import('@fandreams/database')
+    const [payer] = await db
+      .select({ email: usersTable.email })
+      .from(usersTable)
+      .where(eq(usersTable.id, payment.userId))
+      .limit(1)
+    if (payer) {
+      const descriptions: Record<string, string> = {
+        ppv: `Conteudo exclusivo`,
+        fancoin_purchase: meta?.packageId ? `Pacote ${meta.packageId}` : 'FanCoins',
+        subscription: 'Assinatura de criador',
+        tip: 'Gorjeta para criador',
+      }
+      sendPaymentConfirmedEmail(payer.email, {
+        type: payment.type,
+        amount: Number(payment.amount).toFixed(2),
+        description: descriptions[payment.type] || 'Pagamento',
+      }).catch((e) => console.error('Failed to send payment confirmed email:', e))
     }
   }
 
