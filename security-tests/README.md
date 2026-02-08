@@ -30,7 +30,7 @@ npx vitest run security-tests/internal/security-audit.test.ts
 3. Execute:
 
 ```bash
-python fandreams_security_scanner.py --target https://api.fandreams.my --verbose
+python fandreams_security_scanner.py --target https://api.fandreams.app --verbose
 ```
 
 4. Copie o conteúdo de `external_scan_report.json` gerado

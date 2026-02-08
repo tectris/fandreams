@@ -12,7 +12,7 @@ Dependências (pip install):
     pip install requests aiohttp asyncio
 
 Uso:
-    python fandreams_security_scanner.py --target https://api.fandreams.my
+    python fandreams_security_scanner.py --target https://api.fandreams.app
     python fandreams_security_scanner.py --target http://localhost:3001
 
 O script gera um relatório JSON + Markdown que deve ser trazido de volta
@@ -267,7 +267,7 @@ class SecurityScanner:
             'passw0rd',
         ]
 
-        target_email = 'admin@fandreams.my'
+        target_email = 'admin@fandreams.app'
         statuses = []
         rate_limited_count = 0
         start = time.time()
@@ -352,7 +352,7 @@ class SecurityScanner:
         # Test 3: Username enumeration via registration
         print(f"  [>] Testando enumeração de emails...")
         r1 = self._req('POST', '/auth/login', json={'email': 'definitelynotexists@nobody.xyz', 'password': 'Wrong123'})
-        r2 = self._req('POST', '/auth/login', json={'email': 'admin@fandreams.my', 'password': 'Wrong123'})
+        r2 = self._req('POST', '/auth/login', json={'email': 'admin@fandreams.app', 'password': 'Wrong123'})
 
         if r1 and r2:
             msg1 = r1.json().get('error', {}).get('message', '') if r1.status_code != 429 else ''
@@ -917,7 +917,7 @@ class SecurityScanner:
         malicious_origins = [
             'https://evil-attacker.com',
             'https://fandreams.evil.com',
-            'https://fandreams.my.evil.com',
+            'https://fandreams.app.evil.com',
             'null',
             'https://localhost.evil.com',
             'http://127.0.0.1',
@@ -1475,14 +1475,14 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemplos:
-  python fandreams_security_scanner.py --target https://api.fandreams.my
+  python fandreams_security_scanner.py --target https://api.fandreams.app
   python fandreams_security_scanner.py --target http://localhost:3001 --verbose
   python fandreams_security_scanner.py --target http://localhost:3001 --output ./report
 
 AVISO: Use apenas em ambientes autorizados para testes de segurança.
         """
     )
-    parser.add_argument('--target', '-t', required=True, help='URL base da API (ex: https://api.fandreams.my)')
+    parser.add_argument('--target', '-t', required=True, help='URL base da API (ex: https://api.fandreams.app)')
     parser.add_argument('--output', '-o', default='.', help='Diretório de saída para relatórios (default: .)')
     parser.add_argument('--verbose', '-v', action='store_true', help='Modo verbose')
 

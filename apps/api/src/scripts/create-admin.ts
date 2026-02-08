@@ -10,7 +10,7 @@ if (!process.env.DATABASE_URL) {
   process.exit(1)
 }
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@fandreams.com'
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@fandreams.app'
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin'
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@2024!'
 const ADMIN_DISPLAY_NAME = process.env.ADMIN_DISPLAY_NAME || 'FanDreams Admin'

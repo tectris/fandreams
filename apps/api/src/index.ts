@@ -128,7 +128,7 @@ app.get('/health', (c) => {
 app.get('/.well-known/security.txt', (c) => {
   c.header('Content-Type', 'text/plain')
   return c.text(
-    `Contact: security@fandreams.my\nExpires: 2027-01-01T00:00:00.000Z\nPreferred-Languages: pt, en\nPolicy: https://fandreams.my/security-policy\n`,
+    `Contact: security@fandreams.app\nExpires: 2027-01-01T00:00:00.000Z\nPreferred-Languages: pt, en\nPolicy: https://fandreams.app/security-policy\n`,
   )
 })
 

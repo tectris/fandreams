@@ -446,7 +446,7 @@ Para consolidar este relatório com o teste externo (Python scanner), execute:
 ```bash
 # No CodeSandbox ou ambiente Python:
 pip install requests
-python fandreams_security_scanner.py --target https://api.fandreams.my --output ./reports
+python fandreams_security_scanner.py --target https://api.fandreams.app --output ./reports
 
 # Copie o conteúdo de external_scan_report.json e cole no prompt do Claude
 # com a mensagem: "Consolide este relatório externo com a auditoria interna"

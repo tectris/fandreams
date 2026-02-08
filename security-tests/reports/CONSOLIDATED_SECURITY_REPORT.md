@@ -67,7 +67,7 @@
 
 | Métrica | Valor |
 |---|---|
-| Target | `https://api.fandreams.my` |
+| Target | `https://api.fandreams.app` |
 | Proxy/CDN | **Cloudflare** (detectado via Server header) |
 | Total de testes executados | 27 |
 | Testes aprovados | 19 (70.4%) |
