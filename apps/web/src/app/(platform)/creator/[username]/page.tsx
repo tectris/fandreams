@@ -12,7 +12,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { PostCard } from '@/components/feed/post-card'
 import { LevelBadge } from '@/components/gamification/level-badge'
 import { formatCurrency, formatNumber } from '@/lib/utils'
-import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, Share2, FileText, X, Link2, Mail, Eye } from 'lucide-react'
+import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, Share2, FileText, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import { useState, useRef } from 'react'
 
@@ -21,7 +21,6 @@ export default function CreatorProfilePage() {
   const { user, isAuthenticated, setUser } = useAuthStore()
   const queryClient = useQueryClient()
   const [subscribing, setSubscribing] = useState(false)
-  const [showShareModal, setShowShareModal] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
 
@@ -229,45 +228,16 @@ export default function CreatorProfilePage() {
       url,
     }
 
-    // Try native share API on mobile
-    if (typeof navigator !== 'undefined' && navigator.share && /Mobi|Android/i.test(navigator.userAgent)) {
+    if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share(shareData)
       } catch {
         // User cancelled
       }
     } else {
-      // Desktop: show share modal
-      setShowShareModal(true)
-    }
-  }
-
-  function handleShareOption(platform: string) {
-    const url = `${window.location.origin}/creator/${username}`
-    const text = `Confira o perfil de ${profile?.displayName || username} no FanDreams!`
-    const encoded = encodeURIComponent(text + ' ' + url)
-    const encodedUrl = encodeURIComponent(url)
-    const encodedText = encodeURIComponent(text)
-
-    const shareUrls: Record<string, string> = {
-      whatsapp: `https://wa.me/?text=${encoded}`,
-      telegram: `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`,
-      twitter: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
-      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
-      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`,
-      reddit: `https://reddit.com/submit?url=${encodedUrl}&title=${encodedText}`,
-      pinterest: `https://pinterest.com/pin/create/button/?url=${encodedUrl}&description=${encodedText}`,
-      email: `mailto:?subject=${encodedText}&body=${encoded}`,
-    }
-
-    if (platform === 'copy') {
       navigator.clipboard.writeText(url)
       toast.success('Link copiado!')
-    } else if (shareUrls[platform]) {
-      window.open(shareUrls[platform], '_blank', 'width=600,height=400')
     }
-
-    setShowShareModal(false)
   }
 
   if (!profile) {
@@ -285,7 +255,7 @@ export default function CreatorProfilePage() {
   const isFollowing = followData?.isFollowing
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6">
+    <div className="max-w-3xl mx-auto px-4 py-8">
       {/* Cover */}
       <div
         className={`h-48 md:h-56 rounded-md overflow-hidden bg-gradient-to-br from-primary/30 to-secondary/30 relative ${isOwner ? 'group cursor-pointer' : ''}`}
@@ -387,7 +357,7 @@ export default function CreatorProfilePage() {
         {profile.bio && <p className="mt-4 text-sm">{profile.bio}</p>}
 
         {/* Stats */}
-        <div className="flex items-center gap-4 mt-3 text-sm text-muted flex-wrap">
+        <div className="flex items-center gap-5 mt-4 text-sm text-muted flex-wrap">
           {profile.creator?.category && <Badge variant="primary">{profile.creator.category}</Badge>}
           <span className="flex items-center gap-1">
             <FileText className="w-4 h-4" />
@@ -426,30 +396,48 @@ export default function CreatorProfilePage() {
 
       {/* Subscription tiers */}
       {profile.creator?.tiers && profile.creator.tiers.length > 0 && !isOwner && !isSubscribed && (
-        <div className="mb-8">
-          <h2 className="font-bold text-lg mb-3">Planos de assinatura</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {profile.creator.tiers.map((tier: any) => (
-              <Card key={tier.id} hover>
-                <CardContent>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-bold">{tier.name}</h3>
-                    <span className="text-primary font-bold">{formatCurrency(tier.price)}/mes</span>
+        <div className="mb-10">
+          <h2 className="font-bold text-lg mb-4">Planos de assinatura</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {profile.creator.tiers.map((tier: any, tierIndex: number) => {
+              const tierGradients = [
+                'from-primary/20 to-purple-600/5',
+                'from-amber-500/20 to-orange-600/5',
+                'from-emerald-500/20 to-teal-600/5',
+                'from-rose-500/20 to-pink-600/5',
+              ]
+              const tierAccents = [
+                'text-primary',
+                'text-amber-400',
+                'text-emerald-400',
+                'text-rose-400',
+              ]
+              const gradient = tierGradients[tierIndex % tierGradients.length]
+              const accent = tierAccents[tierIndex % tierAccents.length]
+              return (
+                <Card key={tier.id} hover>
+                  <div className={`bg-gradient-to-br ${gradient}`}>
+                    <CardContent>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-bold text-lg">{tier.name}</h3>
+                        <span className={`${accent} font-bold`}>{formatCurrency(tier.price)}/mes</span>
+                      </div>
+                      {tier.description && <p className="text-sm text-muted mb-4">{tier.description}</p>}
+                      {tier.benefits && (
+                        <ul className="text-sm space-y-2">
+                          {(tier.benefits as string[]).map((b, i) => (
+                            <li key={i} className="flex items-center gap-2">
+                              <Star className={`w-3.5 h-3.5 ${accent} shrink-0`} />
+                              {b}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </CardContent>
                   </div>
-                  {tier.description && <p className="text-sm text-muted mb-3">{tier.description}</p>}
-                  {tier.benefits && (
-                    <ul className="text-sm space-y-1">
-                      {(tier.benefits as string[]).map((b, i) => (
-                        <li key={i} className="flex items-center gap-2">
-                          <Star className="w-3 h-3 text-primary" />
-                          {b}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+                </Card>
+              )
+            })}
           </div>
         </div>
       )}
@@ -482,43 +470,6 @@ export default function CreatorProfilePage() {
         )}
       </div>
 
-      {/* Share modal */}
-      {showShareModal && (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setShowShareModal(false)} />
-          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 max-w-sm mx-auto bg-surface border border-border rounded-md shadow-xl p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Compartilhar perfil</h3>
-              <button onClick={() => setShowShareModal(false)} className="text-muted hover:text-foreground">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="grid grid-cols-4 gap-3">
-              {[
-                { id: 'copy', label: 'Copiar URL', icon: <Link2 className="w-5 h-5" />, color: 'bg-gray-600' },
-                { id: 'whatsapp', label: 'WhatsApp', icon: <span className="text-base font-bold">W</span>, color: 'bg-green-500' },
-                { id: 'telegram', label: 'Telegram', icon: <span className="text-base font-bold">T</span>, color: 'bg-blue-400' },
-                { id: 'twitter', label: 'Twitter', icon: <span className="text-base font-bold">X</span>, color: 'bg-black' },
-                { id: 'facebook', label: 'Facebook', icon: <span className="text-base font-bold">f</span>, color: 'bg-blue-600' },
-                { id: 'linkedin', label: 'LinkedIn', icon: <span className="text-base font-bold">in</span>, color: 'bg-blue-700' },
-                { id: 'reddit', label: 'Reddit', icon: <span className="text-base font-bold">R</span>, color: 'bg-orange-500' },
-                { id: 'email', label: 'Email', icon: <Mail className="w-5 h-5" />, color: 'bg-gray-500' },
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  onClick={() => handleShareOption(opt.id)}
-                  className="flex flex-col items-center gap-1.5 group"
-                >
-                  <div className={`w-10 h-10 rounded-full ${opt.color} text-white flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                    {opt.icon}
-                  </div>
-                  <span className="text-xs text-muted">{opt.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
     </div>
   )
 }

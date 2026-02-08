@@ -1,6 +1,6 @@
 # FanDreams
 
-Plataforma de monetizacao para criadores de conteudo com a menor taxa do mercado (12%), gamificacao profunda e FanCoins.
+Plataforma de monetizacao para criadores de conteudo com a menor taxa do mercado (8%), gamificacao profunda e FanCoins.
 
 ## Stack
 

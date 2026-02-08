@@ -53,7 +53,7 @@ export function Sidebar() {
         : fanLinks
 
   return (
-    <aside className="hidden md:flex flex-col w-56 shrink-0 sticky top-16 h-[calc(100vh-4rem)] py-4 px-3 border-r border-border">
+    <aside className="hidden md:flex flex-col w-16 hover:w-56 shrink-0 sticky top-14 h-[calc(100vh-3.5rem)] py-4 px-2 hover:px-3 border-r border-border group/sidebar transition-all duration-200 overflow-hidden">
       <nav className="space-y-1">
         {links.map((link) => {
           const isActive = pathname === link.href || pathname.startsWith(link.href + '/')
@@ -61,15 +61,18 @@ export function Sidebar() {
             <Link
               key={link.href}
               href={link.href}
+              title={link.label}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-sm text-sm font-medium transition-colors',
+                'flex items-center gap-3 px-3 py-2.5 rounded-sm text-sm font-medium transition-colors whitespace-nowrap',
                 isActive
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted hover:text-foreground hover:bg-surface-light',
               )}
             >
-              <link.icon className="w-5 h-5" />
-              {link.label}
+              <link.icon className="w-5 h-5 shrink-0" />
+              <span className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200">
+                {link.label}
+              </span>
             </Link>
           )
         })}
