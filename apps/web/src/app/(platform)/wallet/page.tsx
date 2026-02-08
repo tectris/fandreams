@@ -24,6 +24,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import Link from 'next/link'
 
 type CheckoutResponse = {
   paymentId: string
@@ -231,7 +232,9 @@ function WalletContent() {
               {transactions.map((tx: any) => (
                 <div key={tx.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                   <div>
-                    <span className="text-sm font-medium">{tx.description || tx.type}</span>
+                    <span className="text-sm font-medium">
+                      <TransactionDescription text={tx.description || tx.type} />
+                    </span>
                     <p className="text-xs text-muted">
                       {new Date(tx.createdAt).toLocaleDateString('pt-BR', {
                         day: '2-digit',
@@ -253,6 +256,29 @@ function WalletContent() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function TransactionDescription({ text }: { text: string }) {
+  const parts = text.split(/(@\w+)/g)
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith('@')) {
+          const username = part.slice(1)
+          return (
+            <Link
+              key={i}
+              href={`/creator/${username}`}
+              className="text-primary hover:underline"
+            >
+              {part}
+            </Link>
+          )
+        }
+        return <span key={i}>{part}</span>
+      })}
+    </>
   )
 }
 

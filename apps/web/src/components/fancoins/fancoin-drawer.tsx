@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { X, Coins, ShoppingCart, ArrowRightLeft, Gift } from 'lucide-react'
 import { toast } from 'sonner'
+import Link from 'next/link'
 
 type Wallet = {
   balance: string
@@ -206,7 +207,9 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
                     className="flex items-center justify-between py-3 border-b border-border/50"
                   >
                     <div>
-                      <p className="text-sm font-medium">{tx.description || tx.type}</p>
+                      <p className="text-sm font-medium">
+                        <TransactionDescription text={tx.description || tx.type} />
+                      </p>
                       <p className="text-xs text-muted">
                         {new Date(tx.createdAt).toLocaleDateString('pt-BR')}
                       </p>
@@ -228,6 +231,30 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
           )}
         </div>
       </div>
+    </>
+  )
+}
+
+function TransactionDescription({ text }: { text: string }) {
+  const parts = text.split(/(@\w+)/g)
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith('@')) {
+          const username = part.slice(1)
+          return (
+            <Link
+              key={i}
+              href={`/creator/${username}`}
+              className="text-primary hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {part}
+            </Link>
+          )
+        }
+        return <span key={i}>{part}</span>
+      })}
     </>
   )
 }
