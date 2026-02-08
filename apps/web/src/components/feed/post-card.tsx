@@ -18,8 +18,6 @@ import {
   EyeOff,
   Share2,
   Flag,
-  Link2,
-  Mail,
 } from 'lucide-react'
 import { Avatar } from '@/components/ui/avatar'
 import { VideoPlayer } from '@/components/ui/video-player'
@@ -109,7 +107,6 @@ export function PostCard({
   const [likeCount, setLikeCount] = useState(post.likeCount)
   const [bookmarked, setBookmarked] = useState(post.isBookmarked || false)
   const [shareCount, setShareCount] = useState(post.shareCount || 0)
-  const [showShareModal, setShowShareModal] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
   const [reportReason, setReportReason] = useState('')
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -240,8 +237,8 @@ export function PostCard({
       url,
     }
 
-    // Try native share API first (mobile browsers)
-    if (typeof navigator !== 'undefined' && navigator.share && /Mobi|Android/i.test(navigator.userAgent)) {
+    // Try native share API first
+    if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share(shareData)
         setShareCount((c) => c + 1)
@@ -250,39 +247,12 @@ export function PostCard({
         // User cancelled
       }
     } else {
-      // Desktop: show share modal
-      setShowShareModal(true)
-    }
-  }
-
-  function handleShareOption(platform: string) {
-    const url = `${window.location.origin}/creator/${post.creatorUsername}`
-    const text = post.contentText || `Confira este post no FanDreams!`
-    const encoded = encodeURIComponent(text + ' ' + url)
-    const encodedUrl = encodeURIComponent(url)
-    const encodedText = encodeURIComponent(text)
-
-    const shareUrls: Record<string, string> = {
-      whatsapp: `https://wa.me/?text=${encoded}`,
-      telegram: `https://t.me/share/url?url=${encodedUrl}&text=${encodedText}`,
-      twitter: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
-      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
-      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`,
-      reddit: `https://reddit.com/submit?url=${encodedUrl}&title=${encodedText}`,
-      pinterest: `https://pinterest.com/pin/create/button/?url=${encodedUrl}&description=${encodedText}`,
-      email: `mailto:?subject=${encodedText}&body=${encoded}`,
-    }
-
-    if (platform === 'copy') {
+      // Fallback: copy link
       navigator.clipboard.writeText(url)
       toast.success('Link copiado!')
-    } else if (shareUrls[platform]) {
-      window.open(shareUrls[platform], '_blank', 'width=600,height=400')
+      setShareCount((c) => c + 1)
+      api.post(`/posts/${post.id}/share`, {}).catch(() => {})
     }
-
-    setShareCount((c) => c + 1)
-    api.post(`/posts/${post.id}/share`, {}).catch(() => {})
-    setShowShareModal(false)
   }
 
   async function handleReport() {
@@ -307,7 +277,7 @@ export function PostCard({
   }
 
   return (
-    <Card className={`mb-4 ${isHidden ? 'opacity-50 grayscale' : ''}`}>
+    <Card className={`mb-6 ${isHidden ? 'opacity-50 grayscale' : ''}`}>
       {/* Hidden indicator */}
       {isHidden && isOwner && (
         <div className="px-4 pt-3 flex items-center gap-2 text-muted">
@@ -316,7 +286,7 @@ export function PostCard({
         </div>
       )}
       {/* Header */}
-      <div className="px-4 py-3 flex items-center gap-3">
+      <div className="px-5 py-4 flex items-center gap-3">
         <Link href={`/creator/${post.creatorUsername}`}>
           <Avatar src={post.creatorAvatarUrl} alt={post.creatorDisplayName || post.creatorUsername} />
         </Link>
@@ -399,17 +369,43 @@ export function PostCard({
                     )}
                   </>
                 )}
-                {!isOwner && isAuthenticated && (
+                {/* Share & Bookmark - available to all */}
+                <button
+                  onClick={() => {
+                    handleShare()
+                    setMenuOpen(false)
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-surface-light transition-colors"
+                >
+                  <Share2 className="w-4 h-4" />
+                  Compartilhar
+                </button>
+                {isAuthenticated && (
                   <button
                     onClick={() => {
-                      setShowReportModal(true)
+                      handleBookmark()
                       setMenuOpen(false)
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-error hover:bg-surface-light transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-surface-light transition-colors"
                   >
-                    <Flag className="w-4 h-4" />
-                    Denunciar
+                    <Bookmark className={`w-4 h-4 ${bookmarked ? 'fill-primary text-primary' : ''}`} />
+                    {bookmarked ? 'Remover dos salvos' : 'Salvar'}
                   </button>
+                )}
+                {!isOwner && isAuthenticated && (
+                  <>
+                    <div className="border-t border-border my-1" />
+                    <button
+                      onClick={() => {
+                        setShowReportModal(true)
+                        setMenuOpen(false)
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-error hover:bg-surface-light transition-colors"
+                    >
+                      <Flag className="w-4 h-4" />
+                      Denunciar
+                    </button>
+                  </>
                 )}
               </div>
             </>
@@ -585,13 +581,13 @@ export function PostCard({
       )}
 
       {/* Stats bar (views) */}
-      <div className="px-4 pt-2 flex items-center gap-1 text-xs text-muted">
+      <div className="px-5 pt-3 flex items-center gap-1 text-xs text-muted">
         <Eye className="w-3.5 h-3.5" />
         <span>{formatNumber(viewCount)} visualizacoes</span>
       </div>
 
       {/* Actions */}
-      <div className="px-4 py-3 flex items-center gap-5">
+      <div className="px-5 py-3.5 flex items-center gap-6">
         <button onClick={handleLike} className="flex items-center gap-1.5 text-sm text-muted hover:text-error transition-colors group">
           <Heart
             className={`w-5 h-5 group-hover:scale-110 transition-transform ${liked ? 'fill-error text-error' : ''}`}
@@ -607,14 +603,6 @@ export function PostCard({
           <span>{formatNumber(post.commentCount)}</span>
         </button>
 
-        <button
-          onClick={handleShare}
-          className="flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors"
-        >
-          <Share2 className="w-5 h-5" />
-          <span>{shareCount > 0 ? formatNumber(shareCount) : ''}</span>
-        </button>
-
         {!isOwner && (
           <button
             onClick={toggleTip}
@@ -624,12 +612,6 @@ export function PostCard({
             <span>Tip</span>
           </button>
         )}
-
-        <div className="flex-1" />
-
-        <button onClick={handleBookmark} className="text-muted hover:text-primary transition-colors">
-          <Bookmark className={`w-5 h-5 ${bookmarked ? 'fill-primary text-primary' : ''}`} />
-        </button>
       </div>
 
       {/* Tip sent log */}
@@ -703,43 +685,6 @@ export function PostCard({
         </div>
       )}
 
-      {/* Share modal */}
-      {showShareModal && (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setShowShareModal(false)} />
-          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-50 max-w-sm mx-auto bg-surface border border-border rounded-md shadow-xl p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold">Compartilhar</h3>
-              <button onClick={() => setShowShareModal(false)} className="text-muted hover:text-foreground">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="grid grid-cols-4 gap-3">
-              {[
-                { id: 'copy', label: 'Copiar URL', icon: <Link2 className="w-5 h-5" />, color: 'bg-gray-600' },
-                { id: 'whatsapp', label: 'WhatsApp', icon: <span className="text-base font-bold">W</span>, color: 'bg-green-500' },
-                { id: 'telegram', label: 'Telegram', icon: <span className="text-base font-bold">T</span>, color: 'bg-blue-400' },
-                { id: 'twitter', label: 'Twitter', icon: <span className="text-base font-bold">X</span>, color: 'bg-black' },
-                { id: 'facebook', label: 'Facebook', icon: <span className="text-base font-bold">f</span>, color: 'bg-blue-600' },
-                { id: 'linkedin', label: 'LinkedIn', icon: <span className="text-base font-bold">in</span>, color: 'bg-blue-700' },
-                { id: 'reddit', label: 'Reddit', icon: <span className="text-base font-bold">R</span>, color: 'bg-orange-500' },
-                { id: 'email', label: 'Email', icon: <Mail className="w-5 h-5" />, color: 'bg-gray-500' },
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  onClick={() => handleShareOption(opt.id)}
-                  className="flex flex-col items-center gap-1.5 group"
-                >
-                  <div className={`w-10 h-10 rounded-full ${opt.color} text-white flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                    {opt.icon}
-                  </div>
-                  <span className="text-xs text-muted">{opt.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
 
       {/* Comments section */}
       {showComments && (
