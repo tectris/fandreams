@@ -214,10 +214,16 @@ async function createMpPayment(payment: any, pkg: any, paymentMethod: string, ap
         },
       ],
       external_reference: payment.id,
-      payment_methods: {
-        excluded_payment_types: paymentMethod === 'pix' ? [{ id: 'credit_card' }] : [],
-        installments: paymentMethod === 'credit_card' ? 12 : 1,
-      },
+      payment_methods: paymentMethod === 'pix'
+        ? {
+            excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }, { id: 'ticket' }],
+            default_payment_method_id: 'pix',
+            installments: 1,
+          }
+        : {
+            excluded_payment_types: [{ id: 'bank_transfer' }, { id: 'ticket' }],
+            installments: 12,
+          },
       back_urls: {
         success: `${appUrl}/wallet?payment=success&provider=mercadopago`,
         failure: `${appUrl}/wallet?payment=failure&provider=mercadopago`,
@@ -740,10 +746,16 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
         },
       ],
       external_reference: payment.id,
-      payment_methods: {
-        excluded_payment_types: paymentMethod === 'pix' ? [{ id: 'credit_card' }] : [],
-        installments: paymentMethod === 'credit_card' ? 12 : 1,
-      },
+      payment_methods: paymentMethod === 'pix'
+        ? {
+            excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }, { id: 'ticket' }],
+            default_payment_method_id: 'pix',
+            installments: 1,
+          }
+        : {
+            excluded_payment_types: [{ id: 'bank_transfer' }, { id: 'ticket' }],
+            installments: 12,
+          },
       back_urls: {
         success: `${appUrl}/feed?ppv=success&postId=${postId}`,
         failure: `${appUrl}/feed?ppv=failure&postId=${postId}`,
