@@ -48,6 +48,12 @@ export default function AdminPaymentsPage() {
     enabled: activeTab === 'settings',
   })
 
+  const { data: providers, isLoading: loadingProviders } = useQuery({
+    queryKey: ['payment-providers'],
+    queryFn: async () => (await api.get<any>('/payments/providers')).data,
+    enabled: activeTab === 'settings',
+  })
+
   const approveMutation = useMutation({
     mutationFn: (id: string) => api.post(`/withdrawals/admin/${id}/approve`),
     onSuccess: () => {
@@ -207,38 +213,88 @@ export default function AdminPaymentsPage() {
         </div>
       )}
 
-      {activeTab === 'settings' && settings && (
-        <Card>
-          <CardHeader>
-            <h2 className="font-bold flex items-center gap-2">
-              <Shield className="w-5 h-5 text-primary" /> Configuracoes de Pagamento
-            </h2>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-4" onSubmit={(e) => {
-              e.preventDefault()
-              const form = new FormData(e.currentTarget)
-              settingsMutation.mutate({
-                manual_approval_threshold: Number(form.get('manual_approval_threshold')),
-                max_daily_withdrawals: Number(form.get('max_daily_withdrawals')),
-                max_daily_amount: Number(form.get('max_daily_amount')),
-                cooldown_hours: Number(form.get('cooldown_hours')),
-                min_payout: Number(form.get('min_payout')),
-                fancoin_to_brl: Number(form.get('fancoin_to_brl')),
-              })
-            }}>
-              <Input label="Aprovacao manual a partir de (R$)" name="manual_approval_threshold" type="number" step="0.01" defaultValue={settings.manual_approval_threshold} />
-              <Input label="Max saques por dia" name="max_daily_withdrawals" type="number" defaultValue={settings.max_daily_withdrawals} />
-              <Input label="Max valor diario (R$)" name="max_daily_amount" type="number" step="0.01" defaultValue={settings.max_daily_amount} />
-              <Input label="Cooldown entre saques (horas)" name="cooldown_hours" type="number" defaultValue={settings.cooldown_hours} />
-              <Input label="Saque minimo (R$)" name="min_payout" type="number" step="0.01" defaultValue={settings.min_payout} />
-              <Input label="Taxa FanCoin → BRL" name="fancoin_to_brl" type="number" step="0.001" defaultValue={settings.fancoin_to_brl} />
-              <Button type="submit" loading={settingsMutation.isPending}>
-                Salvar Configuracoes
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+      {activeTab === 'settings' && (
+        <div className="space-y-6">
+          {/* Payment Gateways Status */}
+          <Card>
+            <CardHeader>
+              <h2 className="font-bold flex items-center gap-2">
+                <Settings className="w-5 h-5 text-primary" /> Payment Gateways
+              </h2>
+            </CardHeader>
+            <CardContent>
+              {loadingProviders ? (
+                <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+              ) : providers && providers.length > 0 ? (
+                <div className="space-y-3">
+                  {providers.map((p: any) => (
+                    <div key={p.id} className="flex items-center justify-between p-3 border border-border rounded-md">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-2 rounded-full ${p.sandbox ? 'bg-warning' : 'bg-green-500'}`} />
+                        <div>
+                          <p className="font-medium">{p.label}</p>
+                          <p className="text-xs text-muted">Metodos: {p.methods.join(', ')}</p>
+                        </div>
+                      </div>
+                      <Badge variant={p.sandbox ? 'warning' : 'success'}>
+                        {p.sandbox ? 'Sandbox' : 'Producao'}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-muted">
+                  <AlertTriangle className="w-5 h-5 mx-auto mb-2 text-warning" />
+                  <p className="text-sm">Nenhum gateway configurado. Configure as variaveis de ambiente:</p>
+                  <div className="mt-2 text-xs text-left bg-surface-light p-3 rounded-md font-mono space-y-1">
+                    <p>MERCADOPAGO_ACCESS_TOKEN, MERCADOPAGO_SANDBOX</p>
+                    <p>NOWPAYMENTS_API_KEY, NOWPAYMENTS_IPN_SECRET, NOWPAYMENTS_SANDBOX</p>
+                    <p>PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_SANDBOX</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Anti-fraud & Withdrawal Settings */}
+          <Card>
+            <CardHeader>
+              <h2 className="font-bold flex items-center gap-2">
+                <Shield className="w-5 h-5 text-primary" /> Configuracoes de Anti-Fraude e Saques
+              </h2>
+            </CardHeader>
+            <CardContent>
+              {loadingSettings ? (
+                <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+              ) : settings ? (
+                <form className="space-y-4" onSubmit={(e) => {
+                  e.preventDefault()
+                  const form = new FormData(e.currentTarget)
+                  settingsMutation.mutate({
+                    manual_approval_threshold: Number(form.get('manual_approval_threshold')),
+                    max_daily_withdrawals: Number(form.get('max_daily_withdrawals')),
+                    max_daily_amount: Number(form.get('max_daily_amount')),
+                    cooldown_hours: Number(form.get('cooldown_hours')),
+                    min_payout: Number(form.get('min_payout')),
+                    fancoin_to_brl: Number(form.get('fancoin_to_brl')),
+                  })
+                }}>
+                  <Input label="Aprovacao manual a partir de (R$)" name="manual_approval_threshold" type="number" step="0.01" defaultValue={settings.manual_approval_threshold} />
+                  <Input label="Max saques por dia" name="max_daily_withdrawals" type="number" defaultValue={settings.max_daily_withdrawals} />
+                  <Input label="Max valor diario (R$)" name="max_daily_amount" type="number" step="0.01" defaultValue={settings.max_daily_amount} />
+                  <Input label="Cooldown entre saques (horas)" name="cooldown_hours" type="number" defaultValue={settings.cooldown_hours} />
+                  <Input label="Saque minimo (R$)" name="min_payout" type="number" step="0.01" defaultValue={settings.min_payout} />
+                  <Input label="Taxa FanCoin → BRL" name="fancoin_to_brl" type="number" step="0.001" defaultValue={settings.fancoin_to_brl} />
+                  <Button type="submit" loading={settingsMutation.isPending}>
+                    Salvar Configuracoes
+                  </Button>
+                </form>
+              ) : (
+                <p className="text-sm text-muted text-center py-4">Erro ao carregar configuracoes. Verifique se a tabela platform_settings existe no banco.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   )
