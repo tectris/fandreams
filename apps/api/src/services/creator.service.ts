@@ -1,8 +1,8 @@
-import { eq, desc, sql } from 'drizzle-orm'
-import { users, creatorProfiles, subscriptionTiers, subscriptions, payments } from '@fandreams/database'
+import { eq, and, desc, sql } from 'drizzle-orm'
+import { users, creatorProfiles, subscriptionTiers, subscriptionPromos, subscriptions, payments } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
-import type { CreateTierInput } from '@fandreams/shared'
+import type { CreateTierInput, CreatePromoInput, UpdatePromoInput } from '@fandreams/shared'
 
 export async function applyAsCreator(
   userId: string,
@@ -46,7 +46,13 @@ export async function getCreatorProfile(userId: string) {
     .where(eq(subscriptionTiers.creatorId, userId))
     .orderBy(subscriptionTiers.sortOrder)
 
-  return { ...profile, tiers }
+  const promos = await db
+    .select()
+    .from(subscriptionPromos)
+    .where(eq(subscriptionPromos.creatorId, userId))
+    .orderBy(subscriptionPromos.durationDays)
+
+  return { ...profile, tiers, promos }
 }
 
 export async function updateCreatorProfile(
@@ -56,6 +62,7 @@ export async function updateCreatorProfile(
     tags: string[]
     subscriptionPrice: number
     welcomeMessage: string
+    messagesEnabled: boolean
     payoutMethod: string
     payoutDetails: unknown
   }>,
@@ -65,6 +72,7 @@ export async function updateCreatorProfile(
   if (data.tags !== undefined) updateData.tags = data.tags
   if (data.subscriptionPrice !== undefined) updateData.subscriptionPrice = String(data.subscriptionPrice)
   if (data.welcomeMessage !== undefined) updateData.welcomeMessage = data.welcomeMessage
+  if (data.messagesEnabled !== undefined) updateData.messagesEnabled = data.messagesEnabled
   if (data.payoutMethod !== undefined) updateData.payoutMethod = data.payoutMethod
   if (data.payoutDetails !== undefined) updateData.payoutDetails = data.payoutDetails
 
@@ -158,4 +166,113 @@ export async function getCreatorSubscribers(creatorId: string, page = 1, limit =
     .where(eq(subscriptions.creatorId, creatorId))
 
   return { subscribers: subs, total: count || 0 }
+}
+
+// ── Subscription Promos ──
+
+export async function getCreatorPromos(creatorId: string) {
+  return db
+    .select()
+    .from(subscriptionPromos)
+    .where(eq(subscriptionPromos.creatorId, creatorId))
+    .orderBy(subscriptionPromos.durationDays)
+}
+
+export async function getActivePromos(creatorId: string) {
+  return db
+    .select()
+    .from(subscriptionPromos)
+    .where(
+      and(
+        eq(subscriptionPromos.creatorId, creatorId),
+        eq(subscriptionPromos.isActive, true),
+      ),
+    )
+    .orderBy(subscriptionPromos.durationDays)
+}
+
+export async function createPromo(creatorId: string, input: CreatePromoInput) {
+  // Check if a promo for this duration already exists
+  const [existing] = await db
+    .select()
+    .from(subscriptionPromos)
+    .where(
+      and(
+        eq(subscriptionPromos.creatorId, creatorId),
+        eq(subscriptionPromos.durationDays, input.durationDays),
+      ),
+    )
+    .limit(1)
+
+  if (existing) {
+    throw new AppError('ALREADY_EXISTS', `Ja existe uma promocao para ${input.durationDays} dias`, 409)
+  }
+
+  // Creator must have a subscription price set
+  const [profile] = await db
+    .select({ subscriptionPrice: creatorProfiles.subscriptionPrice })
+    .from(creatorProfiles)
+    .where(eq(creatorProfiles.userId, creatorId))
+    .limit(1)
+
+  if (!profile || !profile.subscriptionPrice || Number(profile.subscriptionPrice) <= 0) {
+    throw new AppError('INVALID', 'Defina o preco mensal da assinatura antes de criar promocoes', 400)
+  }
+
+  const [promo] = await db
+    .insert(subscriptionPromos)
+    .values({
+      creatorId,
+      durationDays: input.durationDays,
+      price: String(input.price),
+      isActive: true,
+    })
+    .returning()
+
+  return promo
+}
+
+export async function updatePromo(creatorId: string, promoId: string, input: UpdatePromoInput) {
+  const [existing] = await db
+    .select()
+    .from(subscriptionPromos)
+    .where(
+      and(
+        eq(subscriptionPromos.id, promoId),
+        eq(subscriptionPromos.creatorId, creatorId),
+      ),
+    )
+    .limit(1)
+
+  if (!existing) throw new AppError('NOT_FOUND', 'Promocao nao encontrada', 404)
+
+  const updateData: Record<string, unknown> = { updatedAt: new Date() }
+  if (input.price !== undefined) updateData.price = String(input.price)
+  if (input.isActive !== undefined) updateData.isActive = input.isActive
+
+  const [updated] = await db
+    .update(subscriptionPromos)
+    .set(updateData)
+    .where(eq(subscriptionPromos.id, promoId))
+    .returning()
+
+  return updated
+}
+
+export async function deletePromo(creatorId: string, promoId: string) {
+  const [existing] = await db
+    .select()
+    .from(subscriptionPromos)
+    .where(
+      and(
+        eq(subscriptionPromos.id, promoId),
+        eq(subscriptionPromos.creatorId, creatorId),
+      ),
+    )
+    .limit(1)
+
+  if (!existing) throw new AppError('NOT_FOUND', 'Promocao nao encontrada', 404)
+
+  await db.delete(subscriptionPromos).where(eq(subscriptionPromos.id, promoId))
+  return { deleted: true }
 }

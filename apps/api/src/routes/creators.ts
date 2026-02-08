@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { createTierSchema } from '@fandreams/shared'
+import { createTierSchema, updateSubscriptionPriceSchema, createPromoSchema, updatePromoSchema } from '@fandreams/shared'
 import { validateBody } from '../middleware/validation'
 import { authMiddleware, creatorMiddleware } from '../middleware/auth'
 import * as creatorService from '../services/creator.service'
@@ -38,6 +38,18 @@ creators.get('/me', authMiddleware, creatorMiddleware, async (c) => {
   }
 })
 
+creators.patch('/me', authMiddleware, creatorMiddleware, validateBody(updateSubscriptionPriceSchema), async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const body = c.req.valid('json')
+    const profile = await creatorService.updateCreatorProfile(userId, body)
+    return success(c, profile)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
 creators.get('/me/earnings', authMiddleware, creatorMiddleware, async (c) => {
   const { userId } = c.get('user')
   const earnings = await creatorService.getCreatorEarnings(userId)
@@ -62,6 +74,59 @@ creators.post('/me/tiers', authMiddleware, creatorMiddleware, validateBody(creat
     if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
     throw e
   }
+})
+
+// ── Subscription Promos ──
+
+creators.get('/me/promos', authMiddleware, creatorMiddleware, async (c) => {
+  const { userId } = c.get('user')
+  const promos = await creatorService.getCreatorPromos(userId)
+  return success(c, promos)
+})
+
+creators.post('/me/promos', authMiddleware, creatorMiddleware, validateBody(createPromoSchema), async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const body = c.req.valid('json')
+    const promo = await creatorService.createPromo(userId, body)
+    return success(c, promo)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+creators.patch('/me/promos/:id', authMiddleware, creatorMiddleware, validateBody(updatePromoSchema), async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const promoId = c.req.param('id')
+    const body = c.req.valid('json')
+    const promo = await creatorService.updatePromo(userId, promoId, body)
+    return success(c, promo)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+creators.delete('/me/promos/:id', authMiddleware, creatorMiddleware, async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const promoId = c.req.param('id')
+    const result = await creatorService.deletePromo(userId, promoId)
+    return success(c, result)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+// ── Public promos for a creator (used by fans) ──
+
+creators.get('/:creatorId/promos', async (c) => {
+  const creatorId = c.req.param('creatorId')
+  const promos = await creatorService.getActivePromos(creatorId)
+  return success(c, promos)
 })
 
 export default creators

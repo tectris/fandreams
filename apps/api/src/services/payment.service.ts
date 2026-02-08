@@ -6,6 +6,7 @@ import { AppError } from './auth.service'
 import { FANCOIN_PACKAGES } from '@fandreams/shared'
 import * as fancoinService from './fancoin.service'
 import { getPlatformFeeRate } from './withdrawal.service'
+import { sendPaymentConfirmedEmail, sendSubscriptionActivatedEmail } from './email.service'
 
 // ── MercadoPago ──
 
@@ -575,6 +576,85 @@ async function processPaymentConfirmation(
       }
       console.log(`PPV unlocked for user ${payment.userId}, post ${meta?.postId}, creator credited ${creatorAmount} BRL as FanCoins`)
     }
+
+    // Promo subscription: activate subscription for the promo duration
+    if (payment.type === 'subscription' && meta?.isPromo && meta?.subscriptionId) {
+      const { subscriptions, creatorProfiles } = await import('@fandreams/database')
+      const durationDays = meta.durationDays || 30
+      const now = new Date()
+      const periodEnd = new Date(now)
+      periodEnd.setDate(periodEnd.getDate() + durationDays)
+
+      await db
+        .update(subscriptions)
+        .set({
+          status: 'active',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          autoRenew: false,
+          updatedAt: now,
+        })
+        .where(eq(subscriptions.id, meta.subscriptionId))
+
+      const creatorAmount = Number(payment.creatorAmount || 0)
+      if (payment.recipientId) {
+        await db
+          .update(creatorProfiles)
+          .set({
+            totalSubscribers: sql`${creatorProfiles.totalSubscribers} + 1`,
+            totalEarnings: sql`${creatorProfiles.totalEarnings} + ${creatorAmount}`,
+          })
+          .where(eq(creatorProfiles.userId, payment.recipientId))
+      }
+
+      console.log(`Promo subscription ${meta.subscriptionId} activated for ${durationDays} days`)
+
+      // Send subscription activated email (non-blocking)
+      const { users } = await import('@fandreams/database')
+      const [fan] = await db
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, payment.userId))
+        .limit(1)
+      if (fan && payment.recipientId) {
+        const [creator] = await db
+          .select({ displayName: users.displayName, username: users.username })
+          .from(users)
+          .where(eq(users.id, payment.recipientId))
+          .limit(1)
+        if (creator) {
+          const dLabel = durationDays === 90 ? '3 meses' : durationDays === 180 ? '6 meses' : durationDays === 360 ? '12 meses' : `${durationDays} dias`
+          sendSubscriptionActivatedEmail(fan.email, {
+            creatorName: creator.displayName || creator.username,
+            price: Number(payment.amount).toFixed(2),
+            periodEnd: periodEnd.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }),
+            isPromo: true,
+            durationLabel: dLabel,
+          }).catch((e) => console.error('Failed to send subscription activated email:', e))
+        }
+      }
+    }
+
+    // Send payment confirmation email for all completed payments (non-blocking)
+    const { users: usersTable } = await import('@fandreams/database')
+    const [payer] = await db
+      .select({ email: usersTable.email })
+      .from(usersTable)
+      .where(eq(usersTable.id, payment.userId))
+      .limit(1)
+    if (payer) {
+      const descriptions: Record<string, string> = {
+        ppv: `Conteudo exclusivo`,
+        fancoin_purchase: meta?.packageId ? `Pacote ${meta.packageId}` : 'FanCoins',
+        subscription: 'Assinatura de criador',
+        tip: 'Gorjeta para criador',
+      }
+      sendPaymentConfirmedEmail(payer.email, {
+        type: payment.type,
+        amount: Number(payment.amount).toFixed(2),
+        description: descriptions[payment.type] || 'Pagamento',
+      }).catch((e) => console.error('Failed to send payment confirmed email:', e))
+    }
   }
 
   return { processed: true, status }
@@ -622,6 +702,7 @@ export async function getPaymentStatus(paymentId: string, userId: string) {
       status: payments.status,
       amount: payments.amount,
       paymentProvider: payments.paymentProvider,
+      providerTxId: payments.providerTxId,
       metadata: payments.metadata,
       createdAt: payments.createdAt,
     })
@@ -630,7 +711,58 @@ export async function getPaymentStatus(paymentId: string, userId: string) {
     .limit(1)
 
   if (!payment) throw new AppError('NOT_FOUND', 'Pagamento nao encontrado', 404)
+
+  // Proactive verification: if payment is still pending and was made via MercadoPago,
+  // check directly with MP API to see if it's been approved (webhook may be delayed)
+  if (payment.status === 'pending' && payment.paymentProvider === 'mercadopago') {
+    try {
+      const mpResult = await proactivelyVerifyMpPayment(paymentId)
+      if (mpResult && mpResult.status === 'completed') {
+        return { ...payment, status: 'completed' }
+      }
+    } catch (e) {
+      console.warn('Proactive MP verification failed (non-critical):', e)
+    }
+  }
+
   return payment
+}
+
+// Proactively check MercadoPago for payment status
+// This is a fallback for when webhooks are delayed or don't arrive (common in sandbox)
+async function proactivelyVerifyMpPayment(paymentId: string) {
+  if (!env.MERCADOPAGO_ACCESS_TOKEN) return null
+
+  try {
+    // Search for payments with our external_reference
+    const searchResult = await mpFetch<{
+      results: MpPaymentInfo[]
+      paging: { total: number }
+    }>(`/v1/payments/search?external_reference=${paymentId}&sort=date_created&criteria=desc`)
+
+    if (searchResult.results && searchResult.results.length > 0) {
+      const mpPayment = searchResult.results[0]
+      if (mpPayment.status === 'approved') {
+        // Process the payment confirmation as if webhook arrived
+        const result = await processPaymentConfirmation(
+          paymentId,
+          'completed',
+          String(mpPayment.id),
+          {
+            mpStatus: mpPayment.status,
+            mpStatusDetail: mpPayment.status_detail,
+            mpPaymentMethod: mpPayment.payment_method_id,
+            verifiedViaPolling: true,
+          },
+        )
+        return result
+      }
+    }
+  } catch (e) {
+    console.warn('MP payment search failed:', e)
+  }
+
+  return null
 }
 
 // ── PPV Payment via MercadoPago ──
@@ -808,6 +940,69 @@ export async function createMpSubscription(params: {
     preapprovalId: preapproval.id,
     checkoutUrl: isMpSandbox() ? preapproval.sandbox_init_point : preapproval.init_point,
     sandbox: isMpSandbox(),
+  }
+}
+
+// ── MercadoPago Promo Subscription (One-time payment for extended period) ──
+
+export async function createPromoSubscriptionPayment(params: {
+  paymentId: string
+  creatorName: string
+  durationLabel: string
+  amount: number
+  paymentMethod: string
+  backUrl: string
+}) {
+  const webhookUrl = getWebhookBaseUrl()
+  const appUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+
+  const preference = await mpFetch<MpPreference>('/checkout/preferences', {
+    method: 'POST',
+    body: JSON.stringify({
+      items: [
+        {
+          title: `Assinatura ${params.durationLabel} - ${params.creatorName} - FanDreams`,
+          description: `Acesso por ${params.durationLabel} ao conteudo exclusivo`,
+          quantity: 1,
+          currency_id: 'BRL',
+          unit_price: params.amount,
+        },
+      ],
+      external_reference: params.paymentId,
+      payment_methods: {
+        excluded_payment_types: params.paymentMethod === 'pix' ? [{ id: 'credit_card' }] : [],
+        installments: params.paymentMethod === 'credit_card' ? 12 : 1,
+      },
+      back_urls: {
+        success: params.backUrl.replace('subscription=pending', 'subscription=success'),
+        failure: params.backUrl.replace('subscription=pending', 'subscription=failure'),
+        pending: params.backUrl,
+      },
+      auto_return: 'approved',
+      notification_url: `${webhookUrl}/api/v1/payments/webhook/mercadopago`,
+      statement_descriptor: 'FANDREAMS',
+    }),
+  })
+
+  return {
+    preferenceId: preference.id,
+    checkoutUrl: isMpSandbox() ? preference.sandbox_init_point : preference.init_point,
+    sandbox: isMpSandbox(),
+  }
+}
+
+// ── MercadoPago Payment Verification ──
+
+export async function verifyMpPaymentStatus(providerTxId: string) {
+  try {
+    const mpPayment = await mpFetch<MpPaymentInfo>(`/v1/payments/${providerTxId}`)
+    return {
+      status: mpPayment.status,
+      statusDetail: mpPayment.status_detail,
+      externalReference: mpPayment.external_reference,
+    }
+  } catch {
+    return null
   }
 }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
@@ -195,8 +195,15 @@ export default function AdminPaymentsPage() {
   const [rejectReason, setRejectReason] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
 
-  if (user?.role !== 'admin') {
-    router.push('/feed')
+  const isAdmin = user?.role === 'admin'
+
+  useEffect(() => {
+    if (user && !isAdmin) {
+      router.push('/feed')
+    }
+  }, [user, isAdmin, router])
+
+  if (!isAdmin) {
     return null
   }
 

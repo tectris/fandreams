@@ -14,7 +14,7 @@ import { SubscribeDrawer } from '@/components/subscription/subscribe-drawer'
 import { PpvUnlockDrawer } from '@/components/feed/ppv-unlock-drawer'
 import { LevelBadge } from '@/components/gamification/level-badge'
 import { formatCurrency, formatNumber } from '@/lib/utils'
-import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, Share2, FileText, Eye, Image, Video } from 'lucide-react'
+import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, Share2, FileText, Eye, Image, Video, AlertTriangle, Tag, MessageCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { useState, useRef, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -28,6 +28,7 @@ export default function CreatorProfilePage() {
   const [selectedTier, setSelectedTier] = useState<any>(null)
   const [ppvDrawerOpen, setPpvDrawerOpen] = useState(false)
   const [ppvPost, setPpvPost] = useState<any>(null)
+  const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
   const searchParams = useSearchParams()
@@ -36,7 +37,7 @@ export default function CreatorProfilePage() {
   useEffect(() => {
     if (subscriptionStatus === 'pending') {
       toast.info('Assinatura em processamento. Voce sera notificado quando for confirmada.')
-      queryClient.invalidateQueries({ queryKey: ['subscription-check'] })
+      queryClient.invalidateQueries({ queryKey: ['subscription-status'] })
     }
   }, [subscriptionStatus, queryClient])
 
@@ -49,9 +50,21 @@ export default function CreatorProfilePage() {
   })
 
   const { data: subscription } = useQuery({
-    queryKey: ['subscription-check', profile?.id],
+    queryKey: ['subscription-status', profile?.id],
     queryFn: async () => {
-      const res = await api.get<{ isSubscribed: boolean }>(`/subscriptions/check/${profile.id}`)
+      const res = await api.get<{
+        isSubscribed: boolean
+        subscription: {
+          id: string
+          status: string
+          pricePaid: string
+          currentPeriodEnd: string | null
+          cancelledAt: string | null
+          autoRenew: boolean
+          isCancelled: boolean
+          createdAt: string
+        } | null
+      }>(`/subscriptions/status/${profile.id}`)
       return res.data
     },
     enabled: !!profile?.id && isAuthenticated && profile.id !== user?.id,
@@ -66,10 +79,11 @@ export default function CreatorProfilePage() {
     enabled: !!profile?.id && isAuthenticated && profile.id !== user?.id,
   })
 
-  const { data: postsData } = useQuery({
+  const { data: postsData, error: postsError } = useQuery({
     queryKey: ['creator-posts', profile?.id],
     queryFn: async () => {
       const res = await api.get<{ posts: any[]; total: number }>(`/posts/creator/${profile.id}`)
+      console.log('[creator-posts] API response:', { total: res.data?.total, postCount: res.data?.posts?.length, visibilities: res.data?.posts?.map((p: any) => p.visibility) })
       return res.data
     },
     enabled: !!profile?.id,
@@ -177,6 +191,16 @@ export default function CreatorProfilePage() {
       toast.success('Imagem de capa atualizada!')
     },
     onError: (e: any) => toast.error(e.message || 'Erro ao enviar imagem'),
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: (subscriptionId: string) => api.delete(`/subscriptions/${subscriptionId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subscription-status', profile?.id] })
+      setCancelModalOpen(false)
+      toast.success('Assinatura cancelada. Acesso mantido ate o fim do periodo.')
+    },
+    onError: (e: any) => toast.error(e.message || 'Erro ao cancelar assinatura'),
   })
 
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -371,10 +395,24 @@ export default function CreatorProfilePage() {
                       : 'Assinar'}
                   </Button>
                 )}
-                {isSubscribed && (
-                  <Button variant="outline" disabled>
+                {isSubscribed && !subscription?.subscription?.isCancelled && (
+                  <Button variant="outline" onClick={() => setCancelModalOpen(true)}>
                     <Crown className="w-4 h-4 mr-1" /> Assinante
                   </Button>
+                )}
+                {isSubscribed && subscription?.subscription?.isCancelled && (
+                  <Button variant="outline" disabled className="text-muted">
+                    <Crown className="w-4 h-4 mr-1" />
+                    Ativo ate {new Date(subscription.subscription.currentPeriodEnd!).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                  </Button>
+                )}
+                {/* Send Message */}
+                {profile.creator?.messagesEnabled !== false && (
+                  <Link href={`/messages?to=${profile.id}`}>
+                    <Button variant="outline" size="sm" className="p-2" title="Enviar mensagem">
+                      <MessageCircle className="w-4 h-4" />
+                    </Button>
+                  </Link>
                 )}
               </>
             )}
@@ -492,6 +530,48 @@ export default function CreatorProfilePage() {
         </div>
       )}
 
+      {/* Promotional offers */}
+      {profile.creator?.promos && profile.creator.promos.length > 0 && !isOwner && !isSubscribed && (
+        <div className="mb-10">
+          <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
+            <Tag className="w-5 h-5 text-success" />
+            Ofertas promocionais
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {profile.creator.promos.map((promo: any) => {
+              const monthlyPrice = Number(profile.creator.subscriptionPrice || 0)
+              const durationLabel = promo.durationDays === 90 ? '3 meses' : promo.durationDays === 180 ? '6 meses' : '12 meses'
+              const normalTotal = monthlyPrice * (promo.durationDays / 30)
+              const discount = normalTotal > 0 ? Math.round(((normalTotal - Number(promo.price)) / normalTotal) * 100) : 0
+              const monthlyEq = (Number(promo.price) / (promo.durationDays / 30)).toFixed(2)
+              return (
+                <Card key={promo.id} hover>
+                  <div className="bg-gradient-to-br from-success/10 to-emerald-600/5">
+                    <CardContent>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-bold">{durationLabel}</h3>
+                        {discount > 0 && <Badge variant="success">-{discount}%</Badge>}
+                      </div>
+                      <p className="text-success font-bold text-xl mb-1">{formatCurrency(promo.price)}</p>
+                      <p className="text-xs text-muted mb-4">
+                        {formatCurrency(monthlyEq)}/mes - pagamento unico
+                      </p>
+                      <Button
+                        className="w-full"
+                        onClick={() => handleSubscribe()}
+                      >
+                        <Crown className="w-4 h-4 mr-1" />
+                        Assinar {durationLabel}
+                      </Button>
+                    </CardContent>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Posts */}
       <div>
         <h2 className="font-bold text-lg mb-4">Posts</h2>
@@ -511,15 +591,73 @@ export default function CreatorProfilePage() {
                 onComment={(postId, content) => commentMutation.mutate({ postId, content })}
                 onTip={(postId, creatorId, amount) => tipMutation.mutate({ postId, creatorId, amount })}
                 onPpvUnlock={handlePpvUnlock}
+                onSubscribe={() => handleSubscribe()}
               />
             ))}
           </div>
+        ) : postsError ? (
+          <div className="text-center py-12 text-error">
+            <p>Erro ao carregar posts: {(postsError as any)?.message || 'Erro desconhecido'}</p>
+          </div>
         ) : (
           <div className="text-center py-12 text-muted">
-            <p>{isOwner ? 'Voce ainda nao publicou nenhum post' : 'Nenhum post publico disponivel'}</p>
+            <p>{isOwner ? 'Voce ainda nao publicou nenhum post' : 'Nenhum post disponivel'}</p>
           </div>
         )}
       </div>
+
+      {/* Cancel Subscription Modal */}
+      {cancelModalOpen && subscription?.subscription && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setCancelModalOpen(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-surface border border-border rounded-md shadow-xl max-w-sm w-full p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-warning" />
+                </div>
+                <h3 className="font-bold text-lg">Cancelar assinatura</h3>
+              </div>
+              <p className="text-sm text-muted mb-2">
+                Tem certeza que deseja cancelar sua assinatura de{' '}
+                <span className="font-semibold text-foreground">{profile.displayName || profile.username}</span>?
+              </p>
+              <div className="bg-surface-light rounded-sm p-3 mb-4">
+                <p className="text-sm">
+                  Seu acesso continua ativo ate{' '}
+                  <span className="font-semibold">
+                    {new Date(subscription.subscription.currentPeriodEnd!).toLocaleDateString('pt-BR', {
+                      day: '2-digit',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  </span>
+                </p>
+                <p className="text-xs text-muted mt-1">
+                  Nenhuma cobranca futura sera realizada. Voce pode reassinar a qualquer momento.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setCancelModalOpen(false)}
+                >
+                  Manter assinatura
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="flex-1 text-error hover:bg-error/10"
+                  onClick={() => cancelMutation.mutate(subscription.subscription!.id)}
+                  loading={cancelMutation.isPending}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Subscribe Drawer */}
       {profile && (
@@ -570,6 +708,7 @@ function CreatorPostCard({
   onComment,
   onTip,
   onPpvUnlock,
+  onSubscribe,
 }: {
   post: any
   currentUserId?: string | null
@@ -582,6 +721,7 @@ function CreatorPostCard({
   onComment: (postId: string, content: string) => void
   onTip: (postId: string, creatorId: string, amount: number) => void
   onPpvUnlock: (post: any) => void
+  onSubscribe: () => void
 }) {
   const { data: commentsData } = useQuery({
     queryKey: ['comments', post.id],
@@ -606,6 +746,7 @@ function CreatorPostCard({
       onComment={onComment}
       onTip={onTip}
       onPpvUnlock={onPpvUnlock}
+      onSubscribe={onSubscribe}
       comments={Array.isArray(comments) ? comments : []}
     />
   )

@@ -99,6 +99,14 @@ export default function FeedPage() {
     setPpvDrawerOpen(true)
   }
 
+  function handleSubscribeFromFeed(post: any) {
+    if (!isAuthenticated) {
+      window.location.href = '/login'
+      return
+    }
+    window.location.href = `/creator/${post.creatorUsername}`
+  }
+
   const isCreatorOrAdmin = user?.role === 'creator' || user?.role === 'admin'
 
   return (
@@ -159,6 +167,7 @@ export default function FeedPage() {
               onComment={(postId, content) => commentMutation.mutate({ postId, content })}
               onTip={(postId, creatorId, amount) => tipMutation.mutate({ postId, creatorId, amount })}
               onPpvUnlock={handlePpvUnlock}
+              onSubscribe={handleSubscribeFromFeed}
             />
           ))}
         </div>
@@ -216,6 +225,7 @@ function FeedPostCard({
   onComment,
   onTip,
   onPpvUnlock,
+  onSubscribe,
 }: {
   post: any
   currentUserId?: string | null
@@ -228,6 +238,7 @@ function FeedPostCard({
   onComment: (postId: string, content: string) => void
   onTip: (postId: string, creatorId: string, amount: number) => void
   onPpvUnlock: (post: any) => void
+  onSubscribe: (post: any) => void
 }) {
   const { data: commentsData } = useQuery({
     queryKey: ['comments', post.id],
@@ -252,6 +263,7 @@ function FeedPostCard({
       onComment={onComment}
       onTip={onTip}
       onPpvUnlock={onPpvUnlock}
+      onSubscribe={onSubscribe}
       comments={Array.isArray(comments) ? comments : []}
     />
   )

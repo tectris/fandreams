@@ -21,7 +21,7 @@ const envSchema = z.object({
   BUNNY_CDN_HOSTNAME: z.string().optional(),
   API_URL: z.string().optional(),
   MERCADOPAGO_ACCESS_TOKEN: z.string().optional(),
-  MERCADOPAGO_WEBHOOK_SECRET: z.string().min(1, 'MERCADOPAGO_WEBHOOK_SECRET is required in production').optional(),
+  MERCADOPAGO_WEBHOOK_SECRET: z.string().optional(),
   MERCADOPAGO_SANDBOX: z.enum(['true', 'false']).default('true'),
   NOWPAYMENTS_API_KEY: z.string().optional(),
   NOWPAYMENTS_IPN_SECRET: z.string().optional(),
@@ -45,13 +45,22 @@ if (!parsed.success) {
 
 // Enforce critical secrets in production
 if (parsed.data.NODE_ENV === 'production') {
-  const missing: string[] = []
-  if (!parsed.data.MERCADOPAGO_WEBHOOK_SECRET) missing.push('MERCADOPAGO_WEBHOOK_SECRET')
-  if (!parsed.data.UPSTASH_REDIS_REST_URL) missing.push('UPSTASH_REDIS_REST_URL')
-  if (!parsed.data.UPSTASH_REDIS_REST_TOKEN) missing.push('UPSTASH_REDIS_REST_TOKEN')
-  if (missing.length > 0) {
-    console.error(`[SECURITY] Missing required production env vars: ${missing.join(', ')}`)
-    console.error('[SECURITY] These variables are required for production security.')
+  const warnings: string[] = []
+  const fatal: string[] = []
+
+  // Non-critical: MP webhook secret only needed for receiving payment webhooks
+  if (!parsed.data.MERCADOPAGO_WEBHOOK_SECRET) warnings.push('MERCADOPAGO_WEBHOOK_SECRET')
+
+  // Critical: Redis needed for rate limiting in production
+  if (!parsed.data.UPSTASH_REDIS_REST_URL) warnings.push('UPSTASH_REDIS_REST_URL')
+  if (!parsed.data.UPSTASH_REDIS_REST_TOKEN) warnings.push('UPSTASH_REDIS_REST_TOKEN')
+
+  if (warnings.length > 0) {
+    console.warn(`[SECURITY] Missing recommended production env vars: ${warnings.join(', ')}`)
+    console.warn('[SECURITY] Some features (webhooks, rate limiting) may not work correctly.')
+  }
+  if (fatal.length > 0) {
+    console.error(`[SECURITY] Missing required production env vars: ${fatal.join(', ')}`)
     process.exit(1)
   }
 }

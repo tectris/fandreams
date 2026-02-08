@@ -1,11 +1,12 @@
-import { eq, and, sql } from 'drizzle-orm'
-import { subscriptions, creatorProfiles, subscriptionTiers, payments, users } from '@fandreams/database'
+import { eq, and, sql, lt, ne } from 'drizzle-orm'
+import { subscriptions, creatorProfiles, subscriptionTiers, subscriptionPromos, payments, users } from '@fandreams/database'
 import { db } from '../config/database'
 import { env } from '../config/env'
 import { AppError } from './auth.service'
 import * as paymentService from './payment.service'
 import * as fancoinService from './fancoin.service'
 import { getPlatformFeeRate } from './withdrawal.service'
+import { sendSubscriptionCancelledEmail } from './email.service'
 
 // ── Create subscription with MP checkout ──
 
@@ -14,6 +15,7 @@ export async function createSubscriptionCheckout(
   creatorId: string,
   tierId?: string,
   paymentMethod?: string,
+  promoId?: string,
 ) {
   if (fanId === creatorId) {
     throw new AppError('INVALID', 'Voce nao pode assinar a si mesmo', 400)
@@ -29,10 +31,24 @@ export async function createSubscriptionCheckout(
     throw new AppError('ALREADY_SUBSCRIBED', 'Voce ja esta inscrito neste criador', 409)
   }
 
+  // Check if promo subscription
+  let promo: any = null
+  if (promoId) {
+    const [p] = await db
+      .select()
+      .from(subscriptionPromos)
+      .where(and(eq(subscriptionPromos.id, promoId), eq(subscriptionPromos.creatorId, creatorId), eq(subscriptionPromos.isActive, true)))
+      .limit(1)
+    if (!p) throw new AppError('NOT_FOUND', 'Promocao nao encontrada ou inativa', 404)
+    promo = p
+  }
+
   // Get price
   let price: string
   let tierName: string | undefined
-  if (tierId) {
+  if (promo) {
+    price = promo.price
+  } else if (tierId) {
     const [tier] = await db.select().from(subscriptionTiers).where(eq(subscriptionTiers.id, tierId)).limit(1)
     if (!tier) throw new AppError('NOT_FOUND', 'Tier nao encontrado', 404)
     price = tier.price
@@ -65,8 +81,95 @@ export async function createSubscriptionCheckout(
     .limit(1)
   const creatorName = creator?.displayName || creator?.username || 'Criador'
 
-  // Create pending subscription record
   const now = new Date()
+  const appUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const creatorUsername = creator?.username || creatorId
+
+  // ── Promo subscription: one-time payment for extended period ──
+  if (promo) {
+    const durationDays = promo.durationDays as number
+    const periodEnd = new Date(now)
+    periodEnd.setDate(periodEnd.getDate() + durationDays)
+
+    const [sub] = await db
+      .insert(subscriptions)
+      .values({
+        fanId,
+        creatorId,
+        tierId,
+        status: 'pending',
+        pricePaid: price,
+        paymentProvider: 'mercadopago',
+        currentPeriodStart: now,
+        currentPeriodEnd: now,
+        autoRenew: false, // promo subscriptions don't auto-renew
+      })
+      .onConflictDoUpdate({
+        target: [subscriptions.fanId, subscriptions.creatorId],
+        set: {
+          status: 'pending',
+          tierId,
+          pricePaid: price,
+          paymentProvider: 'mercadopago',
+          cancelledAt: null,
+          autoRenew: false,
+          updatedAt: now,
+        },
+      })
+      .returning()
+
+    const promoFeeRate = await getPlatformFeeRate()
+    const platformFee = amount * promoFeeRate
+    const creatorAmount = amount - platformFee
+
+    const [payment] = await db
+      .insert(payments)
+      .values({
+        userId: fanId,
+        recipientId: creatorId,
+        type: 'subscription',
+        amount: price,
+        platformFee: String(platformFee),
+        creatorAmount: String(creatorAmount),
+        paymentProvider: 'mercadopago',
+        status: 'pending',
+        metadata: {
+          subscriptionId: sub.id,
+          tierId,
+          promoId,
+          durationDays,
+          paymentMethod,
+          isPromo: true,
+        },
+      })
+      .returning()
+
+    const durationLabel = durationDays === 90 ? '3 meses' : durationDays === 180 ? '6 meses' : '12 meses'
+
+    const mpResult = await paymentService.createPromoSubscriptionPayment({
+      paymentId: payment.id,
+      creatorName,
+      durationLabel,
+      amount,
+      paymentMethod: paymentMethod || 'pix',
+      backUrl: `${appUrl}/creator/${creatorUsername}?subscription=pending`,
+    })
+
+    await db
+      .update(payments)
+      .set({ providerTxId: mpResult.preferenceId })
+      .where(eq(payments.id, payment.id))
+
+    return {
+      subscription: sub,
+      checkoutUrl: mpResult.checkoutUrl,
+      paymentId: payment.id,
+      sandbox: mpResult.sandbox,
+      isPromo: true,
+    }
+  }
+
+  // ── Standard monthly subscription: MP preapproval ──
   const [sub] = await db
     .insert(subscriptions)
     .values({
@@ -112,9 +215,6 @@ export async function createSubscriptionCheckout(
   })
 
   // Create MP preapproval
-  const appUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  const creatorUsername = creator?.username || creatorId
-
   const mpResult = await paymentService.createMpSubscription({
     subscriptionId: sub.id,
     payerEmail: fan.email,
@@ -292,6 +392,12 @@ export async function activateSubscriptionFromWebhook(
   }
 
   if (mpStatus === 'cancelled') {
+    // If user already cancelled through our platform, keep access until period end
+    if (sub.cancelledAt && sub.currentPeriodEnd && sub.currentPeriodEnd > new Date()) {
+      // Already handled — user keeps access until currentPeriodEnd
+      return { processed: true, status: 'cancelled_graceful', subscriptionId: sub.id }
+    }
+
     await db
       .update(subscriptions)
       .set({ status: 'cancelled', cancelledAt: new Date(), autoRenew: false, updatedAt: new Date() })
@@ -372,7 +478,7 @@ export async function recordSubscriptionPayment(
   return { processed: true, status: mpPaymentStatus }
 }
 
-// ── Cancel subscription ──
+// ── Cancel subscription (keeps access until currentPeriodEnd) ──
 
 export async function cancelSubscription(subscriptionId: string, fanId: string) {
   const [sub] = await db
@@ -383,7 +489,15 @@ export async function cancelSubscription(subscriptionId: string, fanId: string) 
 
   if (!sub) throw new AppError('NOT_FOUND', 'Assinatura nao encontrada', 404)
 
-  // Cancel on MP if has provider subscription
+  if (sub.status !== 'active') {
+    throw new AppError('INVALID', 'Assinatura nao esta ativa', 400)
+  }
+
+  if (sub.cancelledAt) {
+    throw new AppError('ALREADY_CANCELLED', 'Assinatura ja foi cancelada. Acesso ativo ate o fim do periodo.', 409)
+  }
+
+  // Cancel recurring billing on MP (stops future charges)
   if (sub.providerSubId && sub.paymentProvider === 'mercadopago') {
     try {
       await paymentService.cancelMpSubscription(sub.providerSubId)
@@ -393,10 +507,12 @@ export async function cancelSubscription(subscriptionId: string, fanId: string) 
     }
   }
 
+  // Keep status 'active' — user retains access until currentPeriodEnd
+  // autoRenew = false prevents future charges
+  // cancelledAt marks when cancellation was requested
   const [updated] = await db
     .update(subscriptions)
     .set({
-      status: 'cancelled',
       cancelledAt: new Date(),
       autoRenew: false,
       updatedAt: new Date(),
@@ -404,7 +520,72 @@ export async function cancelSubscription(subscriptionId: string, fanId: string) 
     .where(eq(subscriptions.id, subscriptionId))
     .returning()
 
+  // Send cancellation email (non-blocking)
+  if (updated) {
+    const [fan] = await db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, fanId))
+      .limit(1)
+
+    const [creator] = await db
+      .select({ displayName: users.displayName, username: users.username })
+      .from(users)
+      .where(eq(users.id, sub.creatorId))
+      .limit(1)
+
+    if (fan && creator) {
+      const accessUntil = updated.currentPeriodEnd
+        ? new Date(updated.currentPeriodEnd).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+        : 'fim do periodo'
+      sendSubscriptionCancelledEmail(fan.email, {
+        creatorName: creator.displayName || creator.username,
+        accessUntil,
+      }).catch((e) => console.error('Failed to send subscription cancelled email:', e))
+    }
+  }
+
   return updated
+}
+
+// ── Expire subscriptions past their period ──
+
+export async function expireOverdueSubscriptions() {
+  const now = new Date()
+
+  // Expire active subscriptions where:
+  // - autoRenew is false (cancelled by user)
+  // - currentPeriodEnd has passed
+  const expired = await db
+    .update(subscriptions)
+    .set({
+      status: 'expired',
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(subscriptions.status, 'active'),
+        eq(subscriptions.autoRenew, false),
+        lt(subscriptions.currentPeriodEnd, now),
+      ),
+    )
+    .returning({ id: subscriptions.id, fanId: subscriptions.fanId, creatorId: subscriptions.creatorId })
+
+  // Decrement subscriber count for each expired subscription
+  for (const sub of expired) {
+    await db
+      .update(creatorProfiles)
+      .set({
+        totalSubscribers: sql`GREATEST(${creatorProfiles.totalSubscribers} - 1, 0)`,
+      })
+      .where(eq(creatorProfiles.userId, sub.creatorId))
+  }
+
+  if (expired.length > 0) {
+    console.log(`Expired ${expired.length} overdue subscriptions`)
+  }
+
+  return expired
 }
 
 // ── Queries ──
@@ -440,4 +621,47 @@ export async function checkSubscription(fanId: string, creatorId: string) {
     .limit(1)
 
   return !!sub
+}
+
+export async function getSubscriptionStatus(fanId: string, creatorId: string) {
+  const [sub] = await db
+    .select({
+      id: subscriptions.id,
+      status: subscriptions.status,
+      pricePaid: subscriptions.pricePaid,
+      currentPeriodEnd: subscriptions.currentPeriodEnd,
+      cancelledAt: subscriptions.cancelledAt,
+      autoRenew: subscriptions.autoRenew,
+      createdAt: subscriptions.createdAt,
+    })
+    .from(subscriptions)
+    .where(
+      and(
+        eq(subscriptions.fanId, fanId),
+        eq(subscriptions.creatorId, creatorId),
+      ),
+    )
+    .limit(1)
+
+  if (!sub) {
+    return { isSubscribed: false, subscription: null }
+  }
+
+  const isActive = sub.status === 'active'
+  const isCancelled = !!sub.cancelledAt && isActive
+  const periodEnd = sub.currentPeriodEnd
+
+  return {
+    isSubscribed: isActive,
+    subscription: {
+      id: sub.id,
+      status: sub.status,
+      pricePaid: sub.pricePaid,
+      currentPeriodEnd: periodEnd,
+      cancelledAt: sub.cancelledAt,
+      autoRenew: sub.autoRenew,
+      isCancelled,
+      createdAt: sub.createdAt,
+    },
+  }
 }
