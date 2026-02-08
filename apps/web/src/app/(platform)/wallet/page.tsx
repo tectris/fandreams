@@ -355,7 +355,7 @@ function WalletContent() {
                           {new Date(p.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </p>
                       </div>
-                      <Badge variant={p.status === 'completed' ? 'success' : p.status === 'rejected' ? 'destructive' : 'warning'}>
+                      <Badge variant={p.status === 'completed' ? 'success' : p.status === 'rejected' ? 'error' : 'warning'}>
                         {p.status === 'completed' ? 'Pago' : p.status === 'pending_approval' ? 'Aprovacao' : p.status === 'pending' ? 'Processando' : p.status === 'rejected' ? 'Rejeitado' : p.status}
                       </Badge>
                     </div>
