@@ -38,6 +38,7 @@ export async function getPublicProfile(username: string) {
       coverUrl: users.coverUrl,
       bio: users.bio,
       role: users.role,
+      profileViews: users.profileViews,
       createdAt: users.createdAt,
     })
     .from(users)
@@ -71,6 +72,12 @@ export async function getPublicProfile(username: string) {
     .select({ count: sql<number>`count(*)::int` })
     .from(posts)
     .where(and(eq(posts.creatorId, user.id), eq(posts.isArchived, false), eq(posts.isVisible, true)))
+
+  // Increment profile views (fire and forget)
+  db.update(users)
+    .set({ profileViews: sql`${users.profileViews} + 1` })
+    .where(eq(users.id, user.id))
+    .catch(() => {})
 
   return {
     ...user,

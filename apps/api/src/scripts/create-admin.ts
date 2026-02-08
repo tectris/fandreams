@@ -2,7 +2,7 @@ import 'dotenv/config'
 import { neon } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-http'
 import { eq } from 'drizzle-orm'
-import { users, userSettings, fancoinWallets, userGamification } from '@myfans/database'
+import { users, userSettings, fancoinWallets, userGamification, creatorProfiles } from '@myfans/database'
 import bcrypt from 'bcryptjs'
 
 if (!process.env.DATABASE_URL) {
@@ -34,6 +34,18 @@ async function createAdmin() {
       .update(users)
       .set({ role: 'admin', kycStatus: 'approved' })
       .where(eq(users.email, ADMIN_EMAIL))
+
+    // Ensure creator profile exists for admin
+    const [existingProfile] = await db
+      .select()
+      .from(creatorProfiles)
+      .where(eq(creatorProfiles.userId, existing[0].id))
+      .limit(1)
+    if (!existingProfile) {
+      await db.insert(creatorProfiles).values({ userId: existing[0].id })
+      console.log('Creator profile created for admin!')
+    }
+
     console.log('Admin role and KYC updated!')
     return
   }
@@ -65,6 +77,7 @@ async function createAdmin() {
     db.insert(userSettings).values({ userId: admin.id }),
     db.insert(fancoinWallets).values({ userId: admin.id }),
     db.insert(userGamification).values({ userId: admin.id }),
+    db.insert(creatorProfiles).values({ userId: admin.id }),
   ])
 
   console.log('')

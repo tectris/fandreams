@@ -491,6 +491,10 @@ export async function addComment(postId: string, userId: string, content: string
   return comment
 }
 
+export async function viewPost(postId: string) {
+  await db.update(posts).set({ viewCount: sql`${posts.viewCount} + 1` }).where(eq(posts.id, postId))
+}
+
 export async function sharePost(postId: string) {
   await db.update(posts).set({ shareCount: sql`${posts.shareCount} + 1` }).where(eq(posts.id, postId))
   return { shared: true }

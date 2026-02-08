@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, boolean, date, timestamp, pgEnum, index } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, text, boolean, date, timestamp, pgEnum, index, integer } from 'drizzle-orm/pg-core'
 
 export const userRoleEnum = pgEnum('user_role', ['fan', 'creator', 'admin'])
 export const kycStatusEnum = pgEnum('kyc_status', ['none', 'pending', 'approved', 'rejected'])
@@ -20,6 +20,7 @@ export const users = pgTable('users', {
   country: varchar('country', { length: 2 }),
   language: varchar('language', { length: 5 }).default('pt-BR'),
   timezone: varchar('timezone', { length: 50 }),
+  profileViews: integer('profile_views').default(0).notNull(),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

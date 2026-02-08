@@ -143,6 +143,18 @@ postsRoute.post('/:id/comments', authMiddleware, validateBody(createCommentSchem
   return success(c, comment)
 })
 
+// Track view (increment viewCount)
+postsRoute.post('/:id/view', async (c) => {
+  const postId = c.req.param('id')
+  try {
+    await postService.viewPost(postId)
+    return success(c, { viewed: true })
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
 // Track share (increment shareCount)
 postsRoute.post('/:id/share', async (c) => {
   const postId = c.req.param('id')

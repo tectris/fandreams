@@ -112,6 +112,10 @@ export function PostCard({
   const [showShareModal, setShowShareModal] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
   const [reportReason, setReportReason] = useState('')
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState(0)
+  const [viewCount, setViewCount] = useState(post.viewCount)
+  const [viewTracked, setViewTracked] = useState(false)
 
   function handleLike() {
     if (!isAuthenticated) {
@@ -187,6 +191,19 @@ export function PostCard({
     }
     setShowTip(!showTip)
     if (!showTip) setShowComments(false)
+  }
+
+  function trackView() {
+    if (viewTracked) return
+    setViewTracked(true)
+    setViewCount((c) => c + 1)
+    api.post(`/posts/${post.id}/view`, {}).catch(() => {})
+  }
+
+  function openLightbox(index: number) {
+    setLightboxIndex(index)
+    setLightboxOpen(true)
+    trackView()
   }
 
   async function handleShare() {
@@ -422,32 +439,127 @@ export function PostCard({
                 <Button size="sm">Assinar para desbloquear</Button>
               </Link>
             </div>
-          ) : (
+          ) : post.media!.length === 1 ? (
+            // Single media
             <div className="aspect-video bg-surface-dark">
-              {post.media?.[0]?.mediaType === 'image' && post.media[0].storageKey && (
-                <img src={post.media[0].storageKey} alt="" className="w-full h-full object-cover" />
+              {post.media![0].mediaType === 'image' && post.media![0].storageKey && (
+                <img
+                  src={post.media![0].storageKey}
+                  alt=""
+                  className="w-full h-full object-cover cursor-pointer"
+                  onClick={() => openLightbox(0)}
+                />
               )}
-              {post.media?.[0]?.mediaType === 'video' && post.media[0].storageKey && (
+              {post.media![0].mediaType === 'video' && post.media![0].storageKey && (
                 <VideoPlayer
-                  src={post.media[0].storageKey}
-                  poster={post.media[0].thumbnailUrl || undefined}
+                  src={post.media![0].storageKey}
+                  poster={post.media![0].thumbnailUrl || undefined}
                   className="w-full h-full object-cover"
+                  onPlay={trackView}
                 />
               )}
             </div>
-          )}
-          {hasMedia && post.media!.length > 1 && (
-            <div className="absolute top-2 right-2">
-              <Badge>{post.media!.length} itens</Badge>
+          ) : (
+            // Multi-image gallery grid
+            <div className={`grid gap-0.5 ${post.media!.length === 2 ? 'grid-cols-2' : post.media!.length >= 3 ? 'grid-cols-2' : ''}`}>
+              {post.media!.slice(0, 4).map((m, i) => (
+                <div
+                  key={m.id || i}
+                  className={`relative bg-surface-dark ${i === 0 && post.media!.length === 3 ? 'row-span-2' : ''} ${post.media!.length === 1 ? 'aspect-video' : 'aspect-square'}`}
+                >
+                  {m.mediaType === 'image' && m.storageKey && (
+                    <img
+                      src={m.storageKey}
+                      alt=""
+                      className="w-full h-full object-cover cursor-pointer"
+                      onClick={() => openLightbox(i)}
+                    />
+                  )}
+                  {m.mediaType === 'video' && m.storageKey && (
+                    <VideoPlayer
+                      src={m.storageKey}
+                      poster={m.thumbnailUrl || undefined}
+                      className="w-full h-full object-cover"
+                      onPlay={trackView}
+                    />
+                  )}
+                  {i === 3 && post.media!.length > 4 && (
+                    <div
+                      className="absolute inset-0 bg-black/60 flex items-center justify-center cursor-pointer"
+                      onClick={() => openLightbox(3)}
+                    >
+                      <span className="text-white text-2xl font-bold">+{post.media!.length - 4}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
       )}
 
+      {/* Image lightbox */}
+      {lightboxOpen && post.media && post.media.filter((m) => m.mediaType === 'image').length > 0 && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onClick={() => setLightboxOpen(false)}>
+            <button
+              className="absolute top-4 right-4 text-white/70 hover:text-white z-60"
+              onClick={() => setLightboxOpen(false)}
+            >
+              <X className="w-8 h-8" />
+            </button>
+            {post.media.filter((m) => m.mediaType === 'image').length > 1 && (
+              <>
+                <button
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white text-4xl font-light z-60"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const images = post.media!.filter((m) => m.mediaType === 'image')
+                    setLightboxIndex((prev) => (prev - 1 + images.length) % images.length)
+                  }}
+                >
+                  &#8249;
+                </button>
+                <button
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white text-4xl font-light z-60"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const images = post.media!.filter((m) => m.mediaType === 'image')
+                    setLightboxIndex((prev) => (prev + 1) % images.length)
+                  }}
+                >
+                  &#8250;
+                </button>
+              </>
+            )}
+            <img
+              src={post.media.filter((m) => m.mediaType === 'image')[lightboxIndex]?.storageKey || ''}
+              alt=""
+              className="max-w-[90vw] max-h-[90vh] object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+            {post.media.filter((m) => m.mediaType === 'image').length > 1 && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                {post.media.filter((m) => m.mediaType === 'image').map((_, i) => (
+                  <button
+                    key={i}
+                    className={`w-2 h-2 rounded-full ${i === lightboxIndex ? 'bg-white' : 'bg-white/40'}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setLightboxIndex(i)
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* Stats bar (views) */}
       <div className="px-4 pt-2 flex items-center gap-1 text-xs text-muted">
         <Eye className="w-3.5 h-3.5" />
-        <span>{formatNumber(post.viewCount)} visualizacoes</span>
+        <span>{formatNumber(viewCount)} visualizacoes</span>
       </div>
 
       {/* Actions */}
