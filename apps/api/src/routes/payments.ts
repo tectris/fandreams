@@ -46,12 +46,19 @@ paymentsRoute.get('/status/:id', authMiddleware, async (c) => {
 // MercadoPago webhook (no auth - called by MercadoPago)
 paymentsRoute.post('/webhook', async (c) => {
   try {
-    // Verify webhook signature if secret is configured
+    const isProduction = env.NODE_ENV === 'production'
+
+    // In production, signature verification is MANDATORY
     if (env.MERCADOPAGO_WEBHOOK_SECRET) {
       const signature = c.req.header('x-signature')
       const requestId = c.req.header('x-request-id')
 
-      if (signature && requestId) {
+      if (!signature || !requestId) {
+        if (isProduction) {
+          console.warn('Webhook: missing signature headers in production — rejecting')
+          return c.json({ received: true, error: 'missing_signature' }, 200)
+        }
+      } else {
         // MercadoPago signature validation
         const parts = signature.split(',')
         const tsRaw = parts.find((p) => p.trim().startsWith('ts='))
@@ -71,17 +78,23 @@ paymentsRoute.post('/webhook', async (c) => {
             .digest('hex')
 
           if (computed !== hash) {
-            console.warn('Webhook: invalid signature')
-            return c.json({ received: true }, 200)
+            console.warn('Webhook: invalid signature — rejecting')
+            return c.json({ received: true, error: 'invalid_signature' }, 200)
           }
 
           const result = await paymentService.handleWebhook(bodyJson.type, String(dataId))
           return c.json({ received: true, ...result }, 200)
+        } else if (isProduction) {
+          console.warn('Webhook: malformed signature in production — rejecting')
+          return c.json({ received: true, error: 'malformed_signature' }, 200)
         }
       }
+    } else if (isProduction) {
+      console.error('Webhook: MERCADOPAGO_WEBHOOK_SECRET not set in production!')
+      return c.json({ received: true, error: 'not_configured' }, 200)
     }
 
-    // Without signature verification (dev/testing)
+    // Without signature verification (dev/testing only)
     const body = await c.req.json()
     const dataId = body?.data?.id
     const type = body?.type || body?.action
@@ -94,7 +107,6 @@ paymentsRoute.post('/webhook', async (c) => {
     return c.json({ received: true }, 200)
   } catch (err) {
     console.error('Webhook error:', err)
-    // Always return 200 to MercadoPago so it doesn't retry
     return c.json({ received: true, error: 'processing_error' }, 200)
   }
 })
