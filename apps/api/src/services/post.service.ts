@@ -237,13 +237,23 @@ export async function getFeed(userId: string, page = 1, limit = 20) {
     }
   }
 
-  const postsWithMedia = feedPosts.map((post) => ({
-    ...post,
-    media: allMedia.filter((m) => m.postId === post.id),
-    isLiked: likedPostIds.has(post.id),
-    isBookmarked: bookmarkedPostIds.has(post.id),
-    tipSent: tipsByPostId.get(post.id) || null,
-  }))
+  const subscribedCreatorIds = new Set(creatorIds)
+
+  const postsWithMedia = feedPosts.map((post) => {
+    const isOwn = post.creatorId === userId
+    const isSubscribed = subscribedCreatorIds.has(post.creatorId)
+    const isPublic = post.visibility === 'public'
+    const hasAccess = isOwn || isSubscribed || isPublic
+
+    return {
+      ...post,
+      media: allMedia.filter((m) => m.postId === post.id),
+      hasAccess,
+      isLiked: likedPostIds.has(post.id),
+      isBookmarked: bookmarkedPostIds.has(post.id),
+      tipSent: tipsByPostId.get(post.id) || null,
+    }
+  })
 
   return { posts: postsWithMedia, total: feedPosts.length }
 }
@@ -283,6 +293,7 @@ export async function getPublicFeed(page = 1, limit = 20) {
   const postsWithMedia = feedPosts.map((post) => ({
     ...post,
     media: allMedia.filter((m) => m.postId === post.id),
+    hasAccess: true,
   }))
 
   return { posts: postsWithMedia, total: feedPosts.length }
