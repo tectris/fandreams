@@ -2,10 +2,14 @@ import { Hono } from 'hono'
 import { updateProfileSchema, updateSettingsSchema } from '@fandreams/shared'
 import { validateBody } from '../middleware/validation'
 import { authMiddleware } from '../middleware/auth'
+import { eq } from 'drizzle-orm'
+import { users } from '@fandreams/database'
 import * as userService from '../services/user.service'
 import * as followService from '../services/follow.service'
+import * as notificationService from '../services/notification.service'
 import { success, error } from '../utils/response'
 import { AppError } from '../services/auth.service'
+import { db } from '../config/database'
 
 const usersRoute = new Hono()
 
@@ -77,6 +81,26 @@ usersRoute.post('/:userId/follow', authMiddleware, async (c) => {
     const { userId: followerId } = c.get('user')
     const followingId = c.req.param('userId')
     const result = await followService.followUser(followerId, followingId)
+
+    // Notify followed user (non-blocking)
+    try {
+      const [follower] = await db
+        .select({ username: users.username, displayName: users.displayName })
+        .from(users)
+        .where(eq(users.id, followerId))
+        .limit(1)
+      const followerName = follower?.displayName || follower?.username || 'Alguem'
+      notificationService.createNotification(
+        followingId,
+        'new_follow',
+        `${followerName} comecou a seguir voce`,
+        undefined,
+        { fromUserId: followerId },
+      ).catch((e) => console.error('Failed to create follow notification:', e))
+    } catch (e) {
+      console.error('Failed to create follow notification:', e)
+    }
+
     return success(c, result)
   } catch (e) {
     if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)

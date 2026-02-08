@@ -3,6 +3,7 @@ import { conversations, messages, users, creatorProfiles, userSettings } from '@
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import { sendNewMessageEmail } from './email.service'
+import { createNotification } from './notification.service'
 
 export async function getConversations(userId: string) {
   const rows = await db
@@ -224,7 +225,7 @@ export async function sendMessage(
     })
     .where(eq(conversations.id, conversationId))
 
-  // Send email notification to recipient (non-blocking)
+  // Send notifications to recipient (non-blocking)
   const recipientId = conv.participant1 === senderId ? conv.participant2 : conv.participant1
   Promise.all([
     db.select({ email: users.email, displayName: users.displayName, username: users.username })
@@ -234,11 +235,26 @@ export async function sendMessage(
     db.select({ notificationEmail: userSettings.notificationEmail, notificationMessages: userSettings.notificationMessages })
       .from(userSettings).where(eq(userSettings.userId, recipientId)).limit(1),
   ]).then(([[recipient], [sender], [settings]]) => {
-    if (recipient && sender && settings?.notificationEmail !== false && settings?.notificationMessages !== false) {
-      sendNewMessageEmail(recipient.email, {
-        senderName: sender.displayName || sender.username,
-        preview: data.content || (data.mediaType === 'video' ? 'Enviou um video' : 'Enviou uma imagem'),
-      }).catch((e) => console.error('Failed to send new message email:', e))
+    if (recipient && sender) {
+      const senderName = sender.displayName || sender.username
+      const msgPreview = data.content || (data.mediaType === 'video' ? 'Enviou um video' : 'Enviou uma imagem')
+
+      // In-app notification
+      createNotification(
+        recipientId,
+        'new_message',
+        `${senderName} enviou uma mensagem`,
+        msgPreview.substring(0, 100),
+        { fromUserId: senderId, conversationId },
+      ).catch((e) => console.error('Failed to create message notification:', e))
+
+      // Email notification
+      if (settings?.notificationEmail !== false && settings?.notificationMessages !== false) {
+        sendNewMessageEmail(recipient.email, {
+          senderName,
+          preview: msgPreview,
+        }).catch((e) => console.error('Failed to send new message email:', e))
+      }
     }
   }).catch(() => {})
 

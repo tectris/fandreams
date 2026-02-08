@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Bell, CheckCheck, Coins, Users, Heart, MessageCircle } from 'lucide-react'
+import { Bell, CheckCheck, Coins, Users, Heart, MessageCircle, UserPlus } from 'lucide-react'
 import { timeAgo } from '@/lib/utils'
 
 type Notification = {
@@ -22,6 +22,8 @@ const typeIcons: Record<string, typeof Bell> = {
   new_subscriber: Users,
   new_like: Heart,
   new_comment: MessageCircle,
+  new_message: MessageCircle,
+  new_follow: UserPlus,
 }
 
 export default function NotificationsPage() {

@@ -72,8 +72,25 @@ export function Header() {
     refetchInterval: 30000,
   })
 
+  const { data: unreadMsgData } = useQuery({
+    queryKey: ['unread-messages-count'],
+    queryFn: async () => {
+      const res = await api.get<{ count: number }>('/messages/unread-count')
+      return res.data
+    },
+    enabled: isAuthenticated,
+    refetchInterval: 15000,
+  })
+
   const balance = walletData?.data ? Number(walletData.data.balance) : 0
   const unreadCount = unreadData?.count || 0
+  const unreadMsgCount = unreadMsgData?.count || 0
+
+  function formatBalance(val: number): string {
+    if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+    if (val >= 10_000) return `${(val / 1_000).toFixed(1).replace(/\.0$/, '')}K`
+    return val.toLocaleString()
+  }
 
   function closeSearch() {
     setSearchExpanded(false)
@@ -83,12 +100,12 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-border overflow-x-hidden">
+        <div className="max-w-7xl mx-auto px-3 md:px-4 h-14 flex items-center justify-between gap-2 md:gap-3">
+          <div className="flex items-center shrink-0">
             <Link href={isAuthenticated ? '/feed' : '/'} className="flex items-center gap-2 font-bold text-lg">
-              <Flame className="w-6 h-6 text-primary" />
-              <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+              <Flame className="w-6 h-6 text-primary shrink-0" />
+              <span className="hidden sm:inline bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
                 FanDreams
               </span>
             </Link>
@@ -152,36 +169,41 @@ export function Header() {
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 md:gap-2 shrink-0">
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-full hover:bg-surface-light transition-colors text-muted hover:text-foreground"
+              className="p-1.5 md:p-2 rounded-full hover:bg-surface-light transition-colors text-muted hover:text-foreground"
               title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
             >
-              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              {theme === 'dark' ? <Sun className="w-4 h-4 md:w-5 md:h-5" /> : <Moon className="w-4 h-4 md:w-5 md:h-5" />}
             </button>
             {isAuthenticated ? (
               <>
                 <button
                   onClick={() => setDrawerOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-warning/10 hover:bg-warning/20 transition-colors"
+                  className="flex items-center gap-1 px-2 py-1 rounded-full bg-warning/10 hover:bg-warning/20 transition-colors max-w-[90px] md:max-w-none"
                 >
-                  <Coins className="w-3.5 h-3.5 text-warning" />
-                  <span className="text-xs font-semibold text-warning">
-                    {balance.toLocaleString()}
+                  <Coins className="w-3.5 h-3.5 text-warning shrink-0" />
+                  <span className="text-xs font-semibold text-warning truncate">
+                    {formatBalance(balance)}
                   </span>
                 </button>
                 <Link
                   href="/messages"
-                  className="p-2 rounded-full hover:bg-surface-light transition-colors relative"
+                  className="p-1.5 md:p-2 rounded-full hover:bg-surface-light transition-colors relative"
                 >
-                  <MessageCircle className="w-5 h-5 text-muted" />
+                  <MessageCircle className="w-4 h-4 md:w-5 md:h-5 text-muted" />
+                  {unreadMsgCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] flex items-center justify-center px-1 text-[9px] font-bold bg-primary text-white rounded-full">
+                      {unreadMsgCount > 99 ? '99+' : unreadMsgCount}
+                    </span>
+                  )}
                 </Link>
                 <Link
                   href="/notifications"
-                  className="p-2 rounded-full hover:bg-surface-light transition-colors relative"
+                  className="p-1.5 md:p-2 rounded-full hover:bg-surface-light transition-colors relative"
                 >
-                  <Bell className="w-5 h-5 text-muted" />
+                  <Bell className="w-4 h-4 md:w-5 md:h-5 text-muted" />
                   {unreadCount > 0 && (
                     <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] flex items-center justify-center px-1 text-[9px] font-bold bg-error text-white rounded-full">
                       {unreadCount > 99 ? '99+' : unreadCount}
