@@ -156,24 +156,34 @@ export default function AdminPaymentsPage() {
     queryKey: ['admin-payouts-pending'],
     queryFn: async () => (await api.get<any>('/withdrawals/admin/pending')).data,
     enabled: activeTab === 'pending',
+    retry: false,
   })
 
   const { data: allPayouts, isLoading: loadingAll } = useQuery({
     queryKey: ['admin-payouts-all', statusFilter],
     queryFn: async () => (await api.get<any>(`/withdrawals/admin/all${statusFilter ? `?status=${statusFilter}` : ''}`)).data,
     enabled: activeTab === 'all',
+    retry: false,
   })
 
   const { data: settings, isLoading: loadingSettings } = useQuery({
     queryKey: ['admin-payment-settings'],
     queryFn: async () => (await api.get<any>('/withdrawals/admin/settings')).data,
     enabled: activeTab === 'settings',
+    retry: false,
   })
 
   const { data: providers, isLoading: loadingProviders } = useQuery({
     queryKey: ['payment-providers'],
-    queryFn: async () => (await api.get<any>('/payments/providers')).data,
+    queryFn: async () => {
+      try {
+        return (await api.get<any>('/payments/providers')).data
+      } catch {
+        return []
+      }
+    },
     enabled: activeTab === 'settings',
+    retry: false,
   })
 
   const approveMutation = useMutation({
