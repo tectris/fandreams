@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { Suspense, useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
@@ -9,7 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { timeAgo } from '@/lib/utils'
-import { MessageCircle, Send, ArrowLeft } from 'lucide-react'
+import { MessageCircle, Send, ArrowLeft, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface OtherParticipant {
@@ -42,6 +42,14 @@ interface ChatMessage {
 }
 
 export default function MessagesPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}>
+      <MessagesContent />
+    </Suspense>
+  )
+}
+
+function MessagesContent() {
   const { user } = useAuthStore()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
