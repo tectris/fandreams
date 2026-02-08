@@ -252,7 +252,16 @@ async function createMpPayment(payment: any, pkg: any, paymentMethod: string, ap
 // ── NOWPayments Payment ──
 
 async function createNpPayment(payment: any, pkg: any, appUrl: string) {
-  const priceUsd = pkg.price / 5.0 // Approximate BRL to USD (configurable later via admin)
+  // Convert BRL to USD using NOWPayments estimate or fallback rate
+  let priceUsd = pkg.price / 5.5
+  try {
+    const estimate = await npFetch<{ estimated_amount: number }>(
+      `/estimate?amount=${pkg.price}&currency_from=brl&currency_to=usd`,
+    )
+    if (estimate.estimated_amount > 0) priceUsd = estimate.estimated_amount
+  } catch {
+    // Fallback to approximate rate
+  }
 
   const invoice = await npFetch<{
     id: string
