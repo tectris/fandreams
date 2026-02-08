@@ -10,19 +10,35 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { PostCard } from '@/components/feed/post-card'
+import { SubscribeDrawer } from '@/components/subscription/subscribe-drawer'
+import { PpvUnlockDrawer } from '@/components/feed/ppv-unlock-drawer'
 import { LevelBadge } from '@/components/gamification/level-badge'
 import { formatCurrency, formatNumber } from '@/lib/utils'
 import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, Share2, FileText, Eye, Image, Video } from 'lucide-react'
 import { toast } from 'sonner'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 
 export default function CreatorProfilePage() {
   const { username } = useParams<{ username: string }>()
   const { user, isAuthenticated, setUser } = useAuthStore()
   const queryClient = useQueryClient()
   const [subscribing, setSubscribing] = useState(false)
+  const [subscribeDrawerOpen, setSubscribeDrawerOpen] = useState(false)
+  const [selectedTier, setSelectedTier] = useState<any>(null)
+  const [ppvDrawerOpen, setPpvDrawerOpen] = useState(false)
+  const [ppvPost, setPpvPost] = useState<any>(null)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
+  const searchParams = useSearchParams()
+  const subscriptionStatus = searchParams.get('subscription')
+
+  useEffect(() => {
+    if (subscriptionStatus === 'pending') {
+      toast.info('Assinatura em processamento. Voce sera notificado quando for confirmada.')
+      queryClient.invalidateQueries({ queryKey: ['subscription-check'] })
+    }
+  }, [subscriptionStatus, queryClient])
 
   const { data: profile } = useQuery({
     queryKey: ['profile', username],
@@ -203,21 +219,22 @@ export default function CreatorProfilePage() {
     }
   }
 
-  async function handleSubscribe() {
+  function handleSubscribe(tier?: any) {
     if (!isAuthenticated) {
       window.location.href = '/login'
       return
     }
-    setSubscribing(true)
-    try {
-      await api.post('/subscriptions', { creatorId: profile.id })
-      queryClient.invalidateQueries({ queryKey: ['subscription-check', profile?.id] })
-      toast.success(`Voce agora assina ${profile.displayName || profile.username}!`)
-    } catch (e: any) {
-      toast.error(e.message)
-    } finally {
-      setSubscribing(false)
+    setSelectedTier(tier || null)
+    setSubscribeDrawerOpen(true)
+  }
+
+  function handlePpvUnlock(post: any) {
+    if (!isAuthenticated) {
+      window.location.href = '/login'
+      return
     }
+    setPpvPost(post)
+    setPpvDrawerOpen(true)
   }
 
   async function handleShare() {
@@ -347,7 +364,7 @@ export default function CreatorProfilePage() {
                   </Button>
                 )}
                 {profile.creator && !isSubscribed && (
-                  <Button onClick={handleSubscribe} loading={subscribing}>
+                  <Button onClick={() => handleSubscribe()}>
                     <Crown className="w-4 h-4 mr-1" />
                     {Number(profile.creator.subscriptionPrice || 0) > 0
                       ? `Assinar ${formatCurrency(profile.creator.subscriptionPrice)}/mes`
@@ -450,7 +467,7 @@ export default function CreatorProfilePage() {
                       </div>
                       {tier.description && <p className="text-sm text-muted mb-4">{tier.description}</p>}
                       {tier.benefits && (
-                        <ul className="text-sm space-y-2">
+                        <ul className="text-sm space-y-2 mb-4">
                           {(tier.benefits as string[]).map((b, i) => (
                             <li key={i} className="flex items-center gap-2">
                               <Star className={`w-3.5 h-3.5 ${accent} shrink-0`} />
@@ -459,6 +476,13 @@ export default function CreatorProfilePage() {
                           ))}
                         </ul>
                       )}
+                      <Button
+                        className="w-full mt-2"
+                        onClick={() => handleSubscribe(tier)}
+                      >
+                        <Crown className="w-4 h-4 mr-1" />
+                        Assinar {formatCurrency(tier.price)}/mes
+                      </Button>
                     </CardContent>
                   </div>
                 </Card>
@@ -486,6 +510,7 @@ export default function CreatorProfilePage() {
                 onBookmark={(postId) => bookmarkMutation.mutate(postId)}
                 onComment={(postId, content) => commentMutation.mutate({ postId, content })}
                 onTip={(postId, creatorId, amount) => tipMutation.mutate({ postId, creatorId, amount })}
+                onPpvUnlock={handlePpvUnlock}
               />
             ))}
           </div>
@@ -496,6 +521,39 @@ export default function CreatorProfilePage() {
         )}
       </div>
 
+      {/* Subscribe Drawer */}
+      {profile && (
+        <SubscribeDrawer
+          open={subscribeDrawerOpen}
+          onClose={() => setSubscribeDrawerOpen(false)}
+          creator={{
+            id: profile.id,
+            username: profile.username,
+            displayName: profile.displayName,
+            avatarUrl: profile.avatarUrl,
+            subscriptionPrice: profile.creator?.subscriptionPrice,
+          }}
+          tier={selectedTier}
+        />
+      )}
+
+      {/* PPV Unlock Drawer */}
+      {ppvPost && (
+        <PpvUnlockDrawer
+          open={ppvDrawerOpen}
+          onClose={() => { setPpvDrawerOpen(false); setPpvPost(null) }}
+          onUnlocked={() => {
+            queryClient.invalidateQueries({ queryKey: ['creator-posts'] })
+          }}
+          post={{
+            id: ppvPost.id,
+            ppvPrice: ppvPost.ppvPrice,
+            creatorUsername: ppvPost.creatorUsername,
+            creatorDisplayName: ppvPost.creatorDisplayName,
+            contentText: ppvPost.contentText,
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -511,6 +569,7 @@ function CreatorPostCard({
   onBookmark,
   onComment,
   onTip,
+  onPpvUnlock,
 }: {
   post: any
   currentUserId?: string | null
@@ -522,6 +581,7 @@ function CreatorPostCard({
   onBookmark: (postId: string) => void
   onComment: (postId: string, content: string) => void
   onTip: (postId: string, creatorId: string, amount: number) => void
+  onPpvUnlock: (post: any) => void
 }) {
   const { data: commentsData } = useQuery({
     queryKey: ['comments', post.id],
@@ -545,6 +605,7 @@ function CreatorPostCard({
       onBookmark={onBookmark}
       onComment={onComment}
       onTip={onTip}
+      onPpvUnlock={onPpvUnlock}
       comments={Array.isArray(comments) ? comments : []}
     />
   )

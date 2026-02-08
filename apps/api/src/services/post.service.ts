@@ -1,5 +1,5 @@
 import { eq, desc, and, or, sql, inArray, gt } from 'drizzle-orm'
-import { posts, postMedia, postLikes, postComments, postBookmarks, subscriptions, users, creatorProfiles, fancoinTransactions, postViews } from '@fandreams/database'
+import { posts, postMedia, postLikes, postComments, postBookmarks, subscriptions, users, creatorProfiles, fancoinTransactions, postViews, payments } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import type { CreatePostInput, UpdatePostInput } from '@fandreams/shared'
@@ -89,7 +89,23 @@ export async function getPost(postId: string, viewerId?: string) {
   if (viewerId) {
     if (viewerId === post.creatorId) {
       hasAccess = true
+    } else if (post.visibility === 'ppv') {
+      // PPV: check for completed payment
+      const [ppvPayment] = await db
+        .select({ id: payments.id })
+        .from(payments)
+        .where(
+          and(
+            eq(payments.userId, viewerId),
+            eq(payments.type, 'ppv'),
+            eq(payments.status, 'completed'),
+            sql`${payments.metadata}->>'postId' = ${postId}`,
+          ),
+        )
+        .limit(1)
+      hasAccess = !!ppvPayment
     } else if (!hasAccess) {
+      // Subscribers visibility
       const [sub] = await db
         .select()
         .from(subscriptions)
@@ -237,17 +253,42 @@ export async function getFeed(userId: string, page = 1, limit = 20) {
     }
   }
 
+  // Check PPV unlocks for PPV posts
+  const ppvPostIds = feedPosts.filter((p) => p.visibility === 'ppv').map((p) => p.id)
+  const ppvUnlockedIds = new Set<string>()
+  if (ppvPostIds.length > 0) {
+    const ppvPayments = await db
+      .select({ metadata: payments.metadata })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.userId, userId),
+          eq(payments.type, 'ppv'),
+          eq(payments.status, 'completed'),
+        ),
+      )
+    for (const p of ppvPayments) {
+      const postId = (p.metadata as any)?.postId
+      if (postId && ppvPostIds.includes(postId)) ppvUnlockedIds.add(postId)
+    }
+  }
+
   const subscribedCreatorIds = new Set(creatorIds)
 
   const postsWithMedia = feedPosts.map((post) => {
     const isOwn = post.creatorId === userId
     const isSubscribed = subscribedCreatorIds.has(post.creatorId)
     const isPublic = post.visibility === 'public'
-    const hasAccess = isOwn || isSubscribed || isPublic
-
+    let hasAccess = isOwn || isSubscribed || isPublic
+    if (!hasAccess && post.visibility === 'ppv') {
+      hasAccess = ppvUnlockedIds.has(post.id)
+    }
+    const postMedia = allMedia.filter((m) => m.postId === post.id)
     return {
       ...post,
-      media: allMedia.filter((m) => m.postId === post.id),
+      media: hasAccess
+        ? postMedia
+        : postMedia.map((m) => ({ ...m, storageKey: m.isPreview ? m.storageKey : null })),
       hasAccess,
       isLiked: likedPostIds.has(post.id),
       isBookmarked: bookmarkedPostIds.has(post.id),
@@ -308,6 +349,8 @@ export async function getCreatorPosts(creatorId: string, viewerId?: string, page
   const conditions = [eq(posts.creatorId, creatorId), eq(posts.isArchived, false)]
   if (!isOwner) {
     conditions.push(eq(posts.isVisible, true))
+    // Non-owners see public posts, subscribers also see subscriber/ppv posts
+    // The access control (locked overlay) is handled client-side via hasAccess
   }
 
   const feedPosts = await db
@@ -401,9 +444,32 @@ export async function getCreatorPosts(creatorId: string, viewerId?: string, page
     }
   }
 
+  // Check PPV unlocks
+  const ppvPostIds = feedPosts.filter((p) => p.visibility === 'ppv').map((p) => p.id)
+  const ppvUnlockedIds = new Set<string>()
+  if (viewerId && ppvPostIds.length > 0) {
+    const ppvPayments = await db
+      .select({ metadata: payments.metadata })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.userId, viewerId),
+          eq(payments.type, 'ppv'),
+          eq(payments.status, 'completed'),
+        ),
+      )
+    for (const p of ppvPayments) {
+      const postId = (p.metadata as any)?.postId
+      if (postId && ppvPostIds.includes(postId)) ppvUnlockedIds.add(postId)
+    }
+  }
+
   const postsWithMedia = feedPosts.map((post) => {
     const postIsPublic = post.visibility === 'public'
-    const hasAccess = isOwner || postIsPublic || hasSubscription
+    let hasAccess = isOwner || postIsPublic || hasSubscription
+    if (!hasAccess && post.visibility === 'ppv') {
+      hasAccess = ppvUnlockedIds.has(post.id)
+    }
     const postMedia = allMedia.filter((m) => m.postId === post.id)
 
     return {

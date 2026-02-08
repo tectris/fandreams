@@ -13,9 +13,16 @@ subscriptionsRoute.post('/', authMiddleware, validateBody(createSubscriptionSche
   try {
     const { userId } = c.get('user')
     const body = c.req.valid('json')
-    const sub = await subscriptionService.subscribe(userId, body.creatorId, body.tierId)
+    const result = await subscriptionService.createSubscriptionCheckout(
+      userId,
+      body.creatorId,
+      body.tierId,
+      body.paymentMethod,
+    )
+
     await gamificationService.addXp(userId, 'subscription_made')
-    return success(c, sub)
+
+    return success(c, result)
   } catch (e) {
     if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
     throw e
