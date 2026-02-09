@@ -290,7 +290,60 @@ Os resultados (.md e .json) devem ser trazidos de volta para consolidacao.
 
 ### Round 2 — Perfil CREATOR
 
-*Aguardando execucao...*
+**Data:** 2026-02-09T21:13:08Z
+**Target:** `https://api.fandreams.app/api/v1`
+**User:** `32331706-7adb-4c50-a601-6a212cafd537` (role: creator)
+**Score: 99/100 (Grade A)**
+
+| Resultado | Qtd |
+|-----------|-----|
+| PASS      | 17  |
+| FAIL      | 0   |
+| WARN      | 1   |
+| SKIP      | 2   |
+
+#### Todos os testes:
+
+| # | Categoria | Teste | Severidade | Status | Descricao |
+|---|-----------|-------|------------|--------|-----------|
+| T1.2 | IDOR | wallet-idor | CRITICAL | PASS | Wallet nao permite acesso a dados de outros usuarios |
+| T1.3 | IDOR | tx-idor | HIGH | PASS | Transactions nao permite acesso a dados de outros usuarios |
+| T2 | Race Condition | double-spend | CRITICAL | SKIP | Balance insuficiente (0 FanCoins) — validado no Round 1 |
+| T3 | Input Validation | invalid-amounts | HIGH | PASS | Todos os valores invalidos rejeitados |
+| T4 | Business Logic | self-tip | HIGH | PASS | Self-tip corretamente bloqueado |
+| T5 | Mass Assignment | mass-assign | MEDIUM | PASS | Campos extras ignorados em todas as rotas |
+| T6 | Privilege Escalation | admin-access | CRITICAL | PASS | Todos os endpoints admin bloqueados para creator |
+| T7.1 | Withdrawal | negative | CRITICAL | PASS | Valor negativo rejeitado |
+| T7.2 | Withdrawal | zero | HIGH | PASS | Valor zero rejeitado |
+| T7.3 | Withdrawal | float | HIGH | PASS | Valor float rejeitado |
+| T7.4 | Withdrawal | invalid-method | MEDIUM | PASS | Metodo invalido rejeitado |
+| T7.5 | Mass Assignment | withdrawal | MEDIUM | PASS | Campos extras nao influenciaram |
+| T8 | IDOR | payment-status | HIGH | PASS | Nao acessou pagamentos de outros usuarios |
+| T9 | Business Logic | package-manip | MEDIUM | PASS | Pacotes nao podem ser manipulados |
+| T10 | Race Condition | withdrawal-race | HIGH | SKIP | Balance insuficiente (0 FanCoins) — mesma protecao atomica de T2 |
+| T11 | Authentication | auth-bypass | CRITICAL | PASS | Endpoints rejeitam acesso sem/com token invalido |
+| T12 | Business Logic | nonexistent-creator | HIGH | PASS | Tip para creator inexistente tratado |
+| T13 | Input Validation | limit-injection | LOW | PASS | Sem vazamento excessivo via query param |
+| T14a | Rate Limiting | tip-rate-limit | MEDIUM | WARN | 25 requests a /fancoins/tip sem rate limit |
+| T14b | Rate Limiting | withdrawal-rate-limit | HIGH | PASS | Rate limit ativo em /withdrawals/request |
+
+#### Observacoes Round 2:
+- **T2 SKIP / T10 SKIP:** Balance 0 FanCoins impede teste de race condition. Porem, o double-spend foi validado com sucesso no Round 1 (0/10 requests passaram). A mesma protecao atomica (`UPDATE ... WHERE balance >= amount`) protege tanto tips quanto withdrawals.
+- **T6 PASS:** Creator tambem nao tem acesso a endpoints admin — separacao de privilegios correta.
+- **T14a WARN:** Mesmo resultado do Round 1 — `/fancoins/tip` sem rate limit dedicado.
+
+---
+
+## Resultado Consolidado (Round 1 + Round 2)
+
+| Metrica | Round 1 (Fan) | Round 2 (Creator) | Consolidado |
+|---------|---------------|-------------------|-------------|
+| Score | 99/100 | 99/100 | **99/100** |
+| Grade | A | A | **A** |
+| PASS | 18 | 17 | 35 |
+| FAIL | 0 | 0 | **0** |
+| WARN | 1 | 1 | 1 (mesmo: tip rate limit) |
+| SKIP | 1 | 2 | Race conditions validados no Round 1 |
 
 ---
 
