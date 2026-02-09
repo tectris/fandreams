@@ -52,7 +52,7 @@ export function VideoPlayer({ src, className = '', poster, onPlay, onPause }: Vi
     }
   }, [src])
 
-  // Intercept fullscreen to use the container (which includes watermark)
+  // Intercept fullscreen to use the container
   const handleFullscreen = useCallback(() => {
     const container = containerRef.current
     if (!container) return
@@ -93,10 +93,6 @@ export function VideoPlayer({ src, className = '', poster, onPlay, onPause }: Vi
         onPause={onPause}
         style={{ display: 'block' }}
       />
-      {/* Watermark — visible in both normal and fullscreen mode */}
-      <div className="absolute bottom-10 right-3 pointer-events-none select-none z-10">
-        <span className="text-white/20 text-sm font-bold tracking-wider">FanDreams</span>
-      </div>
     </div>
   )
 }
