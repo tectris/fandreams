@@ -30,6 +30,7 @@ export default function CreatorProfilePage() {
   const [ppvPost, setPpvPost] = useState<any>(null)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
+  const [affiliateDrawerOpen, setAffiliateDrawerOpen] = useState(false)
   const [affiliateCopied, setAffiliateCopied] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
@@ -501,6 +502,12 @@ export default function CreatorProfilePage() {
                 )}
               </>
             )}
+            {/* Affiliate */}
+            {affiliateProgram && !isOwner && isAuthenticated && (
+              <Button variant="ghost" size="sm" onClick={() => setAffiliateDrawerOpen(true)} title="Programa de Afiliados">
+                <Share2 className="w-4 h-4" />
+              </Button>
+            )}
             {/* Share */}
             <Button variant="ghost" size="sm" onClick={handleShare}>
               <SendHorizontal className="w-4 h-4" />
@@ -654,54 +661,6 @@ export default function CreatorProfilePage() {
               )
             })}
           </div>
-        </div>
-      )}
-
-      {/* Affiliate Program */}
-      {affiliateProgram && !isOwner && isAuthenticated && (
-        <div className="mb-10">
-          <Card>
-            <CardContent className="py-5">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <Share2 className="w-5 h-5 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-sm mb-1">Programa de Afiliados</h3>
-                  <p className="text-xs text-muted mb-3">
-                    Compartilhe o link deste criador e ganhe comissao por cada novo assinante!
-                  </p>
-                  <div className="flex items-center gap-2 text-xs text-muted mb-3">
-                    <Coins className="w-3.5 h-3.5 text-warning" />
-                    Comissao: <span className="font-semibold text-foreground">{Number(affiliateProgram.levels?.[0]?.commissionPercent || 0)}%</span> por assinante
-                  </div>
-                  {myAffiliateLink ? (
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 bg-surface-light rounded-md px-3 py-2 text-xs font-mono truncate">
-                        {typeof window !== 'undefined' ? window.location.origin : ''}/creator/{username}?ref={myAffiliateLink.code}
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleCopyAffiliateLink(myAffiliateLink.code)}
-                      >
-                        {affiliateCopied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      size="sm"
-                      onClick={() => createAffiliateLinkMutation.mutate(profile.id)}
-                      loading={createAffiliateLinkMutation.isPending}
-                    >
-                      <Share2 className="w-4 h-4 mr-1" />
-                      Tornar-se afiliado
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       )}
 
@@ -879,6 +838,118 @@ export default function CreatorProfilePage() {
             contentText: ppvPost.contentText,
           }}
         />
+      )}
+
+      {/* Affiliate Drawer */}
+      {affiliateDrawerOpen && affiliateProgram && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setAffiliateDrawerOpen(false)} />
+          <div className="fixed right-0 top-0 h-full w-full max-w-md bg-surface border-l border-border z-50 flex flex-col shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <h2 className="font-bold flex items-center gap-2">
+                <Share2 className="w-5 h-5 text-primary" />
+                Programa de Afiliados
+              </h2>
+              <Button variant="ghost" size="sm" onClick={() => setAffiliateDrawerOpen(false)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
+              {/* Creator info */}
+              <div className="flex items-center gap-3">
+                <Avatar
+                  src={profile.avatarUrl}
+                  alt={profile.displayName || profile.username}
+                  size="md"
+                />
+                <div>
+                  <p className="font-bold text-sm">{profile.displayName || profile.username}</p>
+                  <p className="text-xs text-muted">@{profile.username}</p>
+                </div>
+              </div>
+
+              {/* Commission info */}
+              <div className="p-4 bg-surface-light rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <Coins className="w-4 h-4 text-warning" />
+                  <span className="text-sm font-medium">Comissao</span>
+                </div>
+                <p className="text-2xl font-bold text-primary">
+                  {Number(affiliateProgram.levels?.[0]?.commissionPercent || 0)}%
+                </p>
+                <p className="text-xs text-muted mt-1">por cada novo assinante que voce trouxer</p>
+              </div>
+
+              {/* How it works */}
+              <div className="space-y-3">
+                <p className="text-xs font-medium text-muted uppercase">Como funciona</p>
+                <div className="space-y-2 text-sm text-muted">
+                  <div className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-xs font-bold text-primary">1</span>
+                    <p>Copie seu link exclusivo abaixo</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-xs font-bold text-primary">2</span>
+                    <p>Compartilhe com amigos e seguidores</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-xs font-bold text-primary">3</span>
+                    <p>Ganhe {Number(affiliateProgram.levels?.[0]?.commissionPercent || 0)}% em FanCoins por cada assinatura</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Link section */}
+              {myAffiliateLink ? (
+                <div className="space-y-3">
+                  <p className="text-xs font-medium text-muted uppercase">Seu link de afiliado</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-surface-light rounded-md px-3 py-2.5 text-xs font-mono truncate border border-border">
+                      {typeof window !== 'undefined' ? window.location.origin : ''}/creator/{username}?ref={myAffiliateLink.code}
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => handleCopyAffiliateLink(myAffiliateLink.code)}
+                    >
+                      {affiliateCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-3 pt-2">
+                    <div className="text-center p-2 bg-surface-light rounded-md">
+                      <p className="text-lg font-bold">{myAffiliateLink.clicks}</p>
+                      <p className="text-xs text-muted">Cliques</p>
+                    </div>
+                    <div className="text-center p-2 bg-surface-light rounded-md">
+                      <p className="text-lg font-bold">{myAffiliateLink.conversions}</p>
+                      <p className="text-xs text-muted">Conversoes</p>
+                    </div>
+                    <div className="text-center p-2 bg-surface-light rounded-md">
+                      <p className="text-lg font-bold text-success">{formatCurrency(Number(myAffiliateLink.totalEarned || 0))}</p>
+                      <p className="text-xs text-muted">Ganhos</p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs font-medium text-muted uppercase">Comece agora</p>
+                  <Button
+                    className="w-full"
+                    onClick={() => createAffiliateLinkMutation.mutate(profile.id)}
+                    loading={createAffiliateLinkMutation.isPending}
+                  >
+                    <Share2 className="w-4 h-4 mr-2" />
+                    Gerar meu link de afiliado
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   )
