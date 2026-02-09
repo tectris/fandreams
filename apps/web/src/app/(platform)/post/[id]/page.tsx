@@ -14,10 +14,15 @@ type Props = {
 
 async function getBaseUrl() {
   if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL
-  const headersList = await headers()
-  const host = headersList.get('x-forwarded-host') || headersList.get('host') || 'www.fandreams.app'
-  const protocol = headersList.get('x-forwarded-proto') || 'https'
-  return `${protocol}://${host}`
+  try {
+    const headersList = await headers()
+    const host = headersList.get('x-forwarded-host') || headersList.get('host')
+    if (host) {
+      const protocol = headersList.get('x-forwarded-proto') || 'https'
+      return `${protocol}://${host}`
+    }
+  } catch {}
+  return 'https://www.fandreams.app'
 }
 
 async function fetchPostForMeta(code: string) {
@@ -38,12 +43,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params
   const [post, baseUrl] = await Promise.all([fetchPostForMeta(id), getBaseUrl()])
 
-  // Override metadataBase so og:image URLs resolve to the actual domain, not localhost
-  const metadataBase = new URL(baseUrl)
-
   if (!post) {
     return {
-      metadataBase,
       title: 'Post nao encontrado',
       description: 'Este post pode ter sido removido ou nao existe.',
     }
@@ -54,10 +55,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = post.contentText
     ? post.contentText.substring(0, 160)
     : `Confira este post de ${creatorName} no FanDreams`
-  const postUrl = `${baseUrl}/post/${post.shortCode || id}`
+  const shortCode = post.shortCode || id
+  const postUrl = `${baseUrl}/post/${shortCode}`
+
+  // Explicit absolute URL to our OG image API route — no dependency on metadataBase
+  const ogImageUrl = `${baseUrl}/api/og/${shortCode}`
 
   return {
-    metadataBase,
+    metadataBase: new URL(baseUrl),
     title,
     description,
     openGraph: {
@@ -66,11 +71,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       url: postUrl,
       siteName: 'FanDreams',
       type: 'article',
+      images: [{ url: ogImageUrl, width: 1200, height: 630, alt: `Post de ${creatorName}` }],
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
+      images: [{ url: ogImageUrl, alt: `Post de ${creatorName}` }],
     },
   }
 }
