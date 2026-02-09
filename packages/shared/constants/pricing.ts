@@ -1,11 +1,11 @@
 export const PLATFORM_FEES = {
-  subscription: 0.12,
+  subscription: 0.08,
   tip: 0.08,
-  ppv: 0.12,
-  fancoin_purchase: 0.10,
-  marketplace: 0.15,
-  top_creator_subscription: 0.10,
-  introductory: 0.10,
+  ppv: 0.08,
+  fancoin_purchase: 0.08,
+  marketplace: 0.08,
+  top_creator_subscription: 0.08,
+  introductory: 0.08,
 } as const
 
 export const PAYOUT_CONFIG = {

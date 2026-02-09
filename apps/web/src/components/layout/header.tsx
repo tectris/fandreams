@@ -3,12 +3,12 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { useAuthStore } from '@/lib/store'
+import { useAuthStore, useThemeStore } from '@/lib/store'
 import { api } from '@/lib/api'
 import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { FancoinDrawer } from '@/components/fancoins/fancoin-drawer'
-import { Search, Bell, MessageCircle, Flame, Coins } from 'lucide-react'
+import { Search, Bell, MessageCircle, Flame, Coins, X, Sun, Moon } from 'lucide-react'
 
 function useDebounce(value: string, delay: number) {
   const [debounced, setDebounced] = useState(value)
@@ -21,10 +21,13 @@ function useDebounce(value: string, delay: number) {
 
 export function Header() {
   const { user, isAuthenticated } = useAuthStore()
+  const { theme, toggleTheme } = useThemeStore()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
+  const [searchExpanded, setSearchExpanded] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const debouncedQuery = useDebounce(searchQuery, 300)
 
   const { data: searchResults } = useQuery({
@@ -40,16 +43,24 @@ export function Header() {
     function handleClickOutside(e: MouseEvent) {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
         setSearchOpen(false)
+        if (!searchQuery) setSearchExpanded(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [searchQuery])
+
+  useEffect(() => {
+    if (searchExpanded && searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
+  }, [searchExpanded])
 
   const { data: walletData } = useQuery({
     queryKey: ['fancoin-wallet'],
     queryFn: () => api.get<{ balance: string }>('/fancoins/wallet'),
     enabled: isAuthenticated,
+    refetchInterval: 10000,
   })
 
   const { data: unreadData } = useQuery({
@@ -59,94 +70,143 @@ export function Header() {
       return res.data
     },
     enabled: isAuthenticated,
-    refetchInterval: 30000,
+    refetchInterval: 10000,
+  })
+
+  const { data: unreadMsgData } = useQuery({
+    queryKey: ['unread-messages-count'],
+    queryFn: async () => {
+      const res = await api.get<{ count: number }>('/messages/unread-count')
+      return res.data
+    },
+    enabled: isAuthenticated,
+    refetchInterval: 10000,
   })
 
   const balance = walletData?.data ? Number(walletData.data.balance) : 0
   const unreadCount = unreadData?.count || 0
+  const unreadMsgCount = unreadMsgData?.count || 0
+
+  function formatBalance(val: number): string {
+    if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+    if (val >= 10_000) return `${(val / 1_000).toFixed(1).replace(/\.0$/, '')}K`
+    return val.toLocaleString()
+  }
+
+  function closeSearch() {
+    setSearchExpanded(false)
+    setSearchOpen(false)
+    setSearchQuery('')
+  }
 
   return (
     <>
-      <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Link href={isAuthenticated ? '/feed' : '/'} className="flex items-center gap-2 font-bold text-xl">
-              <Flame className="w-7 h-7 text-primary" />
-              <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                MyFans
+      <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-border overflow-x-hidden">
+        <div className="max-w-7xl mx-auto px-3 md:px-4 h-14 flex items-center justify-between gap-2 md:gap-3">
+          <div className="flex items-center shrink-0">
+            <Link href={isAuthenticated ? '/feed' : '/'} className="flex items-center gap-2 font-bold text-lg">
+              <Flame className="w-6 h-6 text-primary shrink-0" />
+              <span className="hidden sm:inline bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                FanDreams
               </span>
             </Link>
           </div>
 
-          <div className="hidden md:flex flex-1 max-w-md mx-8" ref={searchRef}>
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value)
-                  setSearchOpen(true)
-                }}
-                onFocus={() => searchQuery.length >= 2 && setSearchOpen(true)}
-                placeholder="Buscar criadores..."
-                className="w-full pl-10 pr-4 py-2 rounded-full bg-surface-light border border-border text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition"
-              />
-              {searchOpen && debouncedQuery.length >= 2 && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-surface border border-border rounded-md shadow-xl max-h-80 overflow-y-auto z-50">
-                  {searchResults && searchResults.length > 0 ? (
-                    searchResults.map((u: any) => (
-                      <Link
-                        key={u.id}
-                        href={`/creator/${u.username}`}
-                        onClick={() => {
-                          setSearchOpen(false)
-                          setSearchQuery('')
-                        }}
-                        className="flex items-center gap-3 px-4 py-3 hover:bg-surface-light transition-colors"
-                      >
-                        <Avatar src={u.avatarUrl} alt={u.displayName || u.username} size="sm" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{u.displayName || u.username}</p>
-                          <p className="text-xs text-muted">@{u.username}</p>
-                        </div>
-                      </Link>
-                    ))
-                  ) : (
-                    <div className="px-4 py-6 text-center text-sm text-muted">
-                      Nenhum usuario encontrado
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+          {/* Search - icon that expands */}
+          <div className="hidden md:flex flex-1 justify-center" ref={searchRef}>
+            {searchExpanded ? (
+              <div className="relative w-full max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value)
+                    setSearchOpen(true)
+                  }}
+                  onFocus={() => searchQuery.length >= 2 && setSearchOpen(true)}
+                  placeholder="Buscar criadores..."
+                  className="w-full pl-10 pr-10 py-1.5 rounded-full bg-surface-light border border-border text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition"
+                />
+                <button
+                  onClick={closeSearch}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                {searchOpen && debouncedQuery.length >= 2 && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-surface border border-border rounded-md shadow-xl max-h-80 overflow-y-auto z-50">
+                    {searchResults && searchResults.length > 0 ? (
+                      searchResults.map((u: any) => (
+                        <Link
+                          key={u.id}
+                          href={`/creator/${u.username}`}
+                          onClick={closeSearch}
+                          className="flex items-center gap-3 px-4 py-3 hover:bg-surface-light transition-colors"
+                        >
+                          <Avatar src={u.avatarUrl} alt={u.displayName || u.username} size="sm" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{u.displayName || u.username}</p>
+                            <p className="text-xs text-muted">@{u.username}</p>
+                          </div>
+                        </Link>
+                      ))
+                    ) : (
+                      <div className="px-4 py-6 text-center text-sm text-muted">
+                        Nenhum usuario encontrado
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => setSearchExpanded(true)}
+                className="p-2 rounded-full hover:bg-surface-light transition-colors text-muted hover:text-foreground"
+              >
+                <Search className="w-5 h-5" />
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 md:gap-2 shrink-0">
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 md:p-2 rounded-full hover:bg-surface-light transition-colors text-muted hover:text-foreground"
+              title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4 md:w-5 md:h-5" /> : <Moon className="w-4 h-4 md:w-5 md:h-5" />}
+            </button>
             {isAuthenticated ? (
               <>
                 <button
                   onClick={() => setDrawerOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-warning/10 hover:bg-warning/20 transition-colors"
+                  className="flex items-center gap-1 px-2 py-1 rounded-full bg-warning/10 hover:bg-warning/20 transition-colors max-w-[90px] md:max-w-none"
                 >
-                  <Coins className="w-4 h-4 text-warning" />
-                  <span className="text-sm font-semibold text-warning">
-                    {balance.toLocaleString()}
+                  <Coins className="w-3.5 h-3.5 text-warning shrink-0" />
+                  <span className="text-xs font-semibold text-warning truncate">
+                    {formatBalance(balance)}
                   </span>
                 </button>
                 <Link
                   href="/messages"
-                  className="p-2 rounded-full hover:bg-surface-light transition-colors relative"
+                  className="p-1.5 md:p-2 rounded-full hover:bg-surface-light transition-colors relative"
                 >
-                  <MessageCircle className="w-5 h-5 text-muted" />
+                  <MessageCircle className="w-4 h-4 md:w-5 md:h-5 text-muted" />
+                  {unreadMsgCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] flex items-center justify-center px-1 text-[9px] font-bold bg-primary text-white rounded-full">
+                      {unreadMsgCount > 99 ? '99+' : unreadMsgCount}
+                    </span>
+                  )}
                 </Link>
                 <Link
                   href="/notifications"
-                  className="p-2 rounded-full hover:bg-surface-light transition-colors relative"
+                  className="p-1.5 md:p-2 rounded-full hover:bg-surface-light transition-colors relative"
                 >
-                  <Bell className="w-5 h-5 text-muted" />
+                  <Bell className="w-4 h-4 md:w-5 md:h-5 text-muted" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-[10px] font-bold bg-error text-white rounded-full">
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] flex items-center justify-center px-1 text-[9px] font-bold bg-error text-white rounded-full">
                       {unreadCount > 99 ? '99+' : unreadCount}
                     </span>
                   )}

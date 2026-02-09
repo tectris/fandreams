@@ -18,6 +18,7 @@ export const creatorProfiles = pgTable('creator_profiles', {
   creatorScore: decimal('creator_score', { precision: 5, scale: 2 }).default('0').notNull(),
   isFeatured: boolean('is_featured').default(false).notNull(),
   welcomeMessage: text('welcome_message'),
+  messagesEnabled: boolean('messages_enabled').default(true).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
@@ -38,7 +39,21 @@ export const subscriptionTiers = pgTable('subscription_tiers', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
+export const subscriptionPromos = pgTable('subscription_promos', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  creatorId: uuid('creator_id')
+    .references(() => users.id, { onDelete: 'cascade' })
+    .notNull(),
+  durationDays: integer('duration_days').notNull(), // 90, 180, 360
+  price: decimal('price', { precision: 10, scale: 2 }).notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 export type CreatorProfile = typeof creatorProfiles.$inferSelect
 export type NewCreatorProfile = typeof creatorProfiles.$inferInsert
 export type SubscriptionTier = typeof subscriptionTiers.$inferSelect
 export type NewSubscriptionTier = typeof subscriptionTiers.$inferInsert
+export type SubscriptionPromo = typeof subscriptionPromos.$inferSelect
+export type NewSubscriptionPromo = typeof subscriptionPromos.$inferInsert

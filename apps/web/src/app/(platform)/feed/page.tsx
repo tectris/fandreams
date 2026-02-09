@@ -3,7 +3,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { PostCard } from '@/components/feed/post-card'
+import { PpvUnlockDrawer } from '@/components/feed/ppv-unlock-drawer'
 import { useAuthStore } from '@/lib/store'
+import { useState } from 'react'
 import { Flame, TrendingUp, Plus } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -85,6 +87,26 @@ export default function FeedPage() {
     onError: (e: any) => toast.error(e.message || 'Erro ao enviar tip'),
   })
 
+  const [ppvDrawerOpen, setPpvDrawerOpen] = useState(false)
+  const [ppvPost, setPpvPost] = useState<any>(null)
+
+  function handlePpvUnlock(post: any) {
+    if (!isAuthenticated) {
+      window.location.href = '/login'
+      return
+    }
+    setPpvPost(post)
+    setPpvDrawerOpen(true)
+  }
+
+  function handleSubscribeFromFeed(post: any) {
+    if (!isAuthenticated) {
+      window.location.href = '/login'
+      return
+    }
+    window.location.href = `/creator/${post.creatorUsername}`
+  }
+
   const isCreatorOrAdmin = user?.role === 'creator' || user?.role === 'admin'
 
   return (
@@ -144,6 +166,8 @@ export default function FeedPage() {
               onBookmark={(postId) => bookmarkMutation.mutate(postId)}
               onComment={(postId, content) => commentMutation.mutate({ postId, content })}
               onTip={(postId, creatorId, amount) => tipMutation.mutate({ postId, creatorId, amount })}
+              onPpvUnlock={handlePpvUnlock}
+              onSubscribe={handleSubscribeFromFeed}
             />
           ))}
         </div>
@@ -170,6 +194,21 @@ export default function FeedPage() {
           )}
         </div>
       )}
+
+      {ppvPost && (
+        <PpvUnlockDrawer
+          open={ppvDrawerOpen}
+          onClose={() => { setPpvDrawerOpen(false); setPpvPost(null) }}
+          onUnlocked={() => queryClient.invalidateQueries({ queryKey: ['feed'] })}
+          post={{
+            id: ppvPost.id,
+            ppvPrice: ppvPost.ppvPrice,
+            creatorUsername: ppvPost.creatorUsername,
+            creatorDisplayName: ppvPost.creatorDisplayName,
+            contentText: ppvPost.contentText,
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -185,6 +224,8 @@ function FeedPostCard({
   onBookmark,
   onComment,
   onTip,
+  onPpvUnlock,
+  onSubscribe,
 }: {
   post: any
   currentUserId?: string | null
@@ -196,6 +237,8 @@ function FeedPostCard({
   onBookmark: (postId: string) => void
   onComment: (postId: string, content: string) => void
   onTip: (postId: string, creatorId: string, amount: number) => void
+  onPpvUnlock: (post: any) => void
+  onSubscribe: (post: any) => void
 }) {
   const { data: commentsData } = useQuery({
     queryKey: ['comments', post.id],
@@ -219,6 +262,8 @@ function FeedPostCard({
       onBookmark={onBookmark}
       onComment={onComment}
       onTip={onTip}
+      onPpvUnlock={onPpvUnlock}
+      onSubscribe={onSubscribe}
       comments={Array.isArray(comments) ? comments : []}
     />
   )

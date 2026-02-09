@@ -23,9 +23,9 @@ export function Card({ children, className, hover, onClick }: CardProps) {
 }
 
 export function CardHeader({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('px-5 py-4 border-b border-border', className)}>{children}</div>
+  return <div className={cn('px-6 py-5 border-b border-border', className)}>{children}</div>
 }
 
 export function CardContent({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('px-5 py-4', className)}>{children}</div>
+  return <div className={cn('px-6 py-5', className)}>{children}</div>
 }

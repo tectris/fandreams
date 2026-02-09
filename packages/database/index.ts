@@ -12,6 +12,7 @@ import * as notifications from './schema/notifications'
 import * as reports from './schema/reports'
 import * as follows from './schema/follows'
 import * as views from './schema/views'
+import * as affiliates from './schema/affiliates'
 
 export const schema = {
   ...users,
@@ -26,6 +27,7 @@ export const schema = {
   ...reports,
   ...follows,
   ...views,
+  ...affiliates,
 }
 
 export function createDb(databaseUrl: string) {
@@ -47,3 +49,4 @@ export * from './schema/notifications'
 export * from './schema/reports'
 export * from './schema/follows'
 export * from './schema/views'
+export * from './schema/affiliates'

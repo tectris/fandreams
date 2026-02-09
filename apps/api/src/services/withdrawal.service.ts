@@ -1,8 +1,8 @@
 import { eq, and, gte, sql, desc, count } from 'drizzle-orm'
-import { payouts, fancoinWallets, fancoinTransactions, platformSettings } from '@myfans/database'
+import { payouts, fancoinWallets, fancoinTransactions, platformSettings } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
-import { PAYOUT_CONFIG } from '@myfans/shared'
+import { PAYOUT_CONFIG } from '@fandreams/shared'
 
 // ── Platform Settings Helpers ──
 
@@ -28,6 +28,32 @@ export async function setSetting(key: string, value: any, updatedBy: string) {
       target: platformSettings.key,
       set: { value, updatedBy, updatedAt: new Date() },
     })
+}
+
+// ── Platform Fee ──
+
+export async function getPlatformFeeRate(): Promise<number> {
+  const percent = await getSetting<number>('platform_fee_percent', 8)
+  return percent / 100
+}
+
+// ── FanCoin Rate ──
+
+/** Returns how much 1 FanCoin is worth in BRL. Default 0.01 (R$0.01). */
+export async function getFancoinToBrl(): Promise<number> {
+  return getSetting<number>('fancoin_to_brl', PAYOUT_CONFIG.fancoinToBrl)
+}
+
+/** Converts BRL to FanCoins using the dynamic rate. */
+export async function brlToFancoins(brl: number): Promise<number> {
+  const rate = await getFancoinToBrl()
+  return Math.round(brl / rate)
+}
+
+/** Converts FanCoins to BRL using the dynamic rate. */
+export async function fancoinsToBrl(coins: number): Promise<number> {
+  const rate = await getFancoinToBrl()
+  return Math.round(coins * rate * 100) / 100
 }
 
 // ── Anti-Fraud Checks ──
@@ -409,6 +435,7 @@ export async function getPaymentSettings() {
     'cooldown_hours',
     'min_payout',
     'fancoin_to_brl',
+    'platform_fee_percent',
   ]
 
   const settings: Record<string, any> = {
@@ -418,6 +445,7 @@ export async function getPaymentSettings() {
     cooldown_hours: PAYOUT_CONFIG.cooldownHours,
     min_payout: PAYOUT_CONFIG.minPayout,
     fancoin_to_brl: PAYOUT_CONFIG.fancoinToBrl,
+    platform_fee_percent: 8,
   }
 
   try {
@@ -443,6 +471,7 @@ export async function updatePaymentSettings(updates: Record<string, any>, adminI
     'cooldown_hours',
     'min_payout',
     'fancoin_to_brl',
+    'platform_fee_percent',
   ]
 
   try {

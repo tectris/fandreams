@@ -1,11 +1,13 @@
 import { Hono } from 'hono'
-import { createPostSchema, updatePostSchema, createCommentSchema } from '@myfans/shared'
+import { createPostSchema, updatePostSchema, createCommentSchema } from '@fandreams/shared'
 import { validateBody } from '../middleware/validation'
 import { authMiddleware, creatorMiddleware } from '../middleware/auth'
 import { eq, and } from 'drizzle-orm'
-import { posts, reports } from '@myfans/database'
+import { posts, reports, users } from '@fandreams/database'
 import * as postService from '../services/post.service'
+import * as fancoinService from '../services/fancoin.service'
 import * as gamificationService from '../services/gamification.service'
+import * as notificationService from '../services/notification.service'
 import { success, error } from '../utils/response'
 import { AppError } from '../services/auth.service'
 import { db } from '../config/database'
@@ -25,6 +27,13 @@ postsRoute.post('/', authMiddleware, creatorMiddleware, validateBody(createPostS
     if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
     throw e
   }
+})
+
+// Debug: check raw post counts by visibility for a creator
+postsRoute.get('/creator/:creatorId/debug', async (c) => {
+  const creatorId = c.req.param('creatorId')
+  const result = await postService.getCreatorPostsDebug(creatorId)
+  return success(c, result)
 })
 
 postsRoute.get('/creator/:creatorId', async (c) => {
@@ -54,7 +63,7 @@ postsRoute.get('/creator/:creatorId', async (c) => {
 
 postsRoute.get('/:id', async (c) => {
   try {
-    const postId = c.req.param('id')
+    const param = c.req.param('id')
     const authHeader = c.req.header('Authorization')
     let viewerId: string | undefined
 
@@ -67,7 +76,11 @@ postsRoute.get('/:id', async (c) => {
       } catch {}
     }
 
-    const post = await postService.getPost(postId, viewerId)
+    // Detect UUID format vs shortCode
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param)
+    const post = isUuid
+      ? await postService.getPost(param, viewerId)
+      : await postService.getPostByShortCode(param, viewerId)
     return success(c, post)
   } catch (e) {
     if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
@@ -118,6 +131,24 @@ postsRoute.post('/:id/like', authMiddleware, async (c) => {
   const result = await postService.likePost(postId, userId)
   if (result.liked) {
     await gamificationService.addXp(userId, 'like_post')
+
+    // Notify post creator (non-blocking)
+    try {
+      const [post] = await db.select({ creatorId: posts.creatorId }).from(posts).where(eq(posts.id, postId)).limit(1)
+      if (post && post.creatorId !== userId) {
+        const [liker] = await db.select({ username: users.username, displayName: users.displayName }).from(users).where(eq(users.id, userId)).limit(1)
+        const likerName = liker?.displayName || liker?.username || 'Alguem'
+        notificationService.createNotification(
+          post.creatorId,
+          'new_like',
+          `${likerName} curtiu seu post`,
+          undefined,
+          { fromUserId: userId, postId, creatorUsername: liker?.username },
+        ).catch((e) => console.error('Failed to create like notification:', e))
+      }
+    } catch (e) {
+      console.error('Failed to create like notification:', e)
+    }
   }
   return success(c, result)
 })
@@ -143,6 +174,25 @@ postsRoute.post('/:id/comments', authMiddleware, validateBody(createCommentSchem
   const body = c.req.valid('json')
   const comment = await postService.addComment(postId, userId, body.content, body.parentId)
   await gamificationService.addXp(userId, 'comment_post')
+
+  // Notify post creator (non-blocking)
+  try {
+    const [post] = await db.select({ creatorId: posts.creatorId }).from(posts).where(eq(posts.id, postId)).limit(1)
+    if (post && post.creatorId !== userId) {
+      const [commenter] = await db.select({ username: users.username, displayName: users.displayName }).from(users).where(eq(users.id, userId)).limit(1)
+      const commenterName = commenter?.displayName || commenter?.username || 'Alguem'
+      notificationService.createNotification(
+        post.creatorId,
+        'new_comment',
+        `${commenterName} comentou no seu post`,
+        body.content.substring(0, 100),
+        { fromUserId: userId, postId, commentId: comment.id, creatorUsername: commenter?.username },
+      ).catch((e) => console.error('Failed to create comment notification:', e))
+    }
+  } catch (e) {
+    console.error('Failed to create comment notification:', e)
+  }
+
   return success(c, comment)
 })
 
@@ -210,6 +260,19 @@ postsRoute.post('/:id/report', authMiddleware, async (c) => {
       description: description || null,
     })
     return success(c, { reported: true })
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+// Unlock PPV post with FanCoins
+postsRoute.post('/:id/unlock', authMiddleware, async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const postId = c.req.param('id')
+    const result = await fancoinService.unlockPpv(userId, postId)
+    return success(c, result)
   } catch (e) {
     if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
     throw e

@@ -3,10 +3,15 @@ import { Providers } from '@/lib/providers'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: { default: 'MyFans — Crie, compartilhe, monetize', template: '%s | MyFans' },
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://www.fandreams.app'),
+  title: { default: 'FanDreams — Crie, compartilhe, monetize', template: '%s | FanDreams' },
   description:
     'A plataforma de monetizacao para criadores de conteudo com menor taxa do mercado. Gamificacao, FanCoins e muito mais.',
   keywords: ['criadores', 'monetizacao', 'conteudo', 'assinatura', 'fancoins'],
+  openGraph: {
+    siteName: 'FanDreams',
+    type: 'website',
+  },
 }
 
 export const viewport: Viewport = {

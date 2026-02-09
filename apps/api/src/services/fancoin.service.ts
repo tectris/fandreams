@@ -1,8 +1,9 @@
-import { eq, sql } from 'drizzle-orm'
-import { fancoinWallets, fancoinTransactions, creatorProfiles, users, posts } from '@myfans/database'
+import { eq, and, sql } from 'drizzle-orm'
+import { fancoinWallets, fancoinTransactions, creatorProfiles, users, posts, payments } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
-import { FANCOIN_PACKAGES, PLATFORM_FEES } from '@myfans/shared'
+import { FANCOIN_PACKAGES } from '@fandreams/shared'
+import { getPlatformFeeRate, brlToFancoins } from './withdrawal.service'
 
 export async function getWallet(userId: string) {
   const [wallet] = await db
@@ -122,7 +123,8 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
 
   const newSenderBalance = Number(debitResult.balance)
 
-  const platformCut = Math.floor(amount * PLATFORM_FEES.tip)
+  const feeRate = await getPlatformFeeRate()
+  const platformCut = Math.floor(amount * feeRate)
   const creatorAmount = amount - platformCut
 
   // ATOMIC credit: add to creator wallet
@@ -227,6 +229,173 @@ export async function creditPurchase(userId: string, totalCoins: number, label: 
   })
 
   return { newBalance, credited: totalCoins }
+}
+
+export async function unlockPpv(userId: string, postId: string) {
+  // Get post info
+  const [post] = await db
+    .select({ id: posts.id, creatorId: posts.creatorId, ppvPrice: posts.ppvPrice, visibility: posts.visibility })
+    .from(posts)
+    .where(eq(posts.id, postId))
+    .limit(1)
+
+  if (!post) throw new AppError('NOT_FOUND', 'Post nao encontrado', 404)
+  if (post.visibility !== 'ppv' || !post.ppvPrice) {
+    throw new AppError('INVALID', 'Este post nao e PPV', 400)
+  }
+  if (post.creatorId === userId) {
+    throw new AppError('INVALID', 'Voce ja tem acesso a este post', 400)
+  }
+
+  // Check if already unlocked
+  const [existing] = await db
+    .select({ id: payments.id })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.userId, userId),
+        eq(payments.type, 'ppv'),
+        eq(payments.status, 'completed'),
+        sql`${payments.metadata}->>'postId' = ${postId}`,
+      ),
+    )
+    .limit(1)
+
+  if (existing) throw new AppError('ALREADY_UNLOCKED', 'Voce ja desbloqueou este post', 409)
+
+  // Convert ppvPrice (BRL) to FanCoins using dynamic rate
+  const priceInCoins = await brlToFancoins(Number(post.ppvPrice))
+
+  const ppvFeeRate = await getPlatformFeeRate()
+  const platformCut = Math.floor(priceInCoins * ppvFeeRate)
+  const creatorAmount = priceInCoins - platformCut
+
+  // ATOMIC debit from buyer: prevents race condition / double-unlock
+  const [debitResult] = await db
+    .update(fancoinWallets)
+    .set({
+      balance: sql`${fancoinWallets.balance} - ${priceInCoins}`,
+      totalSpent: sql`${fancoinWallets.totalSpent} + ${priceInCoins}`,
+      updatedAt: new Date(),
+    })
+    .where(
+      sql`${fancoinWallets.userId} = ${userId} AND ${fancoinWallets.balance} >= ${priceInCoins}`,
+    )
+    .returning({ balance: fancoinWallets.balance })
+
+  if (!debitResult) {
+    throw new AppError('INSUFFICIENT_BALANCE', 'Saldo insuficiente de FanCoins', 400)
+  }
+
+  const newBalance = Number(debitResult.balance)
+
+  // ATOMIC credit to creator
+  await getWallet(post.creatorId)
+  const [creditResult] = await db
+    .update(fancoinWallets)
+    .set({
+      balance: sql`${fancoinWallets.balance} + ${creatorAmount}`,
+      totalEarned: sql`${fancoinWallets.totalEarned} + ${creatorAmount}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(fancoinWallets.userId, post.creatorId))
+    .returning({ balance: fancoinWallets.balance })
+
+  const newCreatorBalance = Number(creditResult?.balance ?? creatorAmount)
+
+  // FanCoin transactions
+  const [sender] = await db.select({ username: users.username }).from(users).where(eq(users.id, userId)).limit(1)
+  const [creator] = await db.select({ username: users.username }).from(users).where(eq(users.id, post.creatorId)).limit(1)
+
+  await db.insert(fancoinTransactions).values([
+    {
+      userId,
+      type: 'ppv_unlock',
+      amount: -priceInCoins,
+      balanceAfter: newBalance,
+      referenceId: postId,
+      description: `Desbloqueio PPV - post de @${creator?.username || 'criador'}`,
+    },
+    {
+      userId: post.creatorId,
+      type: 'ppv_received',
+      amount: creatorAmount,
+      balanceAfter: newCreatorBalance,
+      referenceId: postId,
+      description: `PPV recebido de @${sender?.username || 'usuario'}`,
+    },
+  ])
+
+  // Record in payments table for access tracking
+  const ppvBrlFee = Number(post.ppvPrice) * ppvFeeRate
+  await db.insert(payments).values({
+    userId,
+    recipientId: post.creatorId,
+    type: 'ppv',
+    amount: post.ppvPrice,
+    platformFee: String(ppvBrlFee),
+    creatorAmount: String(Number(post.ppvPrice) - ppvBrlFee),
+    paymentProvider: 'fancoins',
+    status: 'completed',
+    metadata: { postId, method: 'fancoins', fancoinsSpent: priceInCoins },
+  })
+
+  // Update creator earnings
+  const creatorAmountBrl = Number(post.ppvPrice) - ppvBrlFee
+  await db
+    .update(creatorProfiles)
+    .set({ totalEarnings: sql`${creatorProfiles.totalEarnings} + ${creatorAmountBrl}` })
+    .where(eq(creatorProfiles.userId, post.creatorId))
+
+  return { unlocked: true, fancoinsSpent: priceInCoins, newBalance }
+}
+
+/**
+ * Credit creator earnings as FanCoins from external payments (MP subscriptions, PPV via MP).
+ * Converts BRL creator amount (already minus platform fee) to FanCoins using dynamic rate.
+ */
+export async function creditEarnings(
+  creatorId: string,
+  creatorAmountBrl: number,
+  type: 'ppv_received' | 'subscription_earned' | 'affiliate_commission',
+  description: string,
+  referenceId?: string,
+) {
+  const coinsEarned = await brlToFancoins(creatorAmountBrl)
+  if (coinsEarned <= 0) return { credited: 0, newBalance: 0 }
+
+  // Ensure wallet exists
+  await getWallet(creatorId)
+
+  // Atomic credit
+  const [updated] = await db
+    .update(fancoinWallets)
+    .set({
+      balance: sql`${fancoinWallets.balance} + ${coinsEarned}`,
+      totalEarned: sql`${fancoinWallets.totalEarned} + ${coinsEarned}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(fancoinWallets.userId, creatorId))
+    .returning({ balance: fancoinWallets.balance })
+
+  const newBalance = Number(updated?.balance ?? 0)
+
+  await db.insert(fancoinTransactions).values({
+    userId: creatorId,
+    type,
+    amount: coinsEarned,
+    balanceAfter: newBalance,
+    referenceId,
+    description,
+  })
+
+  // Also update BRL totalEarnings on creator profile
+  await db
+    .update(creatorProfiles)
+    .set({ totalEarnings: sql`${creatorProfiles.totalEarnings} + ${creatorAmountBrl}` })
+    .where(eq(creatorProfiles.userId, creatorId))
+
+  return { credited: coinsEarned, newBalance }
 }
 
 export async function rewardEngagement(userId: string, type: string, amount: number) {

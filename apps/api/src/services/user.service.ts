@@ -1,9 +1,9 @@
 import { eq, and, gt, sql } from 'drizzle-orm'
-import { users, userSettings, creatorProfiles, userGamification, fancoinWallets, follows, posts, profileViewLogs } from '@myfans/database'
+import { users, userSettings, creatorProfiles, subscriptionTiers, subscriptionPromos, userGamification, fancoinWallets, follows, posts, profileViewLogs } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import { hashPassword, verifyPassword } from '../utils/password'
-import type { UpdateProfileInput, UpdateSettingsInput } from '@myfans/shared'
+import type { UpdateProfileInput, UpdateSettingsInput } from '@fandreams/shared'
 
 export async function getProfile(userId: string) {
   const [user] = await db
@@ -49,14 +49,29 @@ export async function getPublicProfile(username: string, viewerUserId?: string, 
 
   if (!user) throw new AppError('NOT_FOUND', 'Usuario nao encontrado', 404)
 
-  let creator = null
+  let creator: any = null
   // Always try to fetch creator profile (admin users can also be creators)
   const [profile] = await db
     .select()
     .from(creatorProfiles)
     .where(eq(creatorProfiles.userId, user.id))
     .limit(1)
-  creator = profile || null
+
+  if (profile) {
+    const tiers = await db
+      .select()
+      .from(subscriptionTiers)
+      .where(eq(subscriptionTiers.creatorId, user.id))
+      .orderBy(subscriptionTiers.sortOrder)
+
+    const promos = await db
+      .select()
+      .from(subscriptionPromos)
+      .where(and(eq(subscriptionPromos.creatorId, user.id), eq(subscriptionPromos.isActive, true)))
+      .orderBy(subscriptionPromos.durationDays)
+
+    creator = { ...profile, tiers, promos }
+  }
 
   const [gamification] = await db
     .select()

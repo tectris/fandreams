@@ -1,8 +1,95 @@
-import { eq, desc, and, or, sql, inArray, gt } from 'drizzle-orm'
-import { posts, postMedia, postLikes, postComments, postBookmarks, subscriptions, users, creatorProfiles, fancoinTransactions, postViews } from '@myfans/database'
+import { eq, desc, and, or, sql, inArray, gt, like } from 'drizzle-orm'
+import { posts, postMedia, postLikes, postComments, postBookmarks, subscriptions, users, creatorProfiles, fancoinTransactions, postViews, payments, follows } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
-import type { CreatePostInput, UpdatePostInput } from '@myfans/shared'
+import type { CreatePostInput, UpdatePostInput } from '@fandreams/shared'
+import { customAlphabet } from 'nanoid'
+import { getThumbnailUrl } from './bunny.service'
+import { createNotification } from './notification.service'
+
+const generateShortCode = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 8)
+
+/** Extract Bunny video GUID from either a full HLS URL or a raw GUID.
+ *  e.g. "https://cdn.example.com/abc-123/playlist.m3u8" → "abc-123"
+ *       "abc-123" → "abc-123" */
+function extractVideoGuid(keyOrUrl: string): string {
+  if (keyOrUrl.startsWith('http')) {
+    try {
+      const parts = new URL(keyOrUrl).pathname.split('/').filter(Boolean)
+      if (parts.length > 0) return parts[0]
+    } catch {}
+  }
+  return keyOrUrl
+}
+
+/** Enrich video media items: construct thumbnailUrl when missing or broken.
+ *  Broken URLs occur when a full HLS URL was passed to getThumbnailUrl,
+ *  producing double-nested CDN URLs like https://cdn/https://cdn/guid/... */
+function enrichMediaThumbnails<T extends { mediaType: string; storageKey: string; thumbnailUrl: string | null }>(media: T[]): T[] {
+  return media.map((m) => {
+    if (m.mediaType === 'video' && m.storageKey) {
+      const isMissing = !m.thumbnailUrl
+      const isBroken = m.thumbnailUrl && (m.thumbnailUrl.match(/:\/\//g) || []).length > 1
+      if (isMissing || isBroken) {
+        return { ...m, thumbnailUrl: getThumbnailUrl(extractVideoGuid(m.storageKey)) }
+      }
+    }
+    return m
+  })
+}
+
+/** Batch-generate shortCodes for any posts that are missing one. Mutates the array in place. */
+async function ensureShortCodes<T extends { id: string; shortCode: string | null }>(rows: T[]): Promise<T[]> {
+  const missing = rows.filter((r) => !r.shortCode)
+  if (missing.length === 0) return rows
+  for (const row of missing) {
+    const code = generateShortCode()
+    await db.update(posts).set({ shortCode: code }).where(eq(posts.id, row.id))
+    ;(row as any).shortCode = code
+  }
+  return rows
+}
+
+/** Notify all followers and active subscribers of a new post (fire-and-forget). */
+async function notifyFollowersOfNewPost(creatorId: string, postId: string, contentText?: string) {
+  const [creator] = await db
+    .select({ displayName: users.displayName, username: users.username })
+    .from(users)
+    .where(eq(users.id, creatorId))
+    .limit(1)
+  if (!creator) return
+
+  const name = creator.displayName || creator.username || 'Criador'
+
+  // Get unique user IDs from both followers and active subscribers
+  const followerRows = await db
+    .select({ userId: follows.followerId })
+    .from(follows)
+    .where(eq(follows.followingId, creatorId))
+  const subscriberRows = await db
+    .select({ userId: subscriptions.fanId })
+    .from(subscriptions)
+    .where(and(eq(subscriptions.creatorId, creatorId), eq(subscriptions.status, 'active')))
+
+  const userIds = new Set([
+    ...followerRows.map((r) => r.userId),
+    ...subscriberRows.map((r) => r.userId),
+  ])
+  // Don't notify the creator themselves
+  userIds.delete(creatorId)
+
+  const preview = contentText ? contentText.slice(0, 100) : undefined
+
+  for (const userId of userIds) {
+    await createNotification(
+      userId,
+      'new_post',
+      `${name} publicou um novo post`,
+      preview,
+      { postId, creatorId, creatorUsername: creator.username },
+    )
+  }
+}
 
 export async function createPost(creatorId: string, input: CreatePostInput) {
   // Block media upload for users without KYC verification (admins bypass)
@@ -26,6 +113,7 @@ export async function createPost(creatorId: string, input: CreatePostInput) {
     .insert(posts)
     .values({
       creatorId,
+      shortCode: generateShortCode(),
       contentText: input.contentText,
       postType: input.postType,
       visibility: input.visibility,
@@ -43,11 +131,30 @@ export async function createPost(creatorId: string, input: CreatePostInput) {
         mediaType: m.mediaType,
         storageKey: m.key,
         sortOrder: i,
+        // For videos, construct Bunny CDN thumbnail URL from the video GUID
+        ...(m.mediaType === 'video' ? { thumbnailUrl: getThumbnailUrl(extractVideoGuid(m.key)) } : {}),
       })
     }
   }
 
+  // Notify followers and subscribers asynchronously (fire-and-forget)
+  notifyFollowersOfNewPost(creatorId, post.id, input.contentText).catch((err) =>
+    console.error('Error notifying followers of new post:', err),
+  )
+
   return post
+}
+
+export async function getPostByShortCode(shortCode: string, viewerId?: string) {
+  const [post] = await db
+    .select()
+    .from(posts)
+    .where(eq(posts.shortCode, shortCode))
+    .limit(1)
+
+  if (!post) throw new AppError('NOT_FOUND', 'Post nao encontrado', 404)
+
+  return resolvePostDetails(post, viewerId)
 }
 
 export async function getPost(postId: string, viewerId?: string) {
@@ -59,16 +166,28 @@ export async function getPost(postId: string, viewerId?: string) {
 
   if (!post) throw new AppError('NOT_FOUND', 'Post nao encontrado', 404)
 
+  return resolvePostDetails(post, viewerId)
+}
+
+async function resolvePostDetails(post: typeof posts.$inferSelect, viewerId?: string) {
+  // Lazily generate shortCode for existing posts that don't have one
+  if (!post.shortCode) {
+    const code = generateShortCode()
+    await db.update(posts).set({ shortCode: code }).where(eq(posts.id, post.id))
+    post = { ...post, shortCode: code }
+  }
+
   // Hidden posts are only visible to their creator
   if (!post.isVisible && viewerId !== post.creatorId) {
     throw new AppError('NOT_FOUND', 'Post nao encontrado', 404)
   }
 
-  const media = await db
+  const rawMedia = await db
     .select()
     .from(postMedia)
-    .where(eq(postMedia.postId, postId))
+    .where(eq(postMedia.postId, post.id))
     .orderBy(postMedia.sortOrder)
+  const media = enrichMediaThumbnails(rawMedia)
 
   const [creator] = await db
     .select({
@@ -89,6 +208,20 @@ export async function getPost(postId: string, viewerId?: string) {
   if (viewerId) {
     if (viewerId === post.creatorId) {
       hasAccess = true
+    } else if (post.visibility === 'ppv') {
+      const [ppvPayment] = await db
+        .select({ id: payments.id })
+        .from(payments)
+        .where(
+          and(
+            eq(payments.userId, viewerId),
+            eq(payments.type, 'ppv'),
+            eq(payments.status, 'completed'),
+            sql`${payments.metadata}->>'postId' = ${post.id}`,
+          ),
+        )
+        .limit(1)
+      hasAccess = !!ppvPayment
     } else if (!hasAccess) {
       const [sub] = await db
         .select()
@@ -107,19 +240,19 @@ export async function getPost(postId: string, viewerId?: string) {
     const [like] = await db
       .select()
       .from(postLikes)
-      .where(and(eq(postLikes.userId, viewerId), eq(postLikes.postId, postId)))
+      .where(and(eq(postLikes.userId, viewerId), eq(postLikes.postId, post.id)))
       .limit(1)
     isLiked = !!like
 
     const [bookmark] = await db
       .select()
       .from(postBookmarks)
-      .where(and(eq(postBookmarks.userId, viewerId), eq(postBookmarks.postId, postId)))
+      .where(and(eq(postBookmarks.userId, viewerId), eq(postBookmarks.postId, post.id)))
       .limit(1)
     isBookmarked = !!bookmark
   }
 
-  await db.update(posts).set({ viewCount: sql`${posts.viewCount} + 1` }).where(eq(posts.id, postId))
+  await db.update(posts).set({ viewCount: sql`${posts.viewCount} + 1` }).where(eq(posts.id, post.id))
 
   return {
     ...post,
@@ -164,6 +297,7 @@ export async function getFeed(userId: string, page = 1, limit = 20) {
   const feedPosts = await db
     .select({
       id: posts.id,
+      shortCode: posts.shortCode,
       creatorId: posts.creatorId,
       contentText: posts.contentText,
       postType: posts.postType,
@@ -187,11 +321,14 @@ export async function getFeed(userId: string, page = 1, limit = 20) {
     .limit(limit)
     .offset(offset)
 
+  await ensureShortCodes(feedPosts)
+
   const postIds = feedPosts.map((p) => p.id)
-  const allMedia =
+  const allMedia = enrichMediaThumbnails(
     postIds.length > 0
       ? await db.select().from(postMedia).where(inArray(postMedia.postId, postIds)).orderBy(postMedia.sortOrder)
-      : []
+      : [],
+  )
 
   const userLikes =
     postIds.length > 0
@@ -237,13 +374,48 @@ export async function getFeed(userId: string, page = 1, limit = 20) {
     }
   }
 
-  const postsWithMedia = feedPosts.map((post) => ({
-    ...post,
-    media: allMedia.filter((m) => m.postId === post.id),
-    isLiked: likedPostIds.has(post.id),
-    isBookmarked: bookmarkedPostIds.has(post.id),
-    tipSent: tipsByPostId.get(post.id) || null,
-  }))
+  // Check PPV unlocks for PPV posts
+  const ppvPostIds = feedPosts.filter((p) => p.visibility === 'ppv').map((p) => p.id)
+  const ppvUnlockedIds = new Set<string>()
+  if (ppvPostIds.length > 0) {
+    const ppvPayments = await db
+      .select({ metadata: payments.metadata })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.userId, userId),
+          eq(payments.type, 'ppv'),
+          eq(payments.status, 'completed'),
+        ),
+      )
+    for (const p of ppvPayments) {
+      const postId = (p.metadata as any)?.postId
+      if (postId && ppvPostIds.includes(postId)) ppvUnlockedIds.add(postId)
+    }
+  }
+
+  const subscribedCreatorIds = new Set(creatorIds)
+
+  const postsWithMedia = feedPosts.map((post) => {
+    const isOwn = post.creatorId === userId
+    const isSubscribed = subscribedCreatorIds.has(post.creatorId)
+    const isPublic = post.visibility === 'public'
+    let hasAccess = isOwn || isSubscribed || isPublic
+    if (!hasAccess && post.visibility === 'ppv') {
+      hasAccess = ppvUnlockedIds.has(post.id)
+    }
+    const postMedia = allMedia.filter((m) => m.postId === post.id)
+    return {
+      ...post,
+      media: hasAccess
+        ? postMedia
+        : postMedia.map((m) => ({ ...m, storageKey: m.isPreview ? m.storageKey : null })),
+      hasAccess,
+      isLiked: likedPostIds.has(post.id),
+      isBookmarked: bookmarkedPostIds.has(post.id),
+      tipSent: tipsByPostId.get(post.id) || null,
+    }
+  })
 
   return { posts: postsWithMedia, total: feedPosts.length }
 }
@@ -254,6 +426,7 @@ export async function getPublicFeed(page = 1, limit = 20) {
   const feedPosts = await db
     .select({
       id: posts.id,
+      shortCode: posts.shortCode,
       creatorId: posts.creatorId,
       contentText: posts.contentText,
       postType: posts.postType,
@@ -274,15 +447,19 @@ export async function getPublicFeed(page = 1, limit = 20) {
     .limit(limit)
     .offset(offset)
 
+  await ensureShortCodes(feedPosts)
+
   const postIds = feedPosts.map((p) => p.id)
-  const allMedia =
+  const allMedia = enrichMediaThumbnails(
     postIds.length > 0
       ? await db.select().from(postMedia).where(inArray(postMedia.postId, postIds))
-      : []
+      : [],
+  )
 
   const postsWithMedia = feedPosts.map((post) => ({
     ...post,
     media: allMedia.filter((m) => m.postId === post.id),
+    hasAccess: true,
   }))
 
   return { posts: postsWithMedia, total: feedPosts.length }
@@ -292,15 +469,19 @@ export async function getCreatorPosts(creatorId: string, viewerId?: string, page
   const offset = (page - 1) * limit
   const isOwner = viewerId === creatorId
 
+  // For non-owners: show all visible, non-archived posts (public + protected)
+  // Protected posts will be returned with hasAccess: false and restricted media
   const conditions = [eq(posts.creatorId, creatorId), eq(posts.isArchived, false)]
   if (!isOwner) {
-    conditions.push(eq(posts.visibility, 'public'))
     conditions.push(eq(posts.isVisible, true))
+    // Non-owners see public posts, subscribers also see subscriber/ppv posts
+    // The access control (locked overlay) is handled client-side via hasAccess
   }
 
   const feedPosts = await db
     .select({
       id: posts.id,
+      shortCode: posts.shortCode,
       creatorId: posts.creatorId,
       contentText: posts.contentText,
       postType: posts.postType,
@@ -324,11 +505,31 @@ export async function getCreatorPosts(creatorId: string, viewerId?: string, page
     .limit(limit)
     .offset(offset)
 
+  await ensureShortCodes(feedPosts)
+
   const postIds = feedPosts.map((p) => p.id)
-  const allMedia =
+  const allMedia = enrichMediaThumbnails(
     postIds.length > 0
       ? await db.select().from(postMedia).where(inArray(postMedia.postId, postIds)).orderBy(postMedia.sortOrder)
-      : []
+      : [],
+  )
+
+  // Check subscription status for non-owner viewers
+  let hasSubscription = false
+  if (viewerId && !isOwner) {
+    const [sub] = await db
+      .select()
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.fanId, viewerId),
+          eq(subscriptions.creatorId, creatorId),
+          eq(subscriptions.status, 'active'),
+        ),
+      )
+      .limit(1)
+    hasSubscription = !!sub
+  }
 
   let likedPostIds = new Set<string>()
   let bookmarkedPostIds = new Set<string>()
@@ -372,15 +573,90 @@ export async function getCreatorPosts(creatorId: string, viewerId?: string, page
     }
   }
 
-  const postsWithMedia = feedPosts.map((post) => ({
-    ...post,
-    media: allMedia.filter((m) => m.postId === post.id),
-    isLiked: likedPostIds.has(post.id),
-    isBookmarked: bookmarkedPostIds.has(post.id),
-    tipSent: tipsByPostId.get(post.id) || null,
-  }))
+  // Check PPV unlocks
+  const ppvPostIds = feedPosts.filter((p) => p.visibility === 'ppv').map((p) => p.id)
+  const ppvUnlockedIds = new Set<string>()
+  if (viewerId && ppvPostIds.length > 0) {
+    const ppvPayments = await db
+      .select({ metadata: payments.metadata })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.userId, viewerId),
+          eq(payments.type, 'ppv'),
+          eq(payments.status, 'completed'),
+        ),
+      )
+    for (const p of ppvPayments) {
+      const postId = (p.metadata as any)?.postId
+      if (postId && ppvPostIds.includes(postId)) ppvUnlockedIds.add(postId)
+    }
+  }
+
+  const postsWithMedia = feedPosts.map((post) => {
+    const postIsPublic = post.visibility === 'public'
+    let hasAccess = isOwner || postIsPublic || hasSubscription
+    if (!hasAccess && post.visibility === 'ppv') {
+      hasAccess = ppvUnlockedIds.has(post.id)
+    }
+    const postMedia = allMedia.filter((m) => m.postId === post.id)
+
+    return {
+      ...post,
+      // For locked posts: only show preview media, null out full storageKeys
+      media: hasAccess
+        ? postMedia
+        : postMedia.map((m) => ({ ...m, storageKey: m.isPreview ? m.storageKey : null })),
+      hasAccess,
+      isLiked: likedPostIds.has(post.id),
+      isBookmarked: bookmarkedPostIds.has(post.id),
+      tipSent: tipsByPostId.get(post.id) || null,
+    }
+  })
+
+  // Debug: log post visibility breakdown
+  const visBreakdown = feedPosts.reduce((acc: Record<string, number>, p) => {
+    acc[p.visibility] = (acc[p.visibility] || 0) + 1
+    return acc
+  }, {})
+  console.log(`[getCreatorPosts] creatorId=${creatorId} viewerId=${viewerId || 'anonymous'} isOwner=${isOwner} total=${feedPosts.length} breakdown=`, visBreakdown)
 
   return { posts: postsWithMedia, total: feedPosts.length }
+}
+
+// Debug: raw count of posts by visibility for a creator
+export async function getCreatorPostsDebug(creatorId: string) {
+  const allPosts = await db
+    .select({
+      id: posts.id,
+      visibility: posts.visibility,
+      isVisible: posts.isVisible,
+      isArchived: posts.isArchived,
+      publishedAt: posts.publishedAt,
+      contentText: posts.contentText,
+    })
+    .from(posts)
+    .where(eq(posts.creatorId, creatorId))
+
+  const breakdown = allPosts.reduce((acc: Record<string, number>, p) => {
+    acc[p.visibility] = (acc[p.visibility] || 0) + 1
+    return acc
+  }, {})
+
+  return {
+    creatorId,
+    totalInDb: allPosts.length,
+    visibilityBreakdown: breakdown,
+    archivedCount: allPosts.filter((p) => p.isArchived).length,
+    hiddenCount: allPosts.filter((p) => !p.isVisible).length,
+    posts: allPosts.map((p) => ({
+      id: p.id,
+      visibility: p.visibility,
+      isVisible: p.isVisible,
+      isArchived: p.isArchived,
+      hasText: !!p.contentText,
+    })),
+  }
 }
 
 export async function updatePost(postId: string, creatorId: string, input: UpdatePostInput) {
@@ -537,4 +813,16 @@ export async function addMediaToPost(postId: string, mediaData: { mediaType: str
     .returning()
 
   return media
+}
+
+/** Update video media metadata after Bunny encoding completes.
+ *  Matches storageKey by exact GUID or full HLS URL containing the GUID. */
+export async function updateVideoMedia(videoGuid: string, data: { thumbnailUrl?: string; duration?: number; width?: number; height?: number }) {
+  await db
+    .update(postMedia)
+    .set(data)
+    .where(and(
+      or(eq(postMedia.storageKey, videoGuid), like(postMedia.storageKey, `%${videoGuid}%`)),
+      eq(postMedia.mediaType, 'video'),
+    ))
 }

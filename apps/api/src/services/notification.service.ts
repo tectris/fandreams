@@ -1,5 +1,5 @@
 import { eq, and, sql, desc } from 'drizzle-orm'
-import { notifications, users } from '@myfans/database'
+import { notifications, users } from '@fandreams/database'
 import { db } from '../config/database'
 
 export async function createNotification(userId: string, type: string, title: string, body?: string, data?: Record<string, unknown>) {
@@ -42,4 +42,12 @@ export async function markAllAsRead(userId: string) {
     .update(notifications)
     .set({ isRead: true, readAt: new Date() })
     .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)))
+}
+
+export async function deleteNotification(userId: string, notificationId: string) {
+  const [deleted] = await db
+    .delete(notifications)
+    .where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)))
+    .returning({ id: notifications.id })
+  return deleted
 }

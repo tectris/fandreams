@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ============================================================================
-MYFANS PLATFORM — EXTERNAL SECURITY SCANNER (PENTEST SCRIPT)
+FANDREAMS PLATFORM — EXTERNAL SECURITY SCANNER (PENTEST SCRIPT)
 ============================================================================
 
 Metodologias: OWASP Top 10 2021, OWASP API Security Top 10 2023, MITRE ATT&CK
@@ -12,15 +12,15 @@ Dependências (pip install):
     pip install requests aiohttp asyncio
 
 Uso:
-    python myfans_security_scanner.py --target https://api.fandreams.app
-    python myfans_security_scanner.py --target http://localhost:3001
+    python fandreams_security_scanner.py --target https://api.fandreams.app
+    python fandreams_security_scanner.py --target http://localhost:3001
 
 O script gera um relatório JSON + Markdown que deve ser trazido de volta
 ao prompt do Claude para consolidação com o teste interno.
 
 ============================================================================
 AVISO: Este script é para uso EXCLUSIVO em testes de segurança autorizados
-da plataforma MyFans. Uso não autorizado é ilegal.
+da plataforma FanDreams. Uso não autorizado é ilegal.
 ============================================================================
 """
 
@@ -58,7 +58,7 @@ except ImportError:
 # ============================================================================
 
 VERSION = "1.0.0"
-USER_AGENT = "MyFans-SecurityScanner/1.0"
+USER_AGENT = "FanDreams-SecurityScanner/1.0"
 MAX_WORKERS = 20
 REQUEST_TIMEOUT = 15
 
@@ -110,7 +110,7 @@ class ScanReport:
 
 
 class SecurityScanner:
-    """Scanner de segurança externo para a API MyFans."""
+    """Scanner de segurança externo para a API FanDreams."""
 
     def __init__(self, target: str, verbose: bool = False):
         self.target = target.rstrip('/')
@@ -423,7 +423,7 @@ class SecurityScanner:
         # Test 2: Weak secret attack (common secrets)
         weak_secrets = [
             'secret', 'jwt_secret', 'mysecret', 'password', 'key',
-            'myfans', 'myfans-secret', 'test', 'development',
+            'fandreams', 'fandreams-secret', 'test', 'development',
             'changeme', 'default', '123456', 'qwerty',
         ]
 
@@ -1351,9 +1351,9 @@ class SecurityScanner:
 
     def generate_markdown_report(self, report: ScanReport) -> str:
         md = []
-        md.append("# MyFans Platform — External Security Scan Report")
+        md.append("# FanDreams Platform — External Security Scan Report")
         md.append(f"\n**Target:** `{report.target}`")
-        md.append(f"**Scanner:** MyFans Security Scanner v{report.scanner_version}")
+        md.append(f"**Scanner:** FanDreams Security Scanner v{report.scanner_version}")
         md.append(f"**Date:** {report.scan_start}")
         md.append(f"**Metodologias:** OWASP Top 10 2021, OWASP API Security Top 10 2023, MITRE ATT&CK")
 
@@ -1413,7 +1413,7 @@ class SecurityScanner:
 
     def run_all(self) -> ScanReport:
         print("=" * 70)
-        print("  MYFANS PLATFORM — EXTERNAL SECURITY SCANNER v" + VERSION)
+        print("  FANDREAMS PLATFORM — EXTERNAL SECURITY SCANNER v" + VERSION)
         print(f"  Target: {self.target}")
         print(f"  Date: {datetime.now(timezone.utc).isoformat()}")
         print(f"  Methodology: OWASP Top 10, OWASP API Security, MITRE ATT&CK")
@@ -1471,13 +1471,13 @@ class SecurityScanner:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='MyFans Platform - External Security Scanner',
+        description='FanDreams Platform - External Security Scanner',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemplos:
-  python myfans_security_scanner.py --target https://api.fandreams.app
-  python myfans_security_scanner.py --target http://localhost:3001 --verbose
-  python myfans_security_scanner.py --target http://localhost:3001 --output ./report
+  python fandreams_security_scanner.py --target https://api.fandreams.app
+  python fandreams_security_scanner.py --target http://localhost:3001 --verbose
+  python fandreams_security_scanner.py --target http://localhost:3001 --output ./report
 
 AVISO: Use apenas em ambientes autorizados para testes de segurança.
         """

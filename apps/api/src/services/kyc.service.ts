@@ -1,7 +1,8 @@
 import { eq, desc } from 'drizzle-orm'
-import { users, kycDocuments } from '@myfans/database'
+import { users, kycDocuments } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
+import { sendKycApprovedEmail, sendKycRejectedEmail } from './email.service'
 
 export async function submitKyc(
   userId: string,
@@ -105,6 +106,22 @@ export async function reviewKyc(
     .update(users)
     .set({ kycStatus: newStatus, updatedAt: new Date() })
     .where(eq(users.id, doc.userId))
+
+  // Send KYC result email (non-blocking)
+  const [kycUser] = await db
+    .select({ email: users.email, displayName: users.displayName, username: users.username })
+    .from(users)
+    .where(eq(users.id, doc.userId))
+    .limit(1)
+
+  if (kycUser) {
+    const name = kycUser.displayName || kycUser.username || ''
+    if (approved) {
+      sendKycApprovedEmail(kycUser.email, name).catch((e) => console.error('Failed to send KYC approved email:', e))
+    } else {
+      sendKycRejectedEmail(kycUser.email, { displayName: name, reason: rejectedReason }).catch((e) => console.error('Failed to send KYC rejected email:', e))
+    }
+  }
 
   return updated
 }

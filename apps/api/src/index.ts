@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { secureHeaders } from 'hono/secure-headers'
 import { bodyLimit } from 'hono/body-limit'
+import { HTTPException } from 'hono/http-exception'
 import { serve } from '@hono/node-server'
 import { env } from './config/env'
 import { apiRateLimit } from './middleware/rateLimit'
@@ -25,6 +26,8 @@ import admin from './routes/admin'
 import paymentsRoute from './routes/payments'
 import withdrawals from './routes/withdrawals'
 import notificationsRoute from './routes/notifications'
+import messagesRoute from './routes/messages'
+import affiliatesRoute from './routes/affiliates'
 
 const app = new Hono().basePath('/api/v1')
 
@@ -68,9 +71,7 @@ if (env.NODE_ENV !== 'production') {
 app.use('*', logger())
 app.use('*', secureHeaders())
 
-// Body size limit: 1MB for JSON, file uploads handled separately
-app.use('*', bodyLimit({ maxSize: 1024 * 1024 }))
-
+// CORS must run before bodyLimit so error responses always include CORS headers
 app.use(
   '*',
   cors({
@@ -84,6 +85,18 @@ app.use(
     allowHeaders: ['Content-Type', 'Authorization'],
   }),
 )
+
+// Body size limit: 500MB for upload routes, 1MB for everything else
+const uploadLimit = bodyLimit({ maxSize: 500 * 1024 * 1024 })
+const defaultLimit = bodyLimit({ maxSize: 1024 * 1024 })
+
+app.use('*', async (c, next) => {
+  const path = new URL(c.req.url).pathname.replace(/^\/api\/v1/, '')
+  if (path.startsWith('/upload') || path.startsWith('/media') || path.startsWith('/video') || path.startsWith('/kyc')) {
+    return uploadLimit(c, next)
+  }
+  return defaultLimit(c, next)
+})
 
 // Global rate limit (100 req/min per IP, with in-memory fallback)
 app.use('*', apiRateLimit)
@@ -111,6 +124,8 @@ app.route('/admin', admin)
 app.route('/payments', paymentsRoute)
 app.route('/withdrawals', withdrawals)
 app.route('/notifications', notificationsRoute)
+app.route('/messages', messagesRoute)
+app.route('/affiliates', affiliatesRoute)
 
 // Health check — hide version in production
 app.get('/health', (c) => {
@@ -133,6 +148,13 @@ app.get('/.well-known/security.txt', (c) => {
 })
 
 app.onError((err, c) => {
+  // Handle Hono HTTPException (e.g. bodyLimit 413) with correct status code
+  if (err instanceof HTTPException) {
+    return c.json(
+      { success: false, error: { code: 'HTTP_ERROR', message: err.message } },
+      err.status,
+    )
+  }
   console.error('Unhandled error:', err)
   return c.json(
     {
@@ -151,7 +173,17 @@ app.notFound((c) => {
 })
 
 const port = Number(process.env.PORT) || env.PORT
-console.log(`MyFans API v2.4.0 running on 0.0.0.0:${port}`)
+console.log(`FanDreams API v2.4.0 running on 0.0.0.0:${port}`)
 serve({ fetch: app.fetch, port, hostname: '0.0.0.0' })
+
+// Periodic task: expire overdue subscriptions every 15 minutes
+import { expireOverdueSubscriptions } from './services/subscription.service'
+setInterval(async () => {
+  try {
+    await expireOverdueSubscriptions()
+  } catch (e) {
+    console.error('Error expiring subscriptions:', e)
+  }
+}, 15 * 60 * 1000)
 
 export default app

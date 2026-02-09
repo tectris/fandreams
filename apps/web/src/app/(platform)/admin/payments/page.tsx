@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { formatCurrency } from '@/lib/utils'
 import {
   Settings, Shield, AlertTriangle, CheckCircle2, XCircle,
-  Clock, ArrowDownToLine, DollarSign, Loader2,
+  Clock, ArrowDownToLine, DollarSign, Loader2, Gift, Coins,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -29,6 +29,10 @@ const DEFAULT_SETTINGS = {
   cooldown_hours: 24,
   min_payout: 50,
   fancoin_to_brl: 0.01,
+  platform_fee_percent: 8,
+  creator_bonus_enabled: false,
+  creator_bonus_coins: 1000,
+  creator_bonus_required_subs: 1,
 }
 
 function SettingsTab({ providers, loadingProviders, settings, loadingSettings, settingsMutation }: {
@@ -89,6 +93,159 @@ function SettingsTab({ providers, loadingProviders, settings, loadingSettings, s
         </CardContent>
       </Card>
 
+      {/* Platform Fee */}
+      <Card>
+        <CardHeader>
+          <h2 className="font-bold flex items-center gap-2">
+            <DollarSign className="w-5 h-5 text-primary" /> Taxa da Plataforma
+          </h2>
+          <p className="text-xs text-muted mt-1">Percentual retido pela FanDreams em todas as transacoes (assinaturas, tips, PPV, compra de FanCoins)</p>
+        </CardHeader>
+        <CardContent>
+          {loadingSettings ? (
+            <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+          ) : (
+            <form className="space-y-4" onSubmit={(e) => {
+              e.preventDefault()
+              const form = new FormData(e.currentTarget)
+              const fee = Number(form.get('platform_fee_percent'))
+              if (fee < 0 || fee > 50) {
+                return
+              }
+              settingsMutation.mutate({ platform_fee_percent: fee })
+            }}>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <Input
+                    label="Taxa da plataforma (%)"
+                    name="platform_fee_percent"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="50"
+                    defaultValue={effectiveSettings.platform_fee_percent}
+                  />
+                </div>
+                <div className="pt-5">
+                  <Button type="submit" loading={settingsMutation.isPending}>
+                    Salvar
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted">
+                Atual: <span className="font-bold text-foreground">{effectiveSettings.platform_fee_percent}%</span> — Criador recebe <span className="font-bold text-success">{100 - effectiveSettings.platform_fee_percent}%</span> de cada transacao
+              </p>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* FanCoin Value */}
+      <Card>
+        <CardHeader>
+          <h2 className="font-bold flex items-center gap-2">
+            <Coins className="w-5 h-5 text-primary" /> Valor do FanCoin
+          </h2>
+          <p className="text-xs text-muted mt-1">Quanto vale 1 FanCoin em Reais. Afeta todas as conversoes (compras, ganhos, saques)</p>
+        </CardHeader>
+        <CardContent>
+          {loadingSettings ? (
+            <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+          ) : (
+            <form className="space-y-4" onSubmit={(e) => {
+              e.preventDefault()
+              const form = new FormData(e.currentTarget)
+              const val = Number(form.get('fancoin_to_brl'))
+              if (val <= 0 || val > 1) return
+              settingsMutation.mutate({ fancoin_to_brl: val })
+            }}>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <Input
+                    label="Valor de 1 FanCoin (R$)"
+                    name="fancoin_to_brl"
+                    type="number"
+                    step="0.001"
+                    min="0.001"
+                    max="1"
+                    defaultValue={effectiveSettings.fancoin_to_brl}
+                  />
+                </div>
+                <div className="pt-5">
+                  <Button type="submit" loading={settingsMutation.isPending}>
+                    Salvar
+                  </Button>
+                </div>
+              </div>
+              <div className="p-3 bg-surface-light rounded-md text-xs text-muted space-y-1">
+                <p>1 FanCoin = <span className="font-bold text-foreground">R${effectiveSettings.fancoin_to_brl}</span></p>
+                <p>R$1,00 = <span className="font-bold text-foreground">{Math.round(1 / (effectiveSettings.fancoin_to_brl || 0.01)).toLocaleString()} FanCoins</span></p>
+                <p>R$100,00 = <span className="font-bold text-foreground">{Math.round(100 / (effectiveSettings.fancoin_to_brl || 0.01)).toLocaleString()} FanCoins</span></p>
+              </div>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Creator Bonus Configuration */}
+      <Card>
+        <CardHeader>
+          <h2 className="font-bold flex items-center gap-2">
+            <Gift className="w-5 h-5 text-primary" /> Bonus de Criador
+          </h2>
+          <p className="text-xs text-muted mt-1">Configure o bonus de boas-vindas em FanCoins para novos criadores</p>
+        </CardHeader>
+        <CardContent>
+          {loadingSettings ? (
+            <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+          ) : (
+            <form className="space-y-4" onSubmit={(e) => {
+              e.preventDefault()
+              const form = new FormData(e.currentTarget)
+              settingsMutation.mutate({
+                creator_bonus_enabled: form.get('creator_bonus_enabled') === 'on',
+                creator_bonus_coins: Number(form.get('creator_bonus_coins')),
+                creator_bonus_required_subs: Number(form.get('creator_bonus_required_subs')),
+              })
+            }}>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="creator_bonus_enabled"
+                  defaultChecked={effectiveSettings.creator_bonus_enabled}
+                  className="w-4 h-4 rounded border-border text-primary"
+                />
+                <span className="text-sm font-medium">Ativar bonus de boas-vindas</span>
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="Quantidade de FanCoins"
+                  name="creator_bonus_coins"
+                  type="number"
+                  min="100"
+                  max="100000"
+                  defaultValue={effectiveSettings.creator_bonus_coins}
+                />
+                <Input
+                  label="Assinantes necessarios para resgatar"
+                  name="creator_bonus_required_subs"
+                  type="number"
+                  min="1"
+                  max="100"
+                  defaultValue={effectiveSettings.creator_bonus_required_subs}
+                />
+              </div>
+              <p className="text-xs text-muted">
+                Bonus: <span className="font-bold text-foreground">{effectiveSettings.creator_bonus_coins?.toLocaleString() || '1.000'} FanCoins</span> (R${((effectiveSettings.creator_bonus_coins || 1000) * (effectiveSettings.fancoin_to_brl || 0.01)).toFixed(2)}) — Resgatavel apos <span className="font-bold text-foreground">{effectiveSettings.creator_bonus_required_subs || 1}</span> assinante(s)
+              </p>
+              <Button type="submit" loading={settingsMutation.isPending}>
+                Salvar Bonus
+              </Button>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Anti-fraud & Withdrawal Settings */}
       <Card>
         <CardHeader>
@@ -110,7 +267,6 @@ function SettingsTab({ providers, loadingProviders, settings, loadingSettings, s
                 max_daily_amount: Number(form.get('max_daily_amount')),
                 cooldown_hours: Number(form.get('cooldown_hours')),
                 min_payout: Number(form.get('min_payout')),
-                fancoin_to_brl: Number(form.get('fancoin_to_brl')),
               })
             }}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -119,7 +275,6 @@ function SettingsTab({ providers, loadingProviders, settings, loadingSettings, s
                 <Input label="Max saques por dia" name="max_daily_withdrawals" type="number" defaultValue={effectiveSettings.max_daily_withdrawals} />
                 <Input label="Max valor diario (R$)" name="max_daily_amount" type="number" step="0.01" defaultValue={effectiveSettings.max_daily_amount} />
                 <Input label="Cooldown entre saques (horas)" name="cooldown_hours" type="number" defaultValue={effectiveSettings.cooldown_hours} />
-                <Input label="Taxa FanCoin para BRL" name="fancoin_to_brl" type="number" step="0.001" defaultValue={effectiveSettings.fancoin_to_brl} />
               </div>
               {!settings && (
                 <div className="flex items-center gap-2 p-3 bg-warning/10 rounded text-xs text-warning">
@@ -147,8 +302,15 @@ export default function AdminPaymentsPage() {
   const [rejectReason, setRejectReason] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
 
-  if (user?.role !== 'admin') {
-    router.push('/feed')
+  const isAdmin = user?.role === 'admin'
+
+  useEffect(() => {
+    if (user && !isAdmin) {
+      router.push('/feed')
+    }
+  }, [user, isAdmin, router])
+
+  if (!isAdmin) {
     return null
   }
 

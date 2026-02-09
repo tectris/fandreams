@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { purchaseFancoinsSchema, FANCOIN_PACKAGES } from '@myfans/shared'
+import { purchaseFancoinsSchema, FANCOIN_PACKAGES } from '@fandreams/shared'
 import { validateBody } from '../middleware/validation'
 import { authMiddleware } from '../middleware/auth'
 import { financialRateLimit } from '../middleware/rateLimit'
@@ -8,17 +8,21 @@ import * as fancoinService from '../services/fancoin.service'
 import * as gamificationService from '../services/gamification.service'
 import * as notificationService from '../services/notification.service'
 import { db } from '../config/database'
-import { users } from '@myfans/database'
+import { users } from '@fandreams/database'
 import { eq } from 'drizzle-orm'
 import { success, error } from '../utils/response'
 import { AppError } from '../services/auth.service'
+import { getFancoinToBrl } from '../services/withdrawal.service'
 
 const fancoins = new Hono()
 
 fancoins.get('/wallet', authMiddleware, async (c) => {
   const { userId } = c.get('user')
-  const wallet = await fancoinService.getWallet(userId)
-  return success(c, wallet)
+  const [wallet, fancoinToBrl] = await Promise.all([
+    fancoinService.getWallet(userId),
+    getFancoinToBrl(),
+  ])
+  return success(c, { ...wallet, fancoinToBrl })
 })
 
 fancoins.get('/transactions', authMiddleware, async (c) => {
@@ -70,7 +74,7 @@ fancoins.post('/tip', authMiddleware, financialRateLimit, validateBody(tipSchema
         'tip_received',
         `${senderName} enviou ${body.amount} FanCoins!`,
         `@${sender?.username} enviou um tip de ${body.amount} FanCoins para voce.`,
-        { fromUserId: userId, amount: body.amount, referenceId: body.referenceId },
+        { fromUserId: userId, amount: body.amount, referenceId: body.referenceId, creatorUsername: sender?.username },
       )
     } catch (notifErr) {
       console.error('Failed to create tip notification:', notifErr)
