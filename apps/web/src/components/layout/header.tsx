@@ -60,6 +60,7 @@ export function Header() {
     queryKey: ['fancoin-wallet'],
     queryFn: () => api.get<{ balance: string }>('/fancoins/wallet'),
     enabled: isAuthenticated,
+    refetchInterval: 10000,
   })
 
   const { data: unreadData } = useQuery({

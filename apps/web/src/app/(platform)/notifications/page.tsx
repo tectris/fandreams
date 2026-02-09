@@ -173,12 +173,12 @@ function NotificationCard({
 
   return href ? (
     <Link href={href}>
-      <Card className={`transition-colors hover:border-primary/50 cursor-pointer ${!notif.isRead ? 'border-primary/30 bg-primary/5' : ''}`}>
+      <Card className={`transition-colors hover:border-border/80 cursor-pointer ${!notif.isRead ? 'bg-surface-light/50' : ''}`}>
         {cardContent}
       </Card>
     </Link>
   ) : (
-    <Card className={`transition-colors ${!notif.isRead ? 'border-primary/30 bg-primary/5' : ''}`}>
+    <Card className={`transition-colors ${!notif.isRead ? 'bg-surface-light/50' : ''}`}>
       {cardContent}
     </Card>
   )
