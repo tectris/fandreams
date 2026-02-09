@@ -203,22 +203,102 @@ Moeda: BRL hardcoded. Sem suporte multi-moeda.
 - **Hotmart**: Concorrente, não provedor. Taxa de 9.9% (valida que 8% do FanDreams é competitivo)
 - **Kiwify**: Brasil only, 8.99% + R$2.49. Sem API robusta
 
-### 2.3 Recomendação: Combinação Ideal
+### 2.3 ALERTA CRÍTICO: Políticas de Conteúdo Adulto
+
+Se o FanDreams inclui ou incluirá conteúdo adulto/NSFW, isso **muda completamente** a estratégia de pagamentos.
+
+#### Stripe - PROÍBE conteúdo adulto
+
+Stripe **proíbe explicitamente**:
+- "Adult services" (escorts, pay-per-view sexual, fetish services, adult live-chat)
+- "Pornography and other mature audience content" para fins de gratificação sexual
+- Conteúdo AI-generated adulto (adicionado em Jan/2024)
+
+Em 2024-2025, Stripe **endureceu** a fiscalização:
+- Cortou a WishTender (plataforma de wishlists de sex workers) com poucos dias de aviso
+- Pressionou o itch.io para desindexar conteúdo NSFW (junto com PayPal)
+
+**Exceção OnlyFans**: OnlyFans usa Stripe, mas processa **+$500M/mês** e negociou exceção única. Não se aplica a plataformas menores.
+
+#### MercadoPago - PROÍBE conteúdo adulto
+
+Proíbe explicitamente: pornografia, serviços de acompanhante, webcam adulta, dating services, agências de modelagem adulta. Violação = suspensão permanente sem aviso.
+
+#### PayPal - PROÍBE conteúdo adulto digital
+
+Permite apenas bens físicos adultos (US). Proíbe bens digitais adultos, serviços sexuais. Contas são congeladas sem aviso.
+
+#### Visa/Mastercard - Exigências Regulatórias (aplicam a TODOS os processadores)
+
+Independente do processador usado, as bandeiras de cartão exigem:
+- Verificação de idade de todos os criadores e pessoas retratadas
+- Documentação de consentimento escrito de todos os participantes
+- Revisão de conteúdo antes da publicação
+- Canais de reclamação/takedown
+- Monitoramento contínuo de compliance
+- Multas de **$25.000 por merchant** para violações (Visa VIRP)
+
+### 2.4 Processadores Especializados em Conteúdo Adulto
+
+Se o FanDreams terá conteúdo NSFW, estes são os processadores viáveis:
+
+#### CCBill (Líder do mercado adulto)
+
+| Item | Detalhe |
+|---|---|
+| **Usado por** | Fansly, OnlyFans (parcial) |
+| **Taxas** | 10.8-14.5% para conteúdo adulto; 3.9%+$0.55 para SFW |
+| **Rolling reserve** | ~30% |
+| **Registro MID** | ~$500 primeiro ano, ~$100 renovação anual |
+| **Assinaturas** | Sim, com billing automation |
+| **Compliance** | Lida com verificação de idade e compliance Visa/MC |
+
+#### Segpay
+
+| Item | Detalhe |
+|---|---|
+| **Taxas** | 4-15% para high-risk |
+| **Onboarding** | 24-72 horas (mais rápido do mercado) |
+| **Ideal para** | Streaming, cam sites, plataformas de criadores |
+
+#### Epoch
+
+| Item | Detalhe |
+|---|---|
+| **Diferencial** | IPSP - não precisa de merchant account separado |
+| **Ideal para** | Assinaturas, memberships, VOD |
+| **Experiência** | 20+ anos de especialização |
+
+#### Quem usa o quê (referência do mercado)
+
+| Plataforma | Processador Fan-Side | Payouts Criadores |
+|---|---|---|
+| **OnlyFans** | Stripe, CCBill, Merrick, Harris | ACH, Wire, PayPal |
+| **Fansly** | CCBill (primário) | ACH/SEPA, Skrill, Paxum |
+| **Fanvue** | Shift Holdings (in-house) | Bank, MassPay, Crypto |
+| **LoyalFans** | EU-based ("LoyalBills.com") | ACH, SEPA, Paxum, Crypto |
+| **Patreon** | Múltiplos (Visa/MC compliance) | Bank, PayPal, Payoneer |
+
+### 2.5 Recomendação Revisada: Arquitetura com Conteúdo Adulto
+
+#### Cenário A: FanDreams SEM conteúdo adulto
+
+Se a plataforma for exclusivamente SFW:
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                  ARQUITETURA DE PAGAMENTOS           │
+│         ARQUITETURA DE PAGAMENTOS (SFW)             │
 ├─────────────────────────────────────────────────────┤
 │                                                     │
 │  PRIMÁRIO: Stripe Connect                           │
 │  ├── US/Europa: Cards, ACH, SEPA, Apple/Google Pay  │
 │  ├── Brasil: PIX, Boleto, Cards                     │
 │  ├── México: OXXO, SPEI, Cards                      │
-│  └── Assinaturas: Stripe Billing (todos os mercados)│
+│  └── Assinaturas: Stripe Billing                    │
 │                                                     │
 │  BRASIL (backup): MercadoPago                       │
 │  ├── PIX com menor taxa (~0.99%)                    │
-│  └── Wallet MercadoPago (confiança do consumidor)   │
+│  └── Wallet MercadoPago                             │
 │                                                     │
 │  INTERNACIONAL: PayPal                              │
 │  └── Opção alternativa p/ US/EU (trust signal)      │
@@ -226,13 +306,50 @@ Moeda: BRL hardcoded. Sem suporte multi-moeda.
 │  CRYPTO: NOWPayments                                │
 │  └── BTC, USDT, ETH                                 │
 │                                                     │
-│  FUTURO: dLocal (quando houver volume em LatAm ES)  │
-│  └── Argentina, Colômbia, Chile, Peru               │
+└─────────────────────────────────────────────────────┘
+```
+
+#### Cenário B: FanDreams COM conteúdo adulto (recomendado se aplicável)
+
+```
+┌─────────────────────────────────────────────────────┐
+│         ARQUITETURA DE PAGAMENTOS (NSFW)            │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  CONTEÚDO NSFW: CCBill ou Segpay (primário)         │
+│  ├── Assinaturas de criadores adultos               │
+│  ├── PPV de conteúdo adulto                         │
+│  ├── Tips para criadores adultos                    │
+│  └── Taxas: 10.8-14.5% (custo do segmento)         │
+│                                                     │
+│  CONTEÚDO SFW: MercadoPago (Brasil)                 │
+│  ├── PIX (~0.99%)                                   │
+│  ├── Cartões                                        │
+│  └── Assinaturas SFW (Preapproval)                  │
+│                                                     │
+│  CONTEÚDO SFW INTERNACIONAL: PayPal / Stripe        │
+│  ├── Cards, Apple/Google Pay (Stripe)               │
+│  └── PayPal wallet (trust signal)                   │
+│                                                     │
+│  CRYPTO (qualquer conteúdo): NOWPayments            │
+│  └── BTC, USDT, ETH (censorship-resistant)          │
+│                                                     │
+│  REDUNDÂNCIA: 2+ processadores adultos              │
+│  └── Se um cair, redireciona automaticamente        │
 │                                                     │
 └─────────────────────────────────────────────────────┘
 ```
 
-### 2.4 Comparação de Custos (Assinatura de R$50)
+**Pontos importantes do Cenário B:**
+
+1. **Separação obrigatória**: O sistema precisa classificar conteúdo como SFW/NSFW e rotear para o processador correto
+2. **Taxas mais altas**: Budget de 10-15% no processador (vs. 2.9% do Stripe). Isso impacta a margem - considerar ajustar a taxa da plataforma para NSFW
+3. **Compliance Visa/MC**: Obrigatório independente do processador - KYC, verificação de idade, consent forms, content review, takedown process
+4. **Orquestração de pagamentos**: Prática padrão no segmento adulto - ter 2+ processadores para redundância caso um bloqueie a conta
+5. **Chargebacks**: Segmento adulto tem 5-7x mais chargebacks. Reservar rolling reserve (~30% em CCBill)
+6. **Crypto como hedge**: NOWPayments (já integrado) serve como opção censorship-resistant
+
+### 2.6 Comparação de Custos (Assinatura de R$50)
 
 | Provedor | Taxa | Criador recebe (após 8% plataforma) |
 |---|---|---|
@@ -241,27 +358,24 @@ Moeda: BRL hardcoded. Sem suporte multi-moeda.
 | MercadoPago Cartão | ~R$2.00-2.50 (4-5%) | R$43.50-44.00 |
 | Stripe Cartão (BR) | ~R$2.50 (3.99%+R$0.50) | R$43.50 |
 | PayPal | ~R$2.25 + markup FX | R$43.26 |
+| **CCBill (NSFW)** | **~R$5.40-7.25 (10.8-14.5%)** | **R$38.75-40.60** |
+| **Segpay (NSFW)** | **~R$2.00-7.50 (4-15%)** | **R$38.50-44.00** |
 
-### 2.5 Plano de Migração
+### 2.7 Plano de Migração
 
-**Fase 1 - Adicionar Stripe Connect**
-- Integrar Stripe Connect com Express accounts para criadores
-- Adicionar como provedor ao lado dos existentes
-- Implementar suporte multi-moeda no schema de pagamentos
-- Migrar novas assinaturas para Stripe Billing
+**Se SFW:**
 
-**Fase 2 - Roteamento Inteligente**
-- Detectar localização/moeda do usuário
-- BR: PIX (MP ou Stripe), Cartão (Stripe ou MP)
-- MX: OXXO, SPEI (Stripe)
-- US/EU: Cards, Apple Pay (Stripe), PayPal
-- Crypto: NOWPayments
+**Fase 1** - Adicionar Stripe Connect (Express accounts, Stripe Billing, multi-moeda)
+**Fase 2** - Roteamento Inteligente (BR: MP/Stripe, MX: Stripe, US/EU: Stripe/PayPal)
+**Fase 3** - Expansão LatAm (dLocal se volume justificar)
 
-**Fase 3 - Expansão LatAm**
-- Adicionar dLocal para métodos locais hispânicos (se demanda justificar)
-- Implementar roteamento de payouts por país do criador
+**Se NSFW (ou misto):**
 
-### 2.6 Mudanças no Código para Multi-Moeda
+**Fase 1** - Integrar CCBill/Segpay + classificação SFW/NSFW no conteúdo
+**Fase 2** - Manter MP + PayPal para SFW, NSFW vai para processador adulto
+**Fase 3** - Adicionar Stripe somente para SFW internacional + expansão
+
+### 2.8 Mudanças no Código para Multi-Moeda
 
 Arquivos que precisam de alteração:
 - `packages/database/schema/payments.ts` - Campo currency precisa aceitar USD, EUR, MXN etc.
@@ -398,16 +512,19 @@ Para referência, aqui estão **todas** as variáveis que a API necessita (confo
 
 ### Curto Prazo (próximas sprints)
 - [ ] Configurar next-intl e extrair strings do pt-BR
-- [ ] Iniciar integração com Stripe Connect
-- [ ] Criar contas Express para criadores
+- [ ] **Definir se a plataforma terá conteúdo adulto/NSFW** (decisão que muda toda a estratégia de pagamentos)
+- [ ] Se SFW: Iniciar integração com Stripe Connect
+- [ ] Se NSFW: Aplicar para merchant account em CCBill ou Segpay
+- [ ] Implementar classificação SFW/NSFW no conteúdo (se misto)
 
 ### Médio Prazo
 - [ ] Completar tradução para es e en
 - [ ] Implementar roteamento inteligente de pagamentos por região
-- [ ] Migrar assinaturas novas para Stripe Billing
 - [ ] Suporte multi-moeda no sistema de FanCoins
+- [ ] Se NSFW: Compliance Visa/MC (age verification, consent forms, content review, takedown)
 
 ### Longo Prazo
 - [ ] Avaliar dLocal para LatAm hispânica (se houver demanda)
 - [ ] SEO multi-idioma (hreflang, sitemap por idioma)
 - [ ] Adaptar landing page por mercado
+- [ ] Orquestração de pagamentos (múltiplos processadores para redundância)
