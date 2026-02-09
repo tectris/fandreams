@@ -66,6 +66,7 @@ class TR:
 @dataclass
 class Report:
     target: str; scan_time: str = ""; user_id: str = ""; user_role: str = ""
+    profile: str = ""
     results: list = field(default_factory=list)
     summary: dict = field(default_factory=dict)
 
@@ -760,10 +761,12 @@ def test_headers(base, rpt):
 
 def gen_md(rpt):
     s = rpt.summary
+    profile_str = f" — Perfil {rpt.profile.upper()}" if rpt.profile else ""
     lines = [
-        "# FanDreams — Full Platform Security Scan Report",
+        f"# FanDreams — Full Platform Security Scan Report{profile_str}",
         "", f"**Data:** {rpt.scan_time}", f"**Target:** `{rpt.target}`",
         f"**User:** `{rpt.user_id}` (role: {rpt.user_role})",
+        f"**Profile:** {rpt.profile.upper() if rpt.profile else 'auto'}",
         f"**Scanner:** FanDreams Full Security Scanner v2.0",
         "", "---", "", "## Resumo Executivo", "",
         "| Metrica | Valor |", "|---------|-------|",
@@ -792,6 +795,7 @@ def gen_json(rpt):
     return {
         "scan_time": rpt.scan_time, "target": rpt.target,
         "user_id": rpt.user_id, "user_role": rpt.user_role,
+        "profile": rpt.profile or "auto",
         "summary": rpt.summary,
         "results": [asdict(r) for r in rpt.results],
     }
@@ -801,27 +805,40 @@ def gen_json(rpt):
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 
-def main():
+def main(profile_override=None):
     parser = argparse.ArgumentParser(description="FanDreams Full Platform Security Scanner v2.0")
     parser.add_argument("--target", required=True, help="API base URL")
     parser.add_argument("--email", required=True)
     parser.add_argument("--password", required=True)
-    parser.add_argument("--output", default="fandreams_full_scan", help="Output prefix")
+    parser.add_argument("--profile", choices=["fan", "creator"], default=None,
+                        help="Profile label (fan/creator) — used in report and output filename")
+    parser.add_argument("--output", default=None, help="Output prefix (auto-set from profile if omitted)")
     args = parser.parse_args()
+
+    profile = profile_override or args.profile
+    if args.output:
+        output = args.output
+    elif profile:
+        output = f"full_scan_{profile}"
+    else:
+        output = "fandreams_full_scan"
+    args.output = output
 
     target = args.target.rstrip("/")
     if not target.endswith("/api/v1"):
         target += "/api/v1"
 
+    profile_label = f" [{profile.upper()}]" if profile else ""
     print(f"\n{C.BD}{C.M}")
     print("  ╔════════════════════════════════════════════════════════╗")
-    print("  ║  FANDREAMS — FULL PLATFORM SECURITY SCANNER v2.0     ║")
+    print(f"  ║  FANDREAMS — FULL PLATFORM SCANNER v2.0{profile_label:>14}  ║")
     print("  ║  15 Areas | 50+ Tests | Phases 1-2-3                 ║")
     print("  ╚════════════════════════════════════════════════════════╝")
     print(f"{C.RS}")
 
     rpt = Report(target=target)
     rpt.scan_time = datetime.now(timezone.utc).isoformat()
+    rpt.profile = profile or ""
     s = mksession()
 
     hdr("AUTENTICACAO")
