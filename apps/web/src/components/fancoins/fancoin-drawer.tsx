@@ -18,6 +18,7 @@ type Wallet = {
   balance: string
   totalEarned: string
   totalSpent: string
+  fancoinToBrl?: number
 }
 
 type Transaction = {
@@ -167,7 +168,8 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
   const wallet = walletData?.data
   const transactions = transactionsData?.data ?? []
   const packages = packagesData?.data ?? []
-  const balanceBrl = Number(wallet?.balance || 0) * 0.01
+  const fancoinToBrl = wallet?.fancoinToBrl || 0.01
+  const balanceBrl = Number(wallet?.balance || 0) * fancoinToBrl
 
   if (!open) return null
 

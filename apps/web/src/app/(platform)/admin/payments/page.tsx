@@ -189,7 +189,7 @@ function SettingsTab({ providers, loadingProviders, settings, loadingSettings, s
                 />
               </div>
               <p className="text-xs text-muted">
-                Bonus: <span className="font-bold text-foreground">{effectiveSettings.creator_bonus_coins?.toLocaleString() || '1.000'} FanCoins</span> (R${((effectiveSettings.creator_bonus_coins || 1000) * 0.01).toFixed(2)}) — Resgatavel apos <span className="font-bold text-foreground">{effectiveSettings.creator_bonus_required_subs || 1}</span> assinante(s)
+                Bonus: <span className="font-bold text-foreground">{effectiveSettings.creator_bonus_coins?.toLocaleString() || '1.000'} FanCoins</span> (R${((effectiveSettings.creator_bonus_coins || 1000) * (effectiveSettings.fancoin_to_brl || 0.01)).toFixed(2)}) — Resgatavel apos <span className="font-bold text-foreground">{effectiveSettings.creator_bonus_required_subs || 1}</span> assinante(s)
               </p>
               <Button type="submit" loading={settingsMutation.isPending}>
                 Salvar Bonus

@@ -9,6 +9,7 @@ import {
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import * as fancoinService from './fancoin.service'
+import { brlToFancoins } from './withdrawal.service'
 
 // ── Affiliate Program (Creator) ──
 
@@ -246,7 +247,7 @@ export async function distributeCommissions(
   if (l1Level && referral.l1AffiliateId) {
     const l1Percent = Number(l1Level.commissionPercent)
     const l1Brl = Math.round(creatorGrossBrl * (l1Percent / 100) * 100) / 100
-    const l1Coins = Math.round(l1Brl * 100)
+    const l1Coins = await brlToFancoins(l1Brl)
 
     if (l1Coins > 0) {
       // Credit FanCoins to L1 affiliate
@@ -287,7 +288,7 @@ export async function distributeCommissions(
   if (l2Level && referral.l2AffiliateId) {
     const l2Percent = Number(l2Level.commissionPercent)
     const l2Brl = Math.round(creatorGrossBrl * (l2Percent / 100) * 100) / 100
-    const l2Coins = Math.round(l2Brl * 100)
+    const l2Coins = await brlToFancoins(l2Brl)
 
     if (l2Coins > 0) {
       await fancoinService.creditEarnings(

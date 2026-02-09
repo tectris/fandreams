@@ -37,6 +37,25 @@ export async function getPlatformFeeRate(): Promise<number> {
   return percent / 100
 }
 
+// ── FanCoin Rate ──
+
+/** Returns how much 1 FanCoin is worth in BRL. Default 0.01 (R$0.01). */
+export async function getFancoinToBrl(): Promise<number> {
+  return getSetting<number>('fancoin_to_brl', PAYOUT_CONFIG.fancoinToBrl)
+}
+
+/** Converts BRL to FanCoins using the dynamic rate. */
+export async function brlToFancoins(brl: number): Promise<number> {
+  const rate = await getFancoinToBrl()
+  return Math.round(brl / rate)
+}
+
+/** Converts FanCoins to BRL using the dynamic rate. */
+export async function fancoinsToBrl(coins: number): Promise<number> {
+  const rate = await getFancoinToBrl()
+  return Math.round(coins * rate * 100) / 100
+}
+
 // ── Anti-Fraud Checks ──
 
 type RiskResult = { score: number; flags: string[]; blocked: boolean }
