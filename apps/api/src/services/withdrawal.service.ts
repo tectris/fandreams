@@ -158,6 +158,11 @@ export async function requestWithdrawal(
   },
   ipAddress?: string,
 ) {
+  // Validate positive integer amount
+  if (!Number.isInteger(fancoinAmount) || fancoinAmount <= 0) {
+    throw new AppError('INVALID_AMOUNT', 'Valor deve ser um numero inteiro positivo', 400)
+  }
+
   // Validate minimum
   const minPayout = await getSetting('min_payout', PAYOUT_CONFIG.minPayout)
   const fancoinToBrl = await getSetting('fancoin_to_brl', PAYOUT_CONFIG.fancoinToBrl)
@@ -167,7 +172,7 @@ export async function requestWithdrawal(
     throw new AppError('MIN_PAYOUT', `Saque minimo: R$ ${minPayout.toFixed(2)}`, 400)
   }
 
-  // Check balance
+  // Pre-check balance (the atomic debit below is the real guard, this gives early feedback)
   const [wallet] = await db
     .select({ balance: fancoinWallets.balance })
     .from(fancoinWallets)
@@ -199,28 +204,28 @@ export async function requestWithdrawal(
   const manualThreshold = await getSetting('manual_approval_threshold', PAYOUT_CONFIG.manualApprovalThreshold)
   const needsApproval = brlAmount >= manualThreshold || risk.score >= 50
 
-  // Deduct from wallet
-  await db
+  // ATOMIC debit: deduct only if balance >= fancoinAmount (prevents race condition)
+  const [debitResult] = await db
     .update(fancoinWallets)
     .set({
       balance: sql`${fancoinWallets.balance} - ${fancoinAmount}`,
       totalSpent: sql`${fancoinWallets.totalSpent} + ${fancoinAmount}`,
       updatedAt: new Date(),
     })
-    .where(eq(fancoinWallets.userId, creatorId))
+    .where(
+      sql`${fancoinWallets.userId} = ${creatorId} AND ${fancoinWallets.balance} >= ${fancoinAmount}`,
+    )
+    .returning({ balance: fancoinWallets.balance })
 
-  // Record transaction
-  const [updatedWallet] = await db
-    .select({ balance: fancoinWallets.balance })
-    .from(fancoinWallets)
-    .where(eq(fancoinWallets.userId, creatorId))
-    .limit(1)
+  if (!debitResult) {
+    throw new AppError('INSUFFICIENT_BALANCE', 'Saldo insuficiente de FanCoins', 400)
+  }
 
   await db.insert(fancoinTransactions).values({
     userId: creatorId,
     type: 'withdrawal',
     amount: -fancoinAmount,
-    balanceAfter: Number(updatedWallet?.balance || 0),
+    balanceAfter: Number(debitResult.balance),
     description: `Saque de R$ ${brlAmount.toFixed(2)} via ${method}`,
   })
 
@@ -369,8 +374,8 @@ export async function rejectPayout(payoutId: string, adminId: string, reason: st
     throw new AppError('INVALID_STATUS', 'Saque nao pode ser rejeitado', 400)
   }
 
-  // Refund FanCoins to creator
-  await db
+  // ATOMIC refund: credit back to wallet and get new balance in one operation
+  const [refundResult] = await db
     .update(fancoinWallets)
     .set({
       balance: sql`${fancoinWallets.balance} + ${payout.fancoinAmount}`,
@@ -378,18 +383,13 @@ export async function rejectPayout(payoutId: string, adminId: string, reason: st
       updatedAt: new Date(),
     })
     .where(eq(fancoinWallets.userId, payout.creatorId))
-
-  const [updatedWallet] = await db
-    .select({ balance: fancoinWallets.balance })
-    .from(fancoinWallets)
-    .where(eq(fancoinWallets.userId, payout.creatorId))
-    .limit(1)
+    .returning({ balance: fancoinWallets.balance })
 
   await db.insert(fancoinTransactions).values({
     userId: payout.creatorId,
     type: 'withdrawal_refund',
     amount: payout.fancoinAmount,
-    balanceAfter: Number(updatedWallet?.balance || 0),
+    balanceAfter: Number(refundResult?.balance || 0),
     description: `Saque rejeitado: ${reason}`,
   })
 
