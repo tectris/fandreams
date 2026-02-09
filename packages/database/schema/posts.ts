@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, boolean, decimal, integer, timestamp, primaryKey, index } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, text, boolean, decimal, integer, timestamp, primaryKey, index, uniqueIndex } from 'drizzle-orm/pg-core'
 import { users } from './users'
 import { subscriptionTiers } from './creators'
 
@@ -6,6 +6,7 @@ export const posts = pgTable(
   'posts',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    shortCode: varchar('short_code', { length: 12 }),
     creatorId: uuid('creator_id')
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
@@ -31,6 +32,7 @@ export const posts = pgTable(
     index('idx_posts_creator_id').on(table.creatorId),
     index('idx_posts_published_at').on(table.publishedAt),
     index('idx_posts_visibility').on(table.visibility),
+    uniqueIndex('idx_posts_short_code').on(table.shortCode),
   ],
 )
 

@@ -34,6 +34,7 @@ import Link from 'next/link'
 interface PostCardProps {
   post: {
     id: string
+    shortCode?: string | null
     contentText: string | null
     postType: string
     visibility: string
@@ -241,7 +242,7 @@ export function PostCard({
   }
 
   function getShareUrl() {
-    return `${window.location.origin}/post/${post.id}`
+    return `${window.location.origin}/post/${post.shortCode || post.id}`
   }
 
   function getShareText() {

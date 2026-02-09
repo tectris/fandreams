@@ -63,7 +63,7 @@ postsRoute.get('/creator/:creatorId', async (c) => {
 
 postsRoute.get('/:id', async (c) => {
   try {
-    const postId = c.req.param('id')
+    const param = c.req.param('id')
     const authHeader = c.req.header('Authorization')
     let viewerId: string | undefined
 
@@ -76,7 +76,11 @@ postsRoute.get('/:id', async (c) => {
       } catch {}
     }
 
-    const post = await postService.getPost(postId, viewerId)
+    // Detect UUID format vs shortCode
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param)
+    const post = isUuid
+      ? await postService.getPost(param, viewerId)
+      : await postService.getPostByShortCode(param, viewerId)
     return success(c, post)
   } catch (e) {
     if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
