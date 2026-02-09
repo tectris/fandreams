@@ -1,196 +1,88 @@
-'use client'
+import type { Metadata } from 'next'
+import PostDetailContent from './post-detail-content'
 
-import { useParams, useRouter } from 'next/navigation'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
-import { PostCard } from '@/components/feed/post-card'
-import { PpvUnlockDrawer } from '@/components/feed/ppv-unlock-drawer'
-import { useAuthStore } from '@/lib/store'
-import { useState } from 'react'
-import { ArrowLeft } from 'lucide-react'
-import Link from 'next/link'
-import { toast } from 'sonner'
+const API_URL = (() => {
+  const raw = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  return raw.match(/^https?:\/\//) ? raw : `https://${raw}`
+})()
 
-export default function PostDetailPage() {
-  const { id } = useParams<{ id: string }>()
-  const router = useRouter()
-  const { user, isAuthenticated } = useAuthStore()
-  const queryClient = useQueryClient()
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
-  const { data: post, isLoading, error } = useQuery({
-    queryKey: ['post', id],
-    queryFn: async () => {
-      const res = await api.get<any>(`/posts/${id}`)
-      return res.data
-    },
-    enabled: !!id,
-  })
+type Props = {
+  params: Promise<{ id: string }>
+}
 
-  const { data: commentsData } = useQuery({
-    queryKey: ['comments', id],
-    queryFn: async () => {
-      const res = await api.get<any>(`/posts/${id}/comments`)
-      return res.data
-    },
-    enabled: !!id,
-  })
+async function fetchPostForMeta(code: string) {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/posts/${code}`, {
+      next: { revalidate: 60 },
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    return json.data || null
+  } catch {
+    return null
+  }
+}
 
-  const comments = commentsData?.comments || commentsData || []
+function getOgImage(post: any): string | null {
+  if (!post.media || post.media.length === 0) return null
 
-  const editMutation = useMutation({
-    mutationFn: ({ postId, data }: { postId: string; data: Record<string, unknown> }) =>
-      api.patch(`/posts/${postId}`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['post', id] })
-      toast.success('Post atualizado!')
-    },
-    onError: (e: any) => toast.error(e.message || 'Erro ao editar'),
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: (postId: string) => api.delete(`/posts/${postId}`),
-    onSuccess: () => {
-      toast.success('Post excluido!')
-      router.push('/feed')
-    },
-    onError: (e: any) => toast.error(e.message || 'Erro ao excluir'),
-  })
-
-  const likeMutation = useMutation({
-    mutationFn: (postId: string) => api.post(`/posts/${postId}/like`, {}),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['post', id] }),
-    onError: (e: any) => toast.error(e.message || 'Erro ao curtir'),
-  })
-
-  const bookmarkMutation = useMutation({
-    mutationFn: (postId: string) => api.post(`/posts/${postId}/bookmark`, {}),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['post', id] }),
-    onError: (e: any) => toast.error(e.message || 'Erro ao salvar'),
-  })
-
-  const commentMutation = useMutation({
-    mutationFn: ({ postId, content }: { postId: string; content: string }) =>
-      api.post(`/posts/${postId}/comments`, { content }),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['post', id] })
-      queryClient.invalidateQueries({ queryKey: ['comments', variables.postId] })
-      toast.success('Comentario adicionado!')
-    },
-    onError: (e: any) => toast.error(e.message || 'Erro ao comentar'),
-  })
-
-  const toggleVisibilityMutation = useMutation({
-    mutationFn: (postId: string) => api.patch(`/posts/${postId}/toggle-visibility`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['post', id] })
-      toast.success('Visibilidade atualizada!')
-    },
-    onError: (e: any) => toast.error(e.message || 'Erro ao alterar visibilidade'),
-  })
-
-  const tipMutation = useMutation({
-    mutationFn: ({ postId, creatorId, amount }: { postId: string; creatorId: string; amount: number }) =>
-      api.post('/fancoins/tip', { creatorId, amount, referenceId: postId }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fancoin-wallet'] })
-      queryClient.invalidateQueries({ queryKey: ['fancoin-transactions'] })
-      queryClient.invalidateQueries({ queryKey: ['post', id] })
-      toast.success('Tip enviado com sucesso!')
-    },
-    onError: (e: any) => toast.error(e.message || 'Erro ao enviar tip'),
-  })
-
-  const [ppvDrawerOpen, setPpvDrawerOpen] = useState(false)
-
-  function handlePpvUnlock(post: any) {
-    if (!isAuthenticated) {
-      window.location.href = '/login'
-      return
+  // For non-public posts, only use preview media to avoid leaking paid content
+  if (post.visibility !== 'public') {
+    const preview = post.media.find((m: any) => m.isPreview && m.storageKey)
+    if (preview) {
+      return preview.mediaType === 'video' ? preview.thumbnailUrl : preview.storageKey
     }
-    setPpvDrawerOpen(true)
+    return null
   }
 
-  function handleSubscribe(post: any) {
-    if (!isAuthenticated) {
-      window.location.href = '/login'
-      return
+  const first = post.media[0]
+  if (first.mediaType === 'image' && first.storageKey) return first.storageKey
+  if (first.mediaType === 'video' && first.thumbnailUrl) return first.thumbnailUrl
+  return null
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params
+  const post = await fetchPostForMeta(id)
+
+  if (!post) {
+    return {
+      title: 'Post nao encontrado',
+      description: 'Este post pode ter sido removido ou nao existe.',
     }
-    window.location.href = `/creator/${post.creatorUsername}`
   }
 
-  if (isLoading) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        <div className="bg-surface border border-border rounded-md p-4 animate-pulse">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-surface-light rounded-full" />
-            <div className="space-y-2">
-              <div className="w-32 h-3 bg-surface-light rounded" />
-              <div className="w-24 h-2 bg-surface-light rounded" />
-            </div>
-          </div>
-          <div className="w-full h-64 bg-surface-light rounded" />
-        </div>
-      </div>
-    )
+  const creatorName = post.creator?.displayName || post.creator?.username || 'Criador'
+  const title = `${creatorName} no FanDreams`
+  const description = post.contentText
+    ? post.contentText.substring(0, 160)
+    : `Confira este post de ${creatorName} no FanDreams`
+  const postUrl = `${APP_URL}/post/${post.shortCode || id}`
+  const ogImage = getOgImage(post)
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: postUrl,
+      siteName: 'FanDreams',
+      type: 'article',
+      ...(ogImage ? { images: [{ url: ogImage, width: 1200, height: 630 }] } : {}),
+    },
+    twitter: {
+      card: ogImage ? 'summary_large_image' : 'summary',
+      title,
+      description,
+      ...(ogImage ? { images: [ogImage] } : {}),
+    },
   }
+}
 
-  if (error || !post) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        <div className="text-center py-20">
-          <p className="text-lg font-semibold mb-2">Post nao encontrado</p>
-          <p className="text-muted text-sm mb-6">Este post pode ter sido removido ou nao existe.</p>
-          <Link href="/feed" className="text-primary hover:underline text-sm">
-            Voltar ao feed
-          </Link>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="max-w-2xl mx-auto px-4 py-6">
-      <div className="flex items-center gap-3 mb-4">
-        <button
-          onClick={() => router.back()}
-          className="p-1.5 rounded-full hover:bg-surface-light transition-colors text-muted hover:text-foreground"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <h1 className="text-lg font-bold">Post</h1>
-      </div>
-
-      <PostCard
-        post={post}
-        currentUserId={user?.id}
-        isAuthenticated={isAuthenticated}
-        onEdit={(postId, data) => editMutation.mutate({ postId, data })}
-        onToggleVisibility={(postId) => toggleVisibilityMutation.mutate(postId)}
-        onDelete={(postId) => deleteMutation.mutate(postId)}
-        onLike={(postId) => likeMutation.mutate(postId)}
-        onBookmark={(postId) => bookmarkMutation.mutate(postId)}
-        onComment={(postId, content) => commentMutation.mutate({ postId, content })}
-        onTip={(postId, creatorId, amount) => tipMutation.mutate({ postId, creatorId, amount })}
-        onPpvUnlock={handlePpvUnlock}
-        onSubscribe={handleSubscribe}
-        comments={Array.isArray(comments) ? comments : []}
-      />
-
-      {post && (
-        <PpvUnlockDrawer
-          open={ppvDrawerOpen}
-          onClose={() => setPpvDrawerOpen(false)}
-          onUnlocked={() => queryClient.invalidateQueries({ queryKey: ['post', id] })}
-          post={{
-            id: post.id,
-            ppvPrice: post.ppvPrice,
-            creatorUsername: post.creatorUsername,
-            creatorDisplayName: post.creatorDisplayName,
-            contentText: post.contentText,
-          }}
-        />
-      )}
-    </div>
-  )
+export default async function PostDetailPage({ params }: Props) {
+  const { id } = await params
+  return <PostDetailContent postCode={id} />
 }

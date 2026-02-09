@@ -3,6 +3,9 @@ import { posts, postMedia, postLikes, postComments, postBookmarks, subscriptions
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import type { CreatePostInput, UpdatePostInput } from '@fandreams/shared'
+import { customAlphabet } from 'nanoid'
+
+const generateShortCode = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 8)
 
 export async function createPost(creatorId: string, input: CreatePostInput) {
   // Block media upload for users without KYC verification (admins bypass)
@@ -26,6 +29,7 @@ export async function createPost(creatorId: string, input: CreatePostInput) {
     .insert(posts)
     .values({
       creatorId,
+      shortCode: generateShortCode(),
       contentText: input.contentText,
       postType: input.postType,
       visibility: input.visibility,
@@ -50,6 +54,18 @@ export async function createPost(creatorId: string, input: CreatePostInput) {
   return post
 }
 
+export async function getPostByShortCode(shortCode: string, viewerId?: string) {
+  const [post] = await db
+    .select()
+    .from(posts)
+    .where(eq(posts.shortCode, shortCode))
+    .limit(1)
+
+  if (!post) throw new AppError('NOT_FOUND', 'Post nao encontrado', 404)
+
+  return resolvePostDetails(post, viewerId)
+}
+
 export async function getPost(postId: string, viewerId?: string) {
   const [post] = await db
     .select()
@@ -59,6 +75,17 @@ export async function getPost(postId: string, viewerId?: string) {
 
   if (!post) throw new AppError('NOT_FOUND', 'Post nao encontrado', 404)
 
+  return resolvePostDetails(post, viewerId)
+}
+
+async function resolvePostDetails(post: typeof posts.$inferSelect, viewerId?: string) {
+  // Lazily generate shortCode for existing posts that don't have one
+  if (!post.shortCode) {
+    const code = generateShortCode()
+    await db.update(posts).set({ shortCode: code }).where(eq(posts.id, post.id))
+    post = { ...post, shortCode: code }
+  }
+
   // Hidden posts are only visible to their creator
   if (!post.isVisible && viewerId !== post.creatorId) {
     throw new AppError('NOT_FOUND', 'Post nao encontrado', 404)
@@ -67,7 +94,7 @@ export async function getPost(postId: string, viewerId?: string) {
   const media = await db
     .select()
     .from(postMedia)
-    .where(eq(postMedia.postId, postId))
+    .where(eq(postMedia.postId, post.id))
     .orderBy(postMedia.sortOrder)
 
   const [creator] = await db
@@ -90,7 +117,6 @@ export async function getPost(postId: string, viewerId?: string) {
     if (viewerId === post.creatorId) {
       hasAccess = true
     } else if (post.visibility === 'ppv') {
-      // PPV: check for completed payment
       const [ppvPayment] = await db
         .select({ id: payments.id })
         .from(payments)
@@ -99,13 +125,12 @@ export async function getPost(postId: string, viewerId?: string) {
             eq(payments.userId, viewerId),
             eq(payments.type, 'ppv'),
             eq(payments.status, 'completed'),
-            sql`${payments.metadata}->>'postId' = ${postId}`,
+            sql`${payments.metadata}->>'postId' = ${post.id}`,
           ),
         )
         .limit(1)
       hasAccess = !!ppvPayment
     } else if (!hasAccess) {
-      // Subscribers visibility
       const [sub] = await db
         .select()
         .from(subscriptions)
@@ -123,19 +148,19 @@ export async function getPost(postId: string, viewerId?: string) {
     const [like] = await db
       .select()
       .from(postLikes)
-      .where(and(eq(postLikes.userId, viewerId), eq(postLikes.postId, postId)))
+      .where(and(eq(postLikes.userId, viewerId), eq(postLikes.postId, post.id)))
       .limit(1)
     isLiked = !!like
 
     const [bookmark] = await db
       .select()
       .from(postBookmarks)
-      .where(and(eq(postBookmarks.userId, viewerId), eq(postBookmarks.postId, postId)))
+      .where(and(eq(postBookmarks.userId, viewerId), eq(postBookmarks.postId, post.id)))
       .limit(1)
     isBookmarked = !!bookmark
   }
 
-  await db.update(posts).set({ viewCount: sql`${posts.viewCount} + 1` }).where(eq(posts.id, postId))
+  await db.update(posts).set({ viewCount: sql`${posts.viewCount} + 1` }).where(eq(posts.id, post.id))
 
   return {
     ...post,
@@ -180,6 +205,7 @@ export async function getFeed(userId: string, page = 1, limit = 20) {
   const feedPosts = await db
     .select({
       id: posts.id,
+      shortCode: posts.shortCode,
       creatorId: posts.creatorId,
       contentText: posts.contentText,
       postType: posts.postType,
@@ -305,6 +331,7 @@ export async function getPublicFeed(page = 1, limit = 20) {
   const feedPosts = await db
     .select({
       id: posts.id,
+      shortCode: posts.shortCode,
       creatorId: posts.creatorId,
       contentText: posts.contentText,
       postType: posts.postType,
@@ -356,6 +383,7 @@ export async function getCreatorPosts(creatorId: string, viewerId?: string, page
   const feedPosts = await db
     .select({
       id: posts.id,
+      shortCode: posts.shortCode,
       creatorId: posts.creatorId,
       contentText: posts.contentText,
       postType: posts.postType,
