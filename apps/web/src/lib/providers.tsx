@@ -31,6 +31,8 @@ function AuthHydrator() {
       .get<{ id: string; email: string; username: string; displayName: string | null; avatarUrl: string | null; role: string }>('/auth/me')
       .then((res) => {
         setUser(res.data)
+        // Perform daily check-in to keep streak counter updated
+        api.post('/gamification/checkin', {}).catch(() => {})
       })
       .catch(() => {
         // Token is invalid and refresh also failed — clear session
