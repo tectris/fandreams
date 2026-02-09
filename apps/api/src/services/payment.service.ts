@@ -46,8 +46,14 @@ async function mpFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const data = await res.json()
   if (!res.ok) {
-    console.error('MercadoPago API error:', data)
-    throw new AppError('PAYMENT_ERROR', data.message || 'Erro no processamento do pagamento', 502)
+    console.error('MercadoPago API error:', JSON.stringify(data, null, 2))
+    if (data.cause && Array.isArray(data.cause)) {
+      for (const c of data.cause) {
+        console.error('  cause:', JSON.stringify(c))
+      }
+    }
+    const msg = data.message || (data.cause?.[0]?.description) || 'Erro no processamento do pagamento'
+    throw new AppError('PAYMENT_ERROR', msg, 502)
   }
 
   return data as T
@@ -92,6 +98,43 @@ type MpPixPaymentResponse = {
       ticket_url: string
     }
   }
+}
+
+// ── PIX payer helpers ──
+
+/**
+ * Build payer object for MercadoPago PIX Transparent Checkout.
+ * MP requires first_name, last_name, email, and identification for PIX.
+ */
+function buildPixPayer(email: string, displayName: string) {
+  const parts = displayName.trim().split(/\s+/)
+  const firstName = parts[0] || 'Usuario'
+  const lastName = parts.length > 1 ? parts.slice(1).join(' ') : 'FanDreams'
+
+  return {
+    email,
+    first_name: firstName,
+    last_name: lastName,
+    identification: {
+      type: 'CPF',
+      number: '00000000000', // Placeholder — real CPF should be collected via KYC
+    },
+  }
+}
+
+/**
+ * Format expiration date for MercadoPago.
+ * MP expects ISO 8601 with timezone offset (e.g. 2024-01-01T12:00:00.000-03:00),
+ * not the "Z" suffix that JS toISOString() produces.
+ */
+function formatMpExpiration(date: Date): string {
+  // Use São Paulo timezone offset (-03:00)
+  const offset = '-03:00'
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.000${offset}`
+  )
 }
 
 // ── NOWPayments ──
@@ -285,9 +328,9 @@ async function createMpPayment(payment: any, pkg: any, paymentMethod: string, ap
 async function createMpPixPayment(payment: any, pkg: any, userId: string, appUrl: string) {
   const webhookUrl = getWebhookBaseUrl()
 
-  // Fetch payer email (required by MP)
+  // Fetch payer info (MP requires email + first_name + last_name + identification for PIX)
   const [user] = await db
-    .select({ email: users.email })
+    .select({ email: users.email, displayName: users.displayName, username: users.username })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1)
@@ -297,18 +340,18 @@ async function createMpPixPayment(payment: any, pkg: any, userId: string, appUrl
   // PIX payments expire in 30 minutes
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
 
+  const payer = buildPixPayer(user.email, user.displayName || user.username || 'Usuario')
+
   const mpPayment = await mpFetch<MpPixPaymentResponse>('/v1/payments', {
     method: 'POST',
     body: JSON.stringify({
       transaction_amount: pkg.price,
       description: `${pkg.coins.toLocaleString()} FanCoins${pkg.bonus > 0 ? ` (+${pkg.bonus} bonus)` : ''} - FanDreams`,
       payment_method_id: 'pix',
-      payer: {
-        email: user.email,
-      },
+      payer,
       external_reference: payment.id,
       notification_url: `${webhookUrl}/api/v1/payments/webhook/mercadopago`,
-      date_of_expiration: expiresAt.toISOString(),
+      date_of_expiration: formatMpExpiration(expiresAt),
       statement_descriptor: 'FANDREAMS',
     }),
   })
@@ -861,7 +904,7 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
   // PIX → Transparent Checkout (QR code in-app)
   if (paymentMethod === 'pix') {
     const [user] = await db
-      .select({ email: users.email })
+      .select({ email: users.email, displayName: users.displayName, username: users.username })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1)
@@ -869,6 +912,7 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
     if (!user?.email) throw new AppError('MISSING_EMAIL', 'Email do usuario nao encontrado', 400)
 
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
+    const payer = buildPixPayer(user.email, user.displayName || user.username || 'Usuario')
 
     const mpPayment = await mpFetch<MpPixPaymentResponse>('/v1/payments', {
       method: 'POST',
@@ -876,10 +920,10 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
         transaction_amount: amount,
         description,
         payment_method_id: 'pix',
-        payer: { email: user.email },
+        payer,
         external_reference: payment.id,
         notification_url: `${webhookUrl}/api/v1/payments/webhook/mercadopago`,
-        date_of_expiration: expiresAt.toISOString(),
+        date_of_expiration: formatMpExpiration(expiresAt),
         statement_descriptor: 'FANDREAMS',
       }),
     })
