@@ -58,8 +58,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const shortCode = post.shortCode || id
   const postUrl = `${baseUrl}/post/${shortCode}`
 
-  // Explicit absolute URL to our OG image API route — no dependency on metadataBase
-  const ogImageUrl = `${baseUrl}/api/og/${shortCode}`
+  // Prefer a direct media URL (fast, served from CDN) over dynamic image generation
+  let ogImageUrl: string | null = null
+  if (post.media && post.media.length > 0) {
+    const first = post.media[0]
+    // thumbnailUrl is always available (never redacted), good for videos and PPV content
+    // storageKey is available for public posts / preview images
+    ogImageUrl = first.thumbnailUrl || first.storageKey || null
+  }
+  // Fallback to dynamic OG image route for text-only posts or when no direct URL
+  if (!ogImageUrl) {
+    ogImageUrl = `${baseUrl}/api/og/${shortCode}`
+  }
 
   return {
     metadataBase: new URL(baseUrl),

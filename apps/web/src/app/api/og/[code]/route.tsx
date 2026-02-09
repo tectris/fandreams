@@ -1,6 +1,8 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 
+export const runtime = 'edge'
+
 const API_URL = (() => {
   const raw = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
   const normalized = raw.match(/^https?:\/\//) ? raw : `https://${raw}`
@@ -9,7 +11,7 @@ const API_URL = (() => {
 
 async function fetchPost(code: string) {
   try {
-    const res = await fetch(`${API_URL}/api/v1/posts/${code}`, { cache: 'no-store' })
+    const res = await fetch(`${API_URL}/api/v1/posts/${code}`)
     if (!res.ok) return null
     const json = await res.json()
     return json.data || null
@@ -26,6 +28,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
   const postText = post?.contentText || ''
   const truncatedText = postText.length > 120 ? postText.substring(0, 120) + '...' : postText
   const avatarUrl = post?.creator?.avatarUrl || null
+  const isLocked = post?.hasAccess === false
+  const visibility = post?.visibility || 'public'
 
   // Get thumbnail URL from media
   let thumbnailUrl: string | null = null
@@ -35,6 +39,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
   }
 
   const hasVideo = post?.media?.[0]?.mediaType === 'video'
+  const lockLabel = visibility === 'ppv' ? 'Conteudo Pago' : 'Exclusivo para Assinantes'
 
   return new ImageResponse(
     (
@@ -74,7 +79,27 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
                 height={480}
                 style={{ objectFit: 'cover' }}
               />
-              {hasVideo && (
+              {isLocked ? (
+                // Locked overlay for PPV/subscriber content
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.7)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '12px',
+                  }}
+                >
+                  <span style={{ fontSize: '56px' }}>🔒</span>
+                  <span style={{ color: 'white', fontSize: '20px', fontWeight: 700 }}>{lockLabel}</span>
+                </div>
+              ) : hasVideo ? (
                 <div
                   style={{
                     position: 'absolute',
@@ -101,7 +126,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
                     }}
                   />
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         ) : (
@@ -181,6 +206,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
         </div>
       </div>
     ),
-    { width: 1200, height: 630 },
+    {
+      width: 1200,
+      height: 630,
+      headers: {
+        'Cache-Control': 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
+      },
+    },
   )
 }
