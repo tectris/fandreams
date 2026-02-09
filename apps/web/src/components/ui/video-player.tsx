@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import Hls from 'hls.js'
 
 interface VideoPlayerProps {
@@ -12,6 +12,7 @@ interface VideoPlayerProps {
 }
 
 export function VideoPlayer({ src, className = '', poster, onPlay, onPause }: VideoPlayerProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
 
@@ -51,15 +52,51 @@ export function VideoPlayer({ src, className = '', poster, onPlay, onPause }: Vi
     }
   }, [src])
 
+  // Intercept fullscreen to use the container (which includes watermark)
+  const handleFullscreen = useCallback(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    if (document.fullscreenElement) {
+      document.exitFullscreen()
+    } else {
+      container.requestFullscreen().catch(() => {
+        // Fallback: let the video go fullscreen natively
+        videoRef.current?.requestFullscreen?.()
+      })
+    }
+  }, [])
+
+  // Listen for double-click on video to trigger our custom fullscreen
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    const handleDblClick = (e: Event) => {
+      e.preventDefault()
+      handleFullscreen()
+    }
+
+    video.addEventListener('dblclick', handleDblClick)
+    return () => video.removeEventListener('dblclick', handleDblClick)
+  }, [handleFullscreen])
+
   return (
-    <video
-      ref={videoRef}
-      controls
-      playsInline
-      poster={poster}
-      className={className}
-      onPlay={onPlay}
-      onPause={onPause}
-    />
+    <div ref={containerRef} className={`relative ${className}`} style={{ backgroundColor: '#000' }}>
+      <video
+        ref={videoRef}
+        controls
+        playsInline
+        poster={poster}
+        className="w-full h-full object-cover"
+        onPlay={onPlay}
+        onPause={onPause}
+        style={{ display: 'block' }}
+      />
+      {/* Watermark — visible in both normal and fullscreen mode */}
+      <div className="absolute bottom-10 right-3 pointer-events-none select-none z-10">
+        <span className="text-white/20 text-sm font-bold tracking-wider">FanDreams</span>
+      </div>
+    </div>
   )
 }
