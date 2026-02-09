@@ -13,6 +13,7 @@ import { PostCard } from '@/components/feed/post-card'
 import { SubscribeDrawer } from '@/components/subscription/subscribe-drawer'
 import { PpvUnlockDrawer } from '@/components/feed/ppv-unlock-drawer'
 import { LevelBadge } from '@/components/gamification/level-badge'
+import { StreakCounter } from '@/components/gamification/streak-counter'
 import { formatCurrency, formatNumber } from '@/lib/utils'
 import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, SendHorizontal, FileText, Eye, Image, Video, AlertTriangle, Tag, MessageCircle, X, Link2, Share2, Copy, Check, Coins } from 'lucide-react'
 import { toast } from 'sonner'
@@ -550,12 +551,13 @@ export default function CreatorProfilePage() {
         </div>
 
         {profile.gamification && (
-          <div className="mt-4">
+          <div className="mt-4 flex items-center gap-6">
             <LevelBadge
               level={profile.gamification.level}
               tier={profile.gamification.fanTier}
               xp={profile.gamification.xp}
             />
+            <StreakCounter streak={profile.gamification.currentStreak} />
           </div>
         )}
       </div>
