@@ -241,7 +241,7 @@ export function PostCard({
   }
 
   function getShareUrl() {
-    return `${window.location.origin}/creator/${post.creatorUsername}`
+    return `${window.location.origin}/post/${post.id}`
   }
 
   function getShareText() {
