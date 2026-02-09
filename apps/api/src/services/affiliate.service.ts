@@ -5,6 +5,7 @@ import {
   affiliateLinks,
   affiliateReferrals,
   affiliateCommissions,
+  users,
 } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
@@ -134,10 +135,35 @@ export async function createLink(affiliateUserId: string, creatorId: string) {
 
 export async function getMyLinks(affiliateUserId: string) {
   return db
-    .select()
+    .select({
+      id: affiliateLinks.id,
+      affiliateUserId: affiliateLinks.affiliateUserId,
+      creatorId: affiliateLinks.creatorId,
+      code: affiliateLinks.code,
+      clicks: affiliateLinks.clicks,
+      conversions: affiliateLinks.conversions,
+      totalEarned: affiliateLinks.totalEarned,
+      createdAt: affiliateLinks.createdAt,
+      creatorUsername: users.username,
+      creatorDisplayName: users.displayName,
+      creatorAvatarUrl: users.avatarUrl,
+    })
     .from(affiliateLinks)
+    .leftJoin(users, eq(affiliateLinks.creatorId, users.id))
     .where(eq(affiliateLinks.affiliateUserId, affiliateUserId))
     .orderBy(desc(affiliateLinks.createdAt))
+}
+
+export async function getProgramByUsername(username: string) {
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.username, username))
+    .limit(1)
+
+  if (!user) return null
+
+  return getProgram(user.id)
 }
 
 export async function trackClick(code: string) {
@@ -320,11 +346,7 @@ export async function distributeCommissions(
 // ── Affiliate Dashboard ──
 
 export async function getAffiliateDashboard(userId: string) {
-  const links = await db
-    .select()
-    .from(affiliateLinks)
-    .where(eq(affiliateLinks.affiliateUserId, userId))
-    .orderBy(desc(affiliateLinks.createdAt))
+  const links = await getMyLinks(userId)
 
   const commissions = await db
     .select()
