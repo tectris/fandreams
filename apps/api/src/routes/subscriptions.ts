@@ -47,7 +47,7 @@ subscriptionsRoute.post('/', authMiddleware, validateBody(createSubscriptionSche
         'new_subscriber',
         `${subscriberName} assinou seu perfil!`,
         `@${subscriber?.username} agora e seu assinante.`,
-        { fromUserId: userId },
+        { fromUserId: userId, creatorUsername: subscriber?.username },
       ).catch((e) => console.error('Failed to create subscriber notification:', e))
     } catch (e) {
       console.error('Failed to create subscriber notification:', e)

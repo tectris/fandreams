@@ -95,7 +95,7 @@ usersRoute.post('/:userId/follow', authMiddleware, async (c) => {
         'new_follow',
         `${followerName} comecou a seguir voce`,
         undefined,
-        { fromUserId: followerId },
+        { fromUserId: followerId, creatorUsername: follower?.username },
       ).catch((e) => console.error('Failed to create follow notification:', e))
     } catch (e) {
       console.error('Failed to create follow notification:', e)

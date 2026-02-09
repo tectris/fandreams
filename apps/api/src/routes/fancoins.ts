@@ -73,7 +73,7 @@ fancoins.post('/tip', authMiddleware, validateBody(tipSchema), async (c) => {
         'tip_received',
         `${senderName} enviou ${body.amount} FanCoins!`,
         `@${sender?.username} enviou um tip de ${body.amount} FanCoins para voce.`,
-        { fromUserId: userId, amount: body.amount, referenceId: body.referenceId },
+        { fromUserId: userId, amount: body.amount, referenceId: body.referenceId, creatorUsername: sender?.username },
       )
     } catch (notifErr) {
       console.error('Failed to create tip notification:', notifErr)

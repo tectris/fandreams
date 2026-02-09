@@ -143,7 +143,7 @@ postsRoute.post('/:id/like', authMiddleware, async (c) => {
           'new_like',
           `${likerName} curtiu seu post`,
           undefined,
-          { fromUserId: userId, postId },
+          { fromUserId: userId, postId, creatorUsername: liker?.username },
         ).catch((e) => console.error('Failed to create like notification:', e))
       }
     } catch (e) {
@@ -186,7 +186,7 @@ postsRoute.post('/:id/comments', authMiddleware, validateBody(createCommentSchem
         'new_comment',
         `${commenterName} comentou no seu post`,
         body.content.substring(0, 100),
-        { fromUserId: userId, postId, commentId: comment.id },
+        { fromUserId: userId, postId, commentId: comment.id, creatorUsername: commenter?.username },
       ).catch((e) => console.error('Failed to create comment notification:', e))
     }
   } catch (e) {

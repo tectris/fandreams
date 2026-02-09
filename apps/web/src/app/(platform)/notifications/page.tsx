@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Bell, CheckCheck, Coins, Users, Heart, MessageCircle, UserPlus, ImagePlus } from 'lucide-react'
 import { timeAgo } from '@/lib/utils'
+import Link from 'next/link'
 
 type Notification = {
   id: string
@@ -25,6 +26,26 @@ const typeIcons: Record<string, typeof Bell> = {
   new_message: MessageCircle,
   new_follow: UserPlus,
   new_post: ImagePlus,
+}
+
+function getNotificationHref(notif: Notification): string | null {
+  const data = notif.data
+  if (!data) return null
+  const username = data.creatorUsername as string | undefined
+  switch (notif.type) {
+    case 'new_post':
+    case 'new_follow':
+    case 'new_subscriber':
+    case 'tip_received':
+      return username ? `/creator/${username}` : null
+    case 'new_like':
+    case 'new_comment':
+      return data.postId ? `/post/${data.postId}` : null
+    case 'new_message':
+      return `/messages`
+    default:
+      return null
+  }
 }
 
 export default function NotificationsPage() {
@@ -85,31 +106,50 @@ export default function NotificationsPage() {
         <div className="space-y-2">
           {notifications.map((notif) => {
             const Icon = typeIcons[notif.type] || Bell
-            return (
-              <Card
-                key={notif.id}
-                className={`transition-colors ${!notif.isRead ? 'border-primary/30 bg-primary/5' : ''}`}
-              >
-                <CardContent className="py-3">
-                  <div className="flex items-start gap-3">
-                    <div className={`p-2 rounded-full shrink-0 ${!notif.isRead ? 'bg-primary/20' : 'bg-surface-light'}`}>
-                      <Icon className={`w-4 h-4 ${!notif.isRead ? 'text-primary' : 'text-muted'}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm ${!notif.isRead ? 'font-semibold' : ''}`}>{notif.title}</p>
-                      {notif.body && <p className="text-xs text-muted mt-0.5">{notif.body}</p>}
-                      <p className="text-xs text-muted mt-1">{timeAgo(notif.createdAt)}</p>
-                    </div>
-                    {!notif.isRead && (
-                      <button
-                        onClick={() => markReadMutation.mutate(notif.id)}
-                        className="text-xs text-primary hover:underline shrink-0"
-                      >
-                        Marcar como lido
-                      </button>
-                    )}
+            const username = notif.data?.creatorUsername as string | undefined
+            const href = getNotificationHref(notif)
+
+            const cardContent = (
+              <CardContent className="py-3">
+                <div className="flex items-start gap-3">
+                  <div className={`p-2 rounded-full shrink-0 ${!notif.isRead ? 'bg-primary/20' : 'bg-surface-light'}`}>
+                    <Icon className={`w-4 h-4 ${!notif.isRead ? 'text-primary' : 'text-muted'}`} />
                   </div>
-                </CardContent>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm ${!notif.isRead ? 'font-semibold' : ''}`}>{notif.title}</p>
+                    {username && (
+                      <Link
+                        href={`/creator/${username}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-xs text-primary font-medium hover:underline"
+                      >
+                        @{username}
+                      </Link>
+                    )}
+                    {notif.body && <p className="text-xs text-muted mt-0.5">{notif.body}</p>}
+                    <p className="text-xs text-muted mt-1">{timeAgo(notif.createdAt)}</p>
+                  </div>
+                  {!notif.isRead && (
+                    <button
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); markReadMutation.mutate(notif.id) }}
+                      className="text-xs text-primary hover:underline shrink-0"
+                    >
+                      Marcar como lido
+                    </button>
+                  )}
+                </div>
+              </CardContent>
+            )
+
+            return href ? (
+              <Link key={notif.id} href={href}>
+                <Card className={`transition-colors hover:border-primary/50 cursor-pointer ${!notif.isRead ? 'border-primary/30 bg-primary/5' : ''}`}>
+                  {cardContent}
+                </Card>
+              </Link>
+            ) : (
+              <Card key={notif.id} className={`transition-colors ${!notif.isRead ? 'border-primary/30 bg-primary/5' : ''}`}>
+                {cardContent}
               </Card>
             )
           })}
