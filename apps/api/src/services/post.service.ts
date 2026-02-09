@@ -70,6 +70,8 @@ export async function createPost(creatorId: string, input: CreatePostInput) {
         mediaType: m.mediaType,
         storageKey: m.key,
         sortOrder: i,
+        // For videos, construct Bunny CDN thumbnail URL from the video GUID
+        ...(m.mediaType === 'video' ? { thumbnailUrl: getThumbnailUrl(m.key) } : {}),
       })
     }
   }
@@ -745,4 +747,12 @@ export async function addMediaToPost(postId: string, mediaData: { mediaType: str
     .returning()
 
   return media
+}
+
+/** Update video media metadata after Bunny encoding completes. Matches by storageKey (video GUID). */
+export async function updateVideoMedia(videoGuid: string, data: { thumbnailUrl?: string; duration?: number; width?: number; height?: number }) {
+  await db
+    .update(postMedia)
+    .set(data)
+    .where(and(eq(postMedia.storageKey, videoGuid), eq(postMedia.mediaType, 'video')))
 }
