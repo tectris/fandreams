@@ -20,6 +20,13 @@ const envSchema = z.object({
   BUNNY_LIBRARY_ID: z.string().optional(),
   BUNNY_CDN_HOSTNAME: z.string().optional(),
   API_URL: z.string().optional(),
+  // EFI Pay (PIX)
+  EFI_CLIENT_ID: z.string().optional(),
+  EFI_CLIENT_SECRET: z.string().optional(),
+  EFI_PIX_KEY: z.string().optional(),
+  EFI_CERTIFICATE_BASE64: z.string().optional(),
+  EFI_SANDBOX: z.enum(['true', 'false']).default('true'),
+
   MERCADOPAGO_ACCESS_TOKEN: z.string().optional(),
   MERCADOPAGO_WEBHOOK_SECRET: z.string().optional(),
   MERCADOPAGO_SANDBOX: z.enum(['true', 'false']).default('true'),

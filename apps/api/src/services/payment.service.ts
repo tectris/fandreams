@@ -8,6 +8,7 @@ import * as fancoinService from './fancoin.service'
 import * as affiliateService from './affiliate.service'
 import { getPlatformFeeRate } from './withdrawal.service'
 import { sendPaymentConfirmedEmail, sendSubscriptionActivatedEmail } from './email.service'
+import * as efiService from './efi.service'
 
 // ── MercadoPago ──
 
@@ -222,7 +223,7 @@ async function ppFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 // ── Unified Payment Creation ──
 
-export type PaymentProvider = 'mercadopago' | 'nowpayments' | 'paypal'
+export type PaymentProvider = 'mercadopago' | 'nowpayments' | 'paypal' | 'efi'
 export type PaymentMethod = 'pix' | 'credit_card' | 'crypto' | 'paypal'
 
 export async function createFancoinPayment(
@@ -234,6 +235,11 @@ export async function createFancoinPayment(
   const pkg = FANCOIN_PACKAGES.find((p) => p.id === packageId)
   if (!pkg) throw new AppError('NOT_FOUND', 'Pacote nao encontrado', 404)
 
+  // Auto-route PIX to EFI when configured, regardless of requested provider
+  const effectiveProvider = (paymentMethod === 'pix' && efiService.isEfiConfigured())
+    ? 'efi' as PaymentProvider
+    : provider
+
   const feeRate = await getPlatformFeeRate()
 
   // Create internal payment record
@@ -243,17 +249,19 @@ export async function createFancoinPayment(
       userId,
       type: 'fancoin_purchase',
       amount: String(pkg.price),
-      currency: provider === 'nowpayments' ? 'USD' : 'BRL',
+      currency: effectiveProvider === 'nowpayments' ? 'USD' : 'BRL',
       platformFee: String(pkg.price * feeRate),
-      paymentProvider: provider,
+      paymentProvider: effectiveProvider,
       status: 'pending',
-      metadata: { packageId, coins: pkg.coins, bonus: pkg.bonus, paymentMethod, provider },
+      metadata: { packageId, coins: pkg.coins, bonus: pkg.bonus, paymentMethod, provider: effectiveProvider },
     })
     .returning()
 
   const appUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
-  switch (provider) {
+  switch (effectiveProvider) {
+    case 'efi':
+      return createEfiPixPayment(payment, pkg, userId)
     case 'mercadopago':
       // PIX → Transparent Checkout (QR code in-app), Card → Checkout Pro (redirect)
       if (paymentMethod === 'pix') {
@@ -517,6 +525,38 @@ async function createPpPayment(payment: any, pkg: any, appUrl: string) {
   }
 }
 
+// ── EFI PIX Payment ──
+
+async function createEfiPixPayment(payment: any, pkg: any, userId: string) {
+  const description = `${pkg.coins.toLocaleString()} FanCoins${pkg.bonus > 0 ? ` (+${pkg.bonus} bonus)` : ''} - FanDreams`
+
+  const efiResult = await efiService.createPixCharge({
+    amount: pkg.price,
+    description,
+    externalReference: payment.id,
+  })
+
+  await db
+    .update(payments)
+    .set({
+      providerTxId: efiResult.txid,
+      metadata: { ...(payment.metadata as any), efiTxid: efiResult.txid, efiLocationId: efiResult.locationId },
+    })
+    .where(eq(payments.id, payment.id))
+
+  return {
+    paymentId: payment.id,
+    provider: 'efi' as const,
+    pixData: {
+      qrCodeBase64: efiResult.qrCodeBase64,
+      qrCode: efiResult.pixCopiaECola,
+      expiresAt: efiResult.expiresAt,
+    },
+    package: pkg,
+    sandbox: efiService.isEfiSandbox(),
+  }
+}
+
 // ── Webhooks ──
 
 export async function handleMercadoPagoWebhook(type: string, dataId: string) {
@@ -585,6 +625,45 @@ export async function handleNowPaymentsWebhook(body: any) {
     payAmount: body.pay_amount,
     actuallyPaid: body.actually_paid,
   })
+}
+
+export async function handleEfiWebhook(body: any) {
+  const pixPayments = efiService.parseWebhookPayload(body)
+
+  if (pixPayments.length === 0) {
+    return { processed: false }
+  }
+
+  const results = []
+  for (const pix of pixPayments) {
+    // Find payment by EFI txid stored in providerTxId
+    const [payment] = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.providerTxId, pix.txid))
+      .limit(1)
+
+    if (!payment) {
+      console.warn('EFI Webhook: payment not found for txid', pix.txid)
+      results.push({ txid: pix.txid, processed: false })
+      continue
+    }
+
+    const result = await processPaymentConfirmation(
+      payment.id,
+      'completed',
+      pix.txid,
+      {
+        efiEndToEndId: pix.endToEndId,
+        efiAmount: pix.amount,
+        efiPaidAt: pix.paidAt,
+        efiPayerName: pix.payerName,
+      },
+    )
+    results.push({ txid: pix.txid, ...result })
+  }
+
+  return { processed: true, results }
 }
 
 export async function handlePaypalWebhook(body: any) {
@@ -797,11 +876,22 @@ async function processPaymentConfirmation(
 export function getAvailableProviders() {
   const providers: Array<{ id: PaymentProvider; label: string; methods: string[]; sandbox: boolean }> = []
 
+  // EFI handles PIX when configured; MP handles credit card only
+  if (efiService.isEfiConfigured()) {
+    providers.push({
+      id: 'efi',
+      label: 'PIX',
+      methods: ['pix'],
+      sandbox: efiService.isEfiSandbox(),
+    })
+  }
+
   if (env.MERCADOPAGO_ACCESS_TOKEN) {
+    const methods = efiService.isEfiConfigured() ? ['credit_card'] : ['pix', 'credit_card']
     providers.push({
       id: 'mercadopago',
-      label: 'MercadoPago',
-      methods: ['pix', 'credit_card'],
+      label: efiService.isEfiConfigured() ? 'Cartao de Credito' : 'MercadoPago',
+      methods,
       sandbox: isMpSandbox(),
     })
   }
@@ -844,8 +934,18 @@ export async function getPaymentStatus(paymentId: string, userId: string) {
 
   if (!payment) throw new AppError('NOT_FOUND', 'Pagamento nao encontrado', 404)
 
-  // Proactive verification: if payment is still pending and was made via MercadoPago,
-  // check directly with MP API to see if it's been approved (webhook may be delayed)
+  // Proactive verification: if payment is still pending, check provider directly
+  if (payment.status === 'pending' && payment.paymentProvider === 'efi') {
+    try {
+      const efiResult = await proactivelyVerifyEfiPayment(paymentId, payment.providerTxId)
+      if (efiResult && efiResult.status === 'completed') {
+        return { ...payment, status: 'completed' }
+      }
+    } catch (e) {
+      console.warn('Proactive EFI verification failed (non-critical):', e)
+    }
+  }
+
   if (payment.status === 'pending' && payment.paymentProvider === 'mercadopago') {
     try {
       const mpResult = await proactivelyVerifyMpPayment(paymentId)
@@ -897,6 +997,29 @@ async function proactivelyVerifyMpPayment(paymentId: string) {
   return null
 }
 
+// ── EFI Proactive Verification ──
+
+async function proactivelyVerifyEfiPayment(paymentId: string, txid: string | null) {
+  if (!txid || !efiService.isEfiConfigured()) return null
+
+  try {
+    const chargeStatus = await efiService.getChargeStatus(txid)
+    if (chargeStatus.status === 'CONCLUIDA') {
+      const result = await processPaymentConfirmation(
+        paymentId,
+        'completed',
+        txid,
+        { efiStatus: chargeStatus.status, verifiedViaPolling: true },
+      )
+      return result
+    }
+  } catch (e) {
+    console.warn('EFI charge status check failed:', e)
+  }
+
+  return null
+}
+
 // ── PPV Payment via MercadoPago ──
 
 export async function createPpvPayment(userId: string, postId: string, paymentMethod: string) {
@@ -932,6 +1055,9 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
   const appUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   const webhookUrl = getWebhookBaseUrl()
 
+  // Route PIX to EFI when configured
+  const effectiveProvider = (paymentMethod === 'pix' && efiService.isEfiConfigured()) ? 'efi' : 'mercadopago'
+
   const [payment] = await db
     .insert(payments)
     .values({
@@ -941,7 +1067,7 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
       amount: post.ppvPrice,
       platformFee: String(platformFee),
       creatorAmount: String(creatorAmount),
-      paymentProvider: 'mercadopago',
+      paymentProvider: effectiveProvider,
       status: 'pending',
       metadata: { postId, paymentMethod },
     })
@@ -951,7 +1077,34 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
     ? `PPV: ${post.contentText.slice(0, 60)}${post.contentText.length > 60 ? '...' : ''}`
     : 'Conteudo PPV - FanDreams'
 
-  // PIX → Transparent Checkout (QR code in-app) with Checkout Pro fallback
+  // PIX via EFI (preferred when configured)
+  if (paymentMethod === 'pix' && efiService.isEfiConfigured()) {
+    const efiResult = await efiService.createPixCharge({
+      amount,
+      description,
+      externalReference: payment.id,
+    })
+
+    await db
+      .update(payments)
+      .set({
+        providerTxId: efiResult.txid,
+        metadata: { ...(payment.metadata as any), efiTxid: efiResult.txid, efiLocationId: efiResult.locationId },
+      })
+      .where(eq(payments.id, payment.id))
+
+    return {
+      paymentId: payment.id,
+      pixData: {
+        qrCodeBase64: efiResult.qrCodeBase64,
+        qrCode: efiResult.pixCopiaECola,
+        expiresAt: efiResult.expiresAt,
+      },
+      sandbox: efiService.isEfiSandbox(),
+    }
+  }
+
+  // PIX via MercadoPago (fallback)
   if (paymentMethod === 'pix') {
     const [user] = await db
       .select({ email: users.email, displayName: users.displayName, username: users.username })

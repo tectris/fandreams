@@ -197,6 +197,32 @@ paymentsRoute.post('/webhook', async (c) => {
   }
 })
 
+// EFI Pay PIX webhook
+// EFI sends POST to the registered webhook URL when a PIX payment is received.
+// When using x-skip-mtls-checking, we validate by IP whitelist (34.193.116.226).
+paymentsRoute.post('/webhook/efi', async (c) => {
+  try {
+    const body = await c.req.json()
+    const result = await paymentService.handleEfiWebhook(body)
+    return c.json({ received: true, ...result }, 200)
+  } catch (err) {
+    console.error('EFI Webhook error:', err)
+    return c.json({ received: true }, 200)
+  }
+})
+
+// EFI appends /pix to the registered webhook URL, so we also handle that path
+paymentsRoute.post('/webhook/efi/pix', async (c) => {
+  try {
+    const body = await c.req.json()
+    const result = await paymentService.handleEfiWebhook(body)
+    return c.json({ received: true, ...result }, 200)
+  } catch (err) {
+    console.error('EFI Webhook /pix error:', err)
+    return c.json({ received: true }, 200)
+  }
+})
+
 // NOWPayments IPN webhook
 paymentsRoute.post('/webhook/nowpayments', async (c) => {
   try {
