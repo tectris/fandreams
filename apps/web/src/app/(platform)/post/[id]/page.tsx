@@ -4,7 +4,6 @@ import PostDetailContent from './post-detail-content'
 const API_URL = (() => {
   const raw = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
   const normalized = raw.match(/^https?:\/\//) ? raw : `https://${raw}`
-  // Strip /api/v1 suffix if present (same logic as client api.ts), then re-add it
   return normalized.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '')
 })()
 
@@ -28,22 +27,6 @@ async function fetchPostForMeta(code: string) {
   }
 }
 
-function getOgImage(post: any): string | null {
-  if (post.media && post.media.length > 0) {
-    const first = post.media[0]
-    // thumbnailUrl is never redacted by the API (only storageKey is nulled for locked content)
-    // so it's always safe to use as OG preview — for both images and videos
-    if (first.thumbnailUrl) return first.thumbnailUrl
-    // For public posts, storageKey contains the full image URL
-    if (first.mediaType === 'image' && first.storageKey) return first.storageKey
-  }
-
-  // Fallback: creator avatar
-  if (post.creator?.avatarUrl) return post.creator.avatarUrl
-
-  return null
-}
-
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params
   const post = await fetchPostForMeta(id)
@@ -61,7 +44,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     ? post.contentText.substring(0, 160)
     : `Confira este post de ${creatorName} no FanDreams`
   const postUrl = `${APP_URL}/post/${post.shortCode || id}`
-  const ogImage = getOgImage(post)
 
   return {
     title,
@@ -72,13 +54,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       url: postUrl,
       siteName: 'FanDreams',
       type: 'article',
-      ...(ogImage ? { images: [{ url: ogImage, width: 1200, height: 630 }] } : {}),
+      // og:image is handled by opengraph-image.tsx convention file
     },
     twitter: {
-      card: ogImage ? 'summary_large_image' : 'summary',
+      card: 'summary_large_image',
       title,
       description,
-      ...(ogImage ? { images: [ogImage] } : {}),
+      // twitter:image is handled by opengraph-image.tsx convention file
     },
   }
 }

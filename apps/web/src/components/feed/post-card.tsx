@@ -575,7 +575,7 @@ export function PostCard({
             </div>
           ) : post.media!.length === 1 ? (
             // Single media
-            <div className="aspect-video bg-surface-dark">
+            <div className="aspect-video bg-surface-dark relative">
               {post.media![0].mediaType === 'image' && post.media![0].storageKey && (
                 <img
                   src={post.media![0].storageKey}
@@ -593,6 +593,10 @@ export function PostCard({
                   onPause={handleVideoPause}
                 />
               )}
+              {/* Watermark */}
+              <div className="absolute bottom-3 right-3 pointer-events-none select-none">
+                <span className="text-white/20 text-sm font-bold tracking-wider">FanDreams</span>
+              </div>
             </div>
           ) : (
             // Multi-image gallery grid
@@ -627,6 +631,10 @@ export function PostCard({
                       <span className="text-white text-2xl font-bold">+{post.media!.length - 4}</span>
                     </div>
                   )}
+                  {/* Watermark */}
+                  <div className="absolute bottom-2 right-2 pointer-events-none select-none">
+                    <span className="text-white/20 text-xs font-bold tracking-wider">FanDreams</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -668,12 +676,17 @@ export function PostCard({
                 </button>
               </>
             )}
-            <img
-              src={post.media.filter((m) => m.mediaType === 'image')[lightboxIndex]?.storageKey || ''}
-              alt=""
-              className="max-w-[90vw] max-h-[90vh] object-contain"
-              onClick={(e) => e.stopPropagation()}
-            />
+            <div className="relative" onClick={(e) => e.stopPropagation()}>
+              <img
+                src={post.media.filter((m) => m.mediaType === 'image')[lightboxIndex]?.storageKey || ''}
+                alt=""
+                className="max-w-[90vw] max-h-[90vh] object-contain"
+              />
+              {/* Watermark */}
+              <div className="absolute bottom-4 right-4 pointer-events-none select-none">
+                <span className="text-white/25 text-lg font-bold tracking-wider">FanDreams</span>
+              </div>
+            </div>
             {post.media.filter((m) => m.mediaType === 'image').length > 1 && (
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
                 {post.media.filter((m) => m.mediaType === 'image').map((_, i) => (
