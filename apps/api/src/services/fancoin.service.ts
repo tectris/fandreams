@@ -291,7 +291,7 @@ export async function unlockPpv(userId: string, postId: string) {
 export async function creditEarnings(
   creatorId: string,
   creatorAmountBrl: number,
-  type: 'ppv_received' | 'subscription_earned',
+  type: 'ppv_received' | 'subscription_earned' | 'affiliate_commission',
   description: string,
   referenceId?: string,
 ) {

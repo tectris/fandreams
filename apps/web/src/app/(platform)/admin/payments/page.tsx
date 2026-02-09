@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { formatCurrency } from '@/lib/utils'
 import {
   Settings, Shield, AlertTriangle, CheckCircle2, XCircle,
-  Clock, ArrowDownToLine, DollarSign, Loader2,
+  Clock, ArrowDownToLine, DollarSign, Loader2, Gift,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -30,6 +30,9 @@ const DEFAULT_SETTINGS = {
   min_payout: 50,
   fancoin_to_brl: 0.01,
   platform_fee_percent: 8,
+  creator_bonus_enabled: false,
+  creator_bonus_coins: 1000,
+  creator_bonus_required_subs: 1,
 }
 
 function SettingsTab({ providers, loadingProviders, settings, loadingSettings, settingsMutation }: {
@@ -132,6 +135,65 @@ function SettingsTab({ providers, loadingProviders, settings, loadingSettings, s
               <p className="text-xs text-muted">
                 Atual: <span className="font-bold text-foreground">{effectiveSettings.platform_fee_percent}%</span> — Criador recebe <span className="font-bold text-success">{100 - effectiveSettings.platform_fee_percent}%</span> de cada transacao
               </p>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Creator Bonus Configuration */}
+      <Card>
+        <CardHeader>
+          <h2 className="font-bold flex items-center gap-2">
+            <Gift className="w-5 h-5 text-primary" /> Bonus de Criador
+          </h2>
+          <p className="text-xs text-muted mt-1">Configure o bonus de boas-vindas em FanCoins para novos criadores</p>
+        </CardHeader>
+        <CardContent>
+          {loadingSettings ? (
+            <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+          ) : (
+            <form className="space-y-4" onSubmit={(e) => {
+              e.preventDefault()
+              const form = new FormData(e.currentTarget)
+              settingsMutation.mutate({
+                creator_bonus_enabled: form.get('creator_bonus_enabled') === 'on',
+                creator_bonus_coins: Number(form.get('creator_bonus_coins')),
+                creator_bonus_required_subs: Number(form.get('creator_bonus_required_subs')),
+              })
+            }}>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="creator_bonus_enabled"
+                  defaultChecked={effectiveSettings.creator_bonus_enabled}
+                  className="w-4 h-4 rounded border-border text-primary"
+                />
+                <span className="text-sm font-medium">Ativar bonus de boas-vindas</span>
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="Quantidade de FanCoins"
+                  name="creator_bonus_coins"
+                  type="number"
+                  min="100"
+                  max="100000"
+                  defaultValue={effectiveSettings.creator_bonus_coins}
+                />
+                <Input
+                  label="Assinantes necessarios para resgatar"
+                  name="creator_bonus_required_subs"
+                  type="number"
+                  min="1"
+                  max="100"
+                  defaultValue={effectiveSettings.creator_bonus_required_subs}
+                />
+              </div>
+              <p className="text-xs text-muted">
+                Bonus: <span className="font-bold text-foreground">{effectiveSettings.creator_bonus_coins?.toLocaleString() || '1.000'} FanCoins</span> (R${((effectiveSettings.creator_bonus_coins || 1000) * 0.01).toFixed(2)}) — Resgatavel apos <span className="font-bold text-foreground">{effectiveSettings.creator_bonus_required_subs || 1}</span> assinante(s)
+              </p>
+              <Button type="submit" loading={settingsMutation.isPending}>
+                Salvar Bonus
+              </Button>
             </form>
           )}
         </CardContent>

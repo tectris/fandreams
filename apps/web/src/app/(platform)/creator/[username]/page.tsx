@@ -33,6 +33,7 @@ export default function CreatorProfilePage() {
   const coverInputRef = useRef<HTMLInputElement>(null)
   const searchParams = useSearchParams()
   const subscriptionStatus = searchParams.get('subscription')
+  const refCode = searchParams.get('ref')
 
   useEffect(() => {
     if (subscriptionStatus === 'pending') {
@@ -40,6 +41,13 @@ export default function CreatorProfilePage() {
       queryClient.invalidateQueries({ queryKey: ['subscription-status'] })
     }
   }, [subscriptionStatus, queryClient])
+
+  // Track affiliate click
+  useEffect(() => {
+    if (refCode) {
+      api.post(`/affiliates/track/${refCode}`).catch(() => {})
+    }
+  }, [refCode])
 
   const { data: profile } = useQuery({
     queryKey: ['profile', username],

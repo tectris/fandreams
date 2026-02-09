@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -58,6 +59,8 @@ function getDiscount(monthlyPrice: string, promoPrice: string, days: number) {
 
 export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawerProps) {
   const queryClient = useQueryClient()
+  const searchParams = useSearchParams()
+  const refCode = useMemo(() => searchParams.get('ref') || undefined, [searchParams])
   const [state, setState] = useState<DrawerState>('choose')
   const [error, setError] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('credit_card')
@@ -135,6 +138,7 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
         tierId: tier?.id,
         promoId: selectedPromo?.id,
         paymentMethod,
+        refCode,
       })
       const data = res.data
 
@@ -161,7 +165,7 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
   async function handleFreeSubscribe() {
     setState('processing')
     try {
-      await api.post('/subscriptions', { creatorId: creator.id, tierId: tier?.id })
+      await api.post('/subscriptions', { creatorId: creator.id, tierId: tier?.id, refCode })
       setState('success')
       queryClient.invalidateQueries({ queryKey: ['subscription-check', creator.id] })
       toast.success(`Voce agora assina ${displayName}!`)
