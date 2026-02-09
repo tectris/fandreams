@@ -62,9 +62,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   let ogImageUrl: string | null = null
   if (post.media && post.media.length > 0) {
     const first = post.media[0]
-    // thumbnailUrl is always available (never redacted), good for videos and PPV content
-    // storageKey is available for public posts / preview images
-    ogImageUrl = first.thumbnailUrl || first.storageKey || null
+    // thumbnailUrl works for both images and videos (Bunny CDN thumbnail)
+    // storageKey only works for images (for videos it's a Bunny GUID, not an image URL)
+    ogImageUrl = first.thumbnailUrl || (first.mediaType === 'image' ? first.storageKey : null) || null
   }
   // Fallback to dynamic OG image route for text-only posts or when no direct URL
   if (!ogImageUrl) {

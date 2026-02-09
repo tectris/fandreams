@@ -4,8 +4,19 @@ import { db } from '../config/database'
 import { AppError } from './auth.service'
 import type { CreatePostInput, UpdatePostInput } from '@fandreams/shared'
 import { customAlphabet } from 'nanoid'
+import { getThumbnailUrl } from './bunny.service'
 
 const generateShortCode = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 8)
+
+/** Enrich video media items with a constructed thumbnailUrl when missing. */
+function enrichMediaThumbnails<T extends { mediaType: string; storageKey: string; thumbnailUrl: string | null }>(media: T[]): T[] {
+  return media.map((m) => {
+    if (m.mediaType === 'video' && !m.thumbnailUrl && m.storageKey) {
+      return { ...m, thumbnailUrl: getThumbnailUrl(m.storageKey) }
+    }
+    return m
+  })
+}
 
 /** Batch-generate shortCodes for any posts that are missing one. Mutates the array in place. */
 async function ensureShortCodes<T extends { id: string; shortCode: string | null }>(rows: T[]): Promise<T[]> {
@@ -103,11 +114,12 @@ async function resolvePostDetails(post: typeof posts.$inferSelect, viewerId?: st
     throw new AppError('NOT_FOUND', 'Post nao encontrado', 404)
   }
 
-  const media = await db
+  const rawMedia = await db
     .select()
     .from(postMedia)
     .where(eq(postMedia.postId, post.id))
     .orderBy(postMedia.sortOrder)
+  const media = enrichMediaThumbnails(rawMedia)
 
   const [creator] = await db
     .select({
@@ -244,10 +256,11 @@ export async function getFeed(userId: string, page = 1, limit = 20) {
   await ensureShortCodes(feedPosts)
 
   const postIds = feedPosts.map((p) => p.id)
-  const allMedia =
+  const allMedia = enrichMediaThumbnails(
     postIds.length > 0
       ? await db.select().from(postMedia).where(inArray(postMedia.postId, postIds)).orderBy(postMedia.sortOrder)
-      : []
+      : [],
+  )
 
   const userLikes =
     postIds.length > 0
@@ -369,10 +382,11 @@ export async function getPublicFeed(page = 1, limit = 20) {
   await ensureShortCodes(feedPosts)
 
   const postIds = feedPosts.map((p) => p.id)
-  const allMedia =
+  const allMedia = enrichMediaThumbnails(
     postIds.length > 0
       ? await db.select().from(postMedia).where(inArray(postMedia.postId, postIds))
-      : []
+      : [],
+  )
 
   const postsWithMedia = feedPosts.map((post) => ({
     ...post,
@@ -426,10 +440,11 @@ export async function getCreatorPosts(creatorId: string, viewerId?: string, page
   await ensureShortCodes(feedPosts)
 
   const postIds = feedPosts.map((p) => p.id)
-  const allMedia =
+  const allMedia = enrichMediaThumbnails(
     postIds.length > 0
       ? await db.select().from(postMedia).where(inArray(postMedia.postId, postIds)).orderBy(postMedia.sortOrder)
-      : []
+      : [],
+  )
 
   // Check subscription status for non-owner viewers
   let hasSubscription = false
