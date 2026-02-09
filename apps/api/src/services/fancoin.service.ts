@@ -3,7 +3,7 @@ import { fancoinWallets, fancoinTransactions, creatorProfiles, users, posts, pay
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import { FANCOIN_PACKAGES } from '@fandreams/shared'
-import { getPlatformFeeRate } from './withdrawal.service'
+import { getPlatformFeeRate, brlToFancoins } from './withdrawal.service'
 
 export async function getWallet(userId: string) {
   const [wallet] = await db
@@ -201,8 +201,8 @@ export async function unlockPpv(userId: string, postId: string) {
 
   if (existing) throw new AppError('ALREADY_UNLOCKED', 'Voce ja desbloqueou este post', 409)
 
-  // Convert ppvPrice (BRL) to FanCoins: R$0.01 = 1 FanCoin → R$1 = 100 FanCoins
-  const priceInCoins = Math.ceil(Number(post.ppvPrice) * 100)
+  // Convert ppvPrice (BRL) to FanCoins using dynamic rate
+  const priceInCoins = await brlToFancoins(Number(post.ppvPrice))
 
   const wallet = await getWallet(userId)
   if (wallet.balance < priceInCoins) {
@@ -285,8 +285,7 @@ export async function unlockPpv(userId: string, postId: string) {
 
 /**
  * Credit creator earnings as FanCoins from external payments (MP subscriptions, PPV via MP).
- * Converts BRL creator amount (already minus platform fee) to FanCoins.
- * R$0.01 = 1 FanCoin → R$1.00 = 100 FanCoins
+ * Converts BRL creator amount (already minus platform fee) to FanCoins using dynamic rate.
  */
 export async function creditEarnings(
   creatorId: string,
@@ -295,7 +294,7 @@ export async function creditEarnings(
   description: string,
   referenceId?: string,
 ) {
-  const coinsEarned = Math.round(creatorAmountBrl * 100)
+  const coinsEarned = await brlToFancoins(creatorAmountBrl)
   if (coinsEarned <= 0) return { credited: 0, newBalance: 0 }
 
   const wallet = await getWallet(creatorId)

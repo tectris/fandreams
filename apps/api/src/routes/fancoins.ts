@@ -11,13 +11,17 @@ import { users } from '@fandreams/database'
 import { eq } from 'drizzle-orm'
 import { success, error } from '../utils/response'
 import { AppError } from '../services/auth.service'
+import { getFancoinToBrl } from '../services/withdrawal.service'
 
 const fancoins = new Hono()
 
 fancoins.get('/wallet', authMiddleware, async (c) => {
   const { userId } = c.get('user')
-  const wallet = await fancoinService.getWallet(userId)
-  return success(c, wallet)
+  const [wallet, fancoinToBrl] = await Promise.all([
+    fancoinService.getWallet(userId),
+    getFancoinToBrl(),
+  ])
+  return success(c, { ...wallet, fancoinToBrl })
 })
 
 fancoins.get('/transactions', authMiddleware, async (c) => {
