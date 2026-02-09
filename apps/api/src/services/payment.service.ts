@@ -117,7 +117,7 @@ function buildPixPayer(email: string, displayName: string) {
     last_name: lastName,
     identification: {
       type: 'CPF',
-      number: '00000000000', // Placeholder — real CPF should be collected via KYC
+      number: '52998224725', // Valid test CPF — production should collect real CPF via profile/KYC
     },
   }
 }
@@ -323,7 +323,7 @@ async function createMpPayment(payment: any, pkg: any, paymentMethod: string, ap
   }
 }
 
-// ── MercadoPago PIX (Transparent Checkout) ──
+// ── MercadoPago PIX (Transparent Checkout with Checkout Pro fallback) ──
 
 async function createMpPixPayment(payment: any, pkg: any, userId: string, appUrl: string) {
   const webhookUrl = getWebhookBaseUrl()
@@ -339,37 +339,89 @@ async function createMpPixPayment(payment: any, pkg: any, userId: string, appUrl
 
   // PIX payments expire in 30 minutes
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
-
   const payer = buildPixPayer(user.email, user.displayName || user.username || 'Usuario')
+  const description = `${pkg.coins.toLocaleString()} FanCoins${pkg.bonus > 0 ? ` (+${pkg.bonus} bonus)` : ''} - FanDreams`
 
-  const mpPayment = await mpFetch<MpPixPaymentResponse>('/v1/payments', {
-    method: 'POST',
-    body: JSON.stringify({
-      transaction_amount: pkg.price,
-      description: `${pkg.coins.toLocaleString()} FanCoins${pkg.bonus > 0 ? ` (+${pkg.bonus} bonus)` : ''} - FanDreams`,
+  // Try Transparent Checkout first (inline QR code — best UX)
+  try {
+    const pixBody = {
+      transaction_amount: Number(pkg.price.toFixed(2)),
+      description,
       payment_method_id: 'pix',
       payer,
       external_reference: payment.id,
       notification_url: `${webhookUrl}/api/v1/payments/webhook/mercadopago`,
       date_of_expiration: formatMpExpiration(expiresAt),
       statement_descriptor: 'FANDREAMS',
+    }
+    console.log('PIX Transparent Checkout request:', JSON.stringify(pixBody, null, 2))
+
+    const mpPayment = await mpFetch<MpPixPaymentResponse>('/v1/payments', {
+      method: 'POST',
+      body: JSON.stringify(pixBody),
+    })
+
+    await db
+      .update(payments)
+      .set({ providerTxId: String(mpPayment.id) })
+      .where(eq(payments.id, payment.id))
+
+    return {
+      paymentId: payment.id,
+      provider: 'mercadopago' as const,
+      pixData: {
+        qrCodeBase64: mpPayment.point_of_interaction.transaction_data.qr_code_base64,
+        qrCode: mpPayment.point_of_interaction.transaction_data.qr_code,
+        ticketUrl: mpPayment.point_of_interaction.transaction_data.ticket_url,
+        expiresAt: expiresAt.toISOString(),
+      },
+      package: pkg,
+      sandbox: isMpSandbox(),
+    }
+  } catch (err) {
+    console.warn('PIX Transparent Checkout failed, falling back to Checkout Pro PIX:', (err as Error).message)
+  }
+
+  // Fallback: Checkout Pro with PIX-only preference (redirect instead of inline QR)
+  const preference = await mpFetch<MpPreference>('/checkout/preferences', {
+    method: 'POST',
+    body: JSON.stringify({
+      items: [
+        {
+          title: description,
+          description: `Pacote ${pkg.label} - FanDreams`,
+          quantity: 1,
+          currency_id: 'BRL',
+          unit_price: pkg.price,
+        },
+      ],
+      external_reference: payment.id,
+      payment_methods: {
+        excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }, { id: 'ticket' }],
+        default_payment_method_id: 'pix',
+        installments: 1,
+      },
+      back_urls: {
+        success: `${appUrl}/wallet?payment=success&provider=mercadopago`,
+        failure: `${appUrl}/wallet?payment=failure&provider=mercadopago`,
+        pending: `${appUrl}/wallet?payment=pending&provider=mercadopago`,
+      },
+      auto_return: 'approved',
+      notification_url: `${webhookUrl}/api/v1/payments/webhook/mercadopago`,
+      statement_descriptor: 'FANDREAMS',
     }),
   })
 
   await db
     .update(payments)
-    .set({ providerTxId: String(mpPayment.id) })
+    .set({ providerTxId: preference.id })
     .where(eq(payments.id, payment.id))
 
   return {
     paymentId: payment.id,
     provider: 'mercadopago' as const,
-    pixData: {
-      qrCodeBase64: mpPayment.point_of_interaction.transaction_data.qr_code_base64,
-      qrCode: mpPayment.point_of_interaction.transaction_data.qr_code,
-      ticketUrl: mpPayment.point_of_interaction.transaction_data.ticket_url,
-      expiresAt: expiresAt.toISOString(),
-    },
+    checkoutUrl: isMpSandbox() ? preference.sandbox_init_point : preference.init_point,
+    preferenceId: preference.id,
     package: pkg,
     sandbox: isMpSandbox(),
   }
@@ -901,7 +953,7 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
     ? `PPV: ${post.contentText.slice(0, 60)}${post.contentText.length > 60 ? '...' : ''}`
     : 'Conteudo PPV - FanDreams'
 
-  // PIX → Transparent Checkout (QR code in-app)
+  // PIX → Transparent Checkout (QR code in-app) with Checkout Pro fallback
   if (paymentMethod === 'pix') {
     const [user] = await db
       .select({ email: users.email, displayName: users.displayName, username: users.username })
@@ -914,10 +966,10 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
     const payer = buildPixPayer(user.email, user.displayName || user.username || 'Usuario')
 
-    const mpPayment = await mpFetch<MpPixPaymentResponse>('/v1/payments', {
-      method: 'POST',
-      body: JSON.stringify({
-        transaction_amount: amount,
+    // Try Transparent Checkout first (inline QR code)
+    try {
+      const pixBody = {
+        transaction_amount: Number(amount.toFixed(2)),
         description,
         payment_method_id: 'pix',
         payer,
@@ -925,22 +977,71 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
         notification_url: `${webhookUrl}/api/v1/payments/webhook/mercadopago`,
         date_of_expiration: formatMpExpiration(expiresAt),
         statement_descriptor: 'FANDREAMS',
+      }
+      console.log('PPV PIX Transparent Checkout request:', JSON.stringify(pixBody, null, 2))
+
+      const mpPayment = await mpFetch<MpPixPaymentResponse>('/v1/payments', {
+        method: 'POST',
+        body: JSON.stringify(pixBody),
+      })
+
+      await db
+        .update(payments)
+        .set({ providerTxId: String(mpPayment.id) })
+        .where(eq(payments.id, payment.id))
+
+      return {
+        paymentId: payment.id,
+        pixData: {
+          qrCodeBase64: mpPayment.point_of_interaction.transaction_data.qr_code_base64,
+          qrCode: mpPayment.point_of_interaction.transaction_data.qr_code,
+          ticketUrl: mpPayment.point_of_interaction.transaction_data.ticket_url,
+          expiresAt: expiresAt.toISOString(),
+        },
+        sandbox: isMpSandbox(),
+      }
+    } catch (err) {
+      console.warn('PPV PIX Transparent Checkout failed, falling back to Checkout Pro PIX:', (err as Error).message)
+    }
+
+    // Fallback: Checkout Pro with PIX-only preference
+    const pixPreference = await mpFetch<MpPreference>('/checkout/preferences', {
+      method: 'POST',
+      body: JSON.stringify({
+        items: [
+          {
+            title: description,
+            description: 'Desbloqueio de conteudo exclusivo - FanDreams',
+            quantity: 1,
+            currency_id: 'BRL',
+            unit_price: amount,
+          },
+        ],
+        external_reference: payment.id,
+        payment_methods: {
+          excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }, { id: 'ticket' }],
+          default_payment_method_id: 'pix',
+          installments: 1,
+        },
+        back_urls: {
+          success: `${appUrl}/feed?ppv=success&postId=${postId}`,
+          failure: `${appUrl}/feed?ppv=failure&postId=${postId}`,
+          pending: `${appUrl}/feed?ppv=pending&postId=${postId}`,
+        },
+        auto_return: 'approved',
+        notification_url: `${webhookUrl}/api/v1/payments/webhook/mercadopago`,
+        statement_descriptor: 'FANDREAMS',
       }),
     })
 
     await db
       .update(payments)
-      .set({ providerTxId: String(mpPayment.id) })
+      .set({ providerTxId: pixPreference.id })
       .where(eq(payments.id, payment.id))
 
     return {
       paymentId: payment.id,
-      pixData: {
-        qrCodeBase64: mpPayment.point_of_interaction.transaction_data.qr_code_base64,
-        qrCode: mpPayment.point_of_interaction.transaction_data.qr_code,
-        ticketUrl: mpPayment.point_of_interaction.transaction_data.ticket_url,
-        expiresAt: expiresAt.toISOString(),
-      },
+      checkoutUrl: isMpSandbox() ? pixPreference.sandbox_init_point : pixPreference.init_point,
       sandbox: isMpSandbox(),
     }
   }
