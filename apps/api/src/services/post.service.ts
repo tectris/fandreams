@@ -1,4 +1,4 @@
-import { eq, desc, and, or, sql, inArray, gt } from 'drizzle-orm'
+import { eq, desc, and, or, sql, inArray, gt, like } from 'drizzle-orm'
 import { posts, postMedia, postLikes, postComments, postBookmarks, subscriptions, users, creatorProfiles, fancoinTransactions, postViews, payments } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
@@ -768,10 +768,14 @@ export async function addMediaToPost(postId: string, mediaData: { mediaType: str
   return media
 }
 
-/** Update video media metadata after Bunny encoding completes. Matches by storageKey (video GUID). */
+/** Update video media metadata after Bunny encoding completes.
+ *  Matches storageKey by exact GUID or full HLS URL containing the GUID. */
 export async function updateVideoMedia(videoGuid: string, data: { thumbnailUrl?: string; duration?: number; width?: number; height?: number }) {
   await db
     .update(postMedia)
     .set(data)
-    .where(and(eq(postMedia.storageKey, videoGuid), eq(postMedia.mediaType, 'video')))
+    .where(and(
+      or(eq(postMedia.storageKey, videoGuid), like(postMedia.storageKey, `%${videoGuid}%`)),
+      eq(postMedia.mediaType, 'video'),
+    ))
 }
