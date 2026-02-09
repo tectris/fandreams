@@ -3,7 +3,9 @@ import PostDetailContent from './post-detail-content'
 
 const API_URL = (() => {
   const raw = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-  return raw.match(/^https?:\/\//) ? raw : `https://${raw}`
+  const normalized = raw.match(/^https?:\/\//) ? raw : `https://${raw}`
+  // Strip /api/v1 suffix if present (same logic as client api.ts), then re-add it
+  return normalized.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '')
 })()
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
@@ -16,6 +18,7 @@ async function fetchPostForMeta(code: string) {
   try {
     const res = await fetch(`${API_URL}/api/v1/posts/${code}`, {
       next: { revalidate: 60 },
+      headers: { 'Content-Type': 'application/json' },
     })
     if (!res.ok) return null
     const json = await res.json()

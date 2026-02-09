@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
+import { Avatar } from '@/components/ui/avatar'
 
 export default function PostDetailContent({ postCode }: { postCode: string }) {
   const router = useRouter()
@@ -149,16 +150,27 @@ export default function PostDetailContent({ postCode }: { postCode: string }) {
     )
   }
 
+  const creatorUsername = post.creatorUsername || post.creator?.username
+  const creatorDisplayName = post.creatorDisplayName || post.creator?.displayName
+  const creatorAvatarUrl = post.creatorAvatarUrl || post.creator?.avatarUrl
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
       <div className="flex items-center gap-3 mb-4">
-        <button
-          onClick={() => router.back()}
+        <Link
+          href={creatorUsername ? `/creator/${creatorUsername}` : '/feed'}
           className="p-1.5 rounded-full hover:bg-surface-light transition-colors text-muted hover:text-foreground"
         >
           <ArrowLeft className="w-5 h-5" />
-        </button>
-        <h1 className="text-lg font-bold">Post</h1>
+        </Link>
+        {creatorUsername ? (
+          <Link href={`/creator/${creatorUsername}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <Avatar src={creatorAvatarUrl} alt={creatorDisplayName || creatorUsername} size="sm" />
+            <span className="text-sm font-semibold">{creatorDisplayName || creatorUsername}</span>
+          </Link>
+        ) : (
+          <h1 className="text-lg font-bold">Post</h1>
+        )}
       </div>
 
       <PostCard
