@@ -43,3 +43,11 @@ export async function markAllAsRead(userId: string) {
     .set({ isRead: true, readAt: new Date() })
     .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)))
 }
+
+export async function deleteNotification(userId: string, notificationId: string) {
+  const [deleted] = await db
+    .delete(notifications)
+    .where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)))
+    .returning({ id: notifications.id })
+  return deleted
+}

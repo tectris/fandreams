@@ -69,7 +69,7 @@ export function Header() {
       return res.data
     },
     enabled: isAuthenticated,
-    refetchInterval: 30000,
+    refetchInterval: 10000,
   })
 
   const { data: unreadMsgData } = useQuery({
@@ -79,7 +79,7 @@ export function Header() {
       return res.data
     },
     enabled: isAuthenticated,
-    refetchInterval: 15000,
+    refetchInterval: 10000,
   })
 
   const balance = walletData?.data ? Number(walletData.data.balance) : 0

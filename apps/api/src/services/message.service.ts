@@ -239,14 +239,7 @@ export async function sendMessage(
       const senderName = sender.displayName || sender.username
       const msgPreview = data.content || (data.mediaType === 'video' ? 'Enviou um video' : 'Enviou uma imagem')
 
-      // In-app notification
-      createNotification(
-        recipientId,
-        'new_message',
-        `${senderName} enviou uma mensagem`,
-        msgPreview.substring(0, 100),
-        { fromUserId: senderId, conversationId },
-      ).catch((e) => console.error('Failed to create message notification:', e))
+      // In-app notification skipped — the message icon badge is sufficient
 
       // Email notification
       if (settings?.notificationEmail !== false && settings?.notificationMessages !== false) {
