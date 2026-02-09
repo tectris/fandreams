@@ -1,23 +1,23 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
+import { Avatar } from '@/components/ui/avatar'
 import { formatCurrency } from '@/lib/utils'
 import {
   Share2, Users, Coins, Link as LinkIcon, Copy, Check,
-  TrendingUp, Loader2, MousePointerClick, BarChart3,
+  Loader2, MousePointerClick, BarChart3,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import Link from 'next/link'
 
 export default function AffiliateDashboardPage() {
   const queryClient = useQueryClient()
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
-  const [newCreatorId, setNewCreatorId] = useState('')
 
   // ── Data Fetching ──
 
@@ -27,18 +27,6 @@ export default function AffiliateDashboardPage() {
       const res = await api.get<any>('/affiliates/dashboard')
       return res.data
     },
-  })
-
-  // ── Mutations ──
-
-  const createLinkMutation = useMutation({
-    mutationFn: (creatorId: string) => api.post('/affiliates/links', { creatorId }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['affiliate-dashboard'] })
-      setNewCreatorId('')
-      toast.success('Link de afiliado criado!')
-    },
-    onError: (e: any) => toast.error(e.message),
   })
 
   // ── Helpers ──
@@ -112,66 +100,51 @@ export default function AffiliateDashboardPage() {
         </Card>
       </div>
 
-      {/* Create New Link */}
-      <Card className="mb-6">
-        <CardHeader>
-          <h2 className="font-bold flex items-center gap-2">
-            <LinkIcon className="w-5 h-5 text-primary" /> Criar Link de Afiliado
-          </h2>
-          <p className="text-xs text-muted mt-1">Gere um link para promover um criador e ganhar comissoes</p>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-3">
-            <Input
-              placeholder="ID do criador"
-              value={newCreatorId}
-              onChange={(e) => setNewCreatorId(e.target.value)}
-              className="flex-1"
-            />
-            <Button
-              onClick={() => createLinkMutation.mutate(newCreatorId)}
-              loading={createLinkMutation.isPending}
-              disabled={!newCreatorId}
-            >
-              Gerar Link
-            </Button>
-          </div>
-          <p className="text-xs text-muted mt-2">
-            Cole o ID do criador que tem programa de afiliados ativo. O link sera gerado automaticamente.
-          </p>
-        </CardContent>
-      </Card>
-
       {/* My Links */}
       <Card className="mb-6">
         <CardHeader>
           <h2 className="font-bold flex items-center gap-2">
             <Share2 className="w-5 h-5 text-primary" /> Meus Links
           </h2>
+          <p className="text-xs text-muted mt-1">
+            Para criar um link, visite o perfil de um criador com programa de afiliados ativo e clique em &quot;Tornar-se afiliado&quot;.
+          </p>
         </CardHeader>
         <CardContent>
           {links.length > 0 ? (
             <div className="space-y-3">
               {links.map((link: any) => {
-                const fullUrl = `${appUrl}/creator/${link.creatorId}?ref=${link.code}`
+                const creatorUsername = link.creatorUsername || link.creatorId
+                const creatorName = link.creatorDisplayName || link.creatorUsername || link.creatorId.slice(0, 8)
+                const fullUrl = `${appUrl}/creator/${creatorUsername}?ref=${link.code}`
                 return (
                   <div key={link.id} className="p-3 border border-border rounded-md">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
+                      <Link href={`/creator/${creatorUsername}`} className="flex items-center gap-2 min-w-0">
+                        <Avatar
+                          src={link.creatorAvatarUrl}
+                          alt={creatorName}
+                          size="sm"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{creatorName}</p>
+                          <p className="text-xs text-muted">@{creatorUsername}</p>
+                        </div>
+                      </Link>
+                      <div className="flex items-center gap-2 shrink-0">
                         <Badge variant="default">{link.code}</Badge>
-                        <span className="text-xs text-muted">Criador: {link.creatorId.slice(0, 8)}...</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => copyToClipboard(fullUrl, link.code)}
+                        >
+                          {copiedCode === link.code ? (
+                            <Check className="w-4 h-4 text-success" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </Button>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => copyToClipboard(fullUrl, link.code)}
-                      >
-                        {copiedCode === link.code ? (
-                          <Check className="w-4 h-4 text-success" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </Button>
                     </div>
                     <div className="flex items-center gap-4 text-xs text-muted">
                       <span className="flex items-center gap-1">
@@ -190,7 +163,13 @@ export default function AffiliateDashboardPage() {
               })}
             </div>
           ) : (
-            <p className="text-muted text-sm text-center py-6">Nenhum link criado ainda. Gere um link acima.</p>
+            <div className="text-center py-8">
+              <Share2 className="w-10 h-10 mx-auto mb-3 text-muted opacity-50" />
+              <p className="text-muted text-sm mb-2">Nenhum link criado ainda</p>
+              <p className="text-xs text-muted">
+                Explore criadores no <Link href="/explore" className="text-primary hover:underline">Explorar</Link> e torne-se afiliado dos que possuem o programa ativo.
+              </p>
+            </div>
           )}
         </CardContent>
       </Card>

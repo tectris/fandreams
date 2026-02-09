@@ -14,9 +14,9 @@ import { SubscribeDrawer } from '@/components/subscription/subscribe-drawer'
 import { PpvUnlockDrawer } from '@/components/feed/ppv-unlock-drawer'
 import { LevelBadge } from '@/components/gamification/level-badge'
 import { formatCurrency, formatNumber } from '@/lib/utils'
-import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, SendHorizontal, FileText, Eye, Image, Video, AlertTriangle, Tag, MessageCircle, X, Link2 } from 'lucide-react'
+import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, SendHorizontal, FileText, Eye, Image, Video, AlertTriangle, Tag, MessageCircle, X, Link2, Share2, Copy, Check, Coins } from 'lucide-react'
 import { toast } from 'sonner'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 export default function CreatorProfilePage() {
@@ -30,6 +30,7 @@ export default function CreatorProfilePage() {
   const [ppvPost, setPpvPost] = useState<any>(null)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
+  const [affiliateCopied, setAffiliateCopied] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
   const searchParams = useSearchParams()
@@ -97,6 +98,45 @@ export default function CreatorProfilePage() {
     },
     enabled: !!profile?.id,
   })
+
+  // Affiliate program query (for non-owners)
+  const { data: affiliateProgram } = useQuery({
+    queryKey: ['affiliate-program', username],
+    queryFn: async () => {
+      const res = await api.get<any>(`/affiliates/program/by-username/${username}`)
+      return res.data
+    },
+    enabled: !!profile?.id && isAuthenticated && !!(profile.id !== user?.id),
+    retry: false,
+  })
+
+  // Check if user already has an affiliate link for this creator
+  const { data: myAffiliateLink } = useQuery({
+    queryKey: ['my-affiliate-link', profile?.id],
+    queryFn: async () => {
+      const res = await api.get<any[]>('/affiliates/links')
+      const links = res.data || []
+      return links.find((l: any) => l.creatorId === profile.id) || null
+    },
+    enabled: !!profile?.id && isAuthenticated && !!affiliateProgram && profile.id !== user?.id,
+  })
+
+  const createAffiliateLinkMutation = useMutation({
+    mutationFn: (creatorId: string) => api.post<any>('/affiliates/links', { creatorId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-affiliate-link', profile?.id] })
+      toast.success('Link de afiliado criado!')
+    },
+    onError: (e: any) => toast.error(e.message || 'Erro ao criar link'),
+  })
+
+  const handleCopyAffiliateLink = useCallback((code: string) => {
+    const url = `${window.location.origin}/creator/${username}?ref=${code}`
+    navigator.clipboard.writeText(url)
+    setAffiliateCopied(true)
+    toast.success('Link de afiliado copiado!')
+    setTimeout(() => setAffiliateCopied(false), 2000)
+  }, [username])
 
   const editMutation = useMutation({
     mutationFn: ({ postId, data }: { postId: string; data: Record<string, unknown> }) =>
@@ -614,6 +654,58 @@ export default function CreatorProfilePage() {
               )
             })}
           </div>
+        </div>
+      )}
+
+      {/* Affiliate Program */}
+      {affiliateProgram && !isOwner && isAuthenticated && (
+        <div className="mb-10">
+          <Card>
+            <CardContent className="py-5">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <Share2 className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold text-sm mb-1">Programa de Afiliados</h3>
+                  <p className="text-xs text-muted mb-3">
+                    Compartilhe o link deste criador e ganhe comissao por cada novo assinante!
+                  </p>
+                  <div className="flex items-center gap-3 text-xs text-muted mb-3">
+                    {affiliateProgram.levels?.map((l: any) => (
+                      <span key={l.level} className="flex items-center gap-1">
+                        <Coins className="w-3.5 h-3.5 text-warning" />
+                        Nivel {l.level}: <span className="font-semibold text-foreground">{Number(l.commissionPercent)}%</span>
+                      </span>
+                    ))}
+                  </div>
+                  {myAffiliateLink ? (
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-surface-light rounded-md px-3 py-2 text-xs font-mono truncate">
+                        {typeof window !== 'undefined' ? window.location.origin : ''}/creator/{username}?ref={myAffiliateLink.code}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleCopyAffiliateLink(myAffiliateLink.code)}
+                      >
+                        {affiliateCopied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      size="sm"
+                      onClick={() => createAffiliateLinkMutation.mutate(profile.id)}
+                      loading={createAffiliateLinkMutation.isPending}
+                    >
+                      <Share2 className="w-4 h-4 mr-1" />
+                      Tornar-se afiliado
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 

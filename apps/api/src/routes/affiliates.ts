@@ -55,6 +55,22 @@ affiliates.get('/creator-stats', authMiddleware, creatorMiddleware, async (c) =>
   }
 })
 
+// ── Public: Get creator's affiliate program by username ──
+
+affiliates.get('/program/by-username/:username', async (c) => {
+  try {
+    const username = c.req.param('username')
+    const program = await affiliateService.getProgramByUsername(username)
+    if (!program || !program.isActive) {
+      return error(c, 404, 'NOT_FOUND', 'Programa de afiliados nao encontrado ou inativo')
+    }
+    return success(c, program)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
 // ── Public: Get creator's affiliate program (for potential affiliates) ──
 
 affiliates.get('/program/:creatorId', async (c) => {

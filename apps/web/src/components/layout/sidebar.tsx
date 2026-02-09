@@ -20,6 +20,7 @@ const fanLinks = [
   { href: '/feed', icon: Home, label: 'Feed' },
   { href: '/explore', icon: Compass, label: 'Explorar' },
   { href: '/messages', icon: MessageCircle, label: 'Mensagens' },
+  { href: '/affiliates', icon: Share2, label: 'Afiliados' },
   { href: '/settings', icon: Settings, label: 'Configuracoes' },
 ]
 
