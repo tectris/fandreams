@@ -5,7 +5,7 @@ Executa o scanner completo com perfil CREATOR e output prefixado.
 
 Uso:
     python creator_fandreams_full_scanner.py --target https://api.fandreams.app \
-        --email fandreams.app@gmail.com --password '#Z1x2c3a4@321'
+        --email <your-email> --password '<your-password>'
 """
 import subprocess, sys, os
 
