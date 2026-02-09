@@ -321,7 +321,8 @@ export function PostCard({
           </Badge>
         )}
 
-        {/* More menu */}
+        {/* More menu - only show if owner or can report */}
+        {(isOwner || (!isOwner && isAuthenticated)) && (
         <div className="relative">
           <button
             onClick={() => {
@@ -384,48 +385,23 @@ export function PostCard({
                     )}
                   </>
                 )}
-                {/* Share & Bookmark - available to all */}
-                <button
-                  onClick={() => {
-                    handleShare()
-                    setMenuOpen(false)
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-surface-light transition-colors"
-                >
-                  <Share2 className="w-4 h-4" />
-                  Compartilhar
-                </button>
-                {isAuthenticated && (
+                {!isOwner && isAuthenticated && (
                   <button
                     onClick={() => {
-                      handleBookmark()
+                      setShowReportModal(true)
                       setMenuOpen(false)
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-surface-light transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-error hover:bg-surface-light transition-colors"
                   >
-                    <Bookmark className={`w-4 h-4 ${bookmarked ? 'fill-primary text-primary' : ''}`} />
-                    {bookmarked ? 'Remover dos salvos' : 'Salvar'}
+                    <Flag className="w-4 h-4" />
+                    Denunciar
                   </button>
-                )}
-                {!isOwner && isAuthenticated && (
-                  <>
-                    <div className="border-t border-border my-1" />
-                    <button
-                      onClick={() => {
-                        setShowReportModal(true)
-                        setMenuOpen(false)
-                      }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-error hover:bg-surface-light transition-colors"
-                    >
-                      <Flag className="w-4 h-4" />
-                      Denunciar
-                    </button>
-                  </>
                 )}
               </div>
             </>
           )}
         </div>
+        )}
       </div>
 
       {/* Locked content banner for text-only locked posts */}
@@ -679,31 +655,50 @@ export function PostCard({
       </div>
 
       {/* Actions */}
-      <div className="px-5 py-3.5 flex items-center gap-6">
-        <button onClick={handleLike} className="flex items-center gap-1.5 text-sm text-muted hover:text-error transition-colors group">
-          <Heart
-            className={`w-5 h-5 group-hover:scale-110 transition-transform ${liked ? 'fill-error text-error' : ''}`}
-          />
-          <span>{formatNumber(likeCount)}</span>
-        </button>
-
-        <button
-          onClick={toggleComments}
-          className="flex items-center gap-1.5 text-sm text-muted hover:text-primary transition-colors"
-        >
-          <MessageCircle className={`w-5 h-5 ${showComments ? 'text-primary' : ''}`} />
-          <span>{formatNumber(post.commentCount)}</span>
-        </button>
-
-        {!isOwner && (
-          <button
-            onClick={toggleTip}
-            className="flex items-center gap-1.5 text-sm text-muted hover:text-secondary transition-colors"
-          >
-            <Coins className={`w-5 h-5 ${showTip ? 'text-secondary' : ''}`} />
-            <span>Tip</span>
+      <div className="px-5 py-3.5 flex items-center">
+        <div className="flex items-center gap-5">
+          <button onClick={handleLike} className="flex items-center gap-1.5 text-sm text-muted hover:text-error transition-colors group">
+            <Heart
+              className={`w-5 h-5 group-hover:scale-110 transition-transform ${liked ? 'fill-error text-error' : ''}`}
+            />
+            <span>{formatNumber(likeCount)}</span>
           </button>
-        )}
+
+          <button
+            onClick={toggleComments}
+            className="flex items-center gap-1.5 text-sm text-muted hover:text-primary transition-colors"
+          >
+            <MessageCircle className={`w-5 h-5 ${showComments ? 'text-primary' : ''}`} />
+            <span>{formatNumber(post.commentCount)}</span>
+          </button>
+
+          <button
+            onClick={handleShare}
+            className="flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors"
+          >
+            <Share2 className="w-5 h-5" />
+            {shareCount > 0 && <span>{formatNumber(shareCount)}</span>}
+          </button>
+
+          {!isOwner && (
+            <button
+              onClick={toggleTip}
+              className="flex items-center gap-1.5 text-sm text-muted hover:text-secondary transition-colors"
+            >
+              <Coins className={`w-5 h-5 ${showTip ? 'text-secondary' : ''}`} />
+              <span>Tip</span>
+            </button>
+          )}
+        </div>
+
+        <div className="ml-auto">
+          <button
+            onClick={handleBookmark}
+            className="flex items-center gap-1.5 text-sm text-muted hover:text-primary transition-colors"
+          >
+            <Bookmark className={`w-5 h-5 ${bookmarked ? 'fill-primary text-primary' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Tip sent log */}
