@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { formatCurrency } from '@/lib/utils'
 import {
   Settings, Shield, AlertTriangle, CheckCircle2, XCircle,
-  Clock, ArrowDownToLine, DollarSign, Loader2, Gift,
+  Clock, ArrowDownToLine, DollarSign, Loader2, Gift, Coins,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -140,6 +140,53 @@ function SettingsTab({ providers, loadingProviders, settings, loadingSettings, s
         </CardContent>
       </Card>
 
+      {/* FanCoin Value */}
+      <Card>
+        <CardHeader>
+          <h2 className="font-bold flex items-center gap-2">
+            <Coins className="w-5 h-5 text-primary" /> Valor do FanCoin
+          </h2>
+          <p className="text-xs text-muted mt-1">Quanto vale 1 FanCoin em Reais. Afeta todas as conversoes (compras, ganhos, saques)</p>
+        </CardHeader>
+        <CardContent>
+          {loadingSettings ? (
+            <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+          ) : (
+            <form className="space-y-4" onSubmit={(e) => {
+              e.preventDefault()
+              const form = new FormData(e.currentTarget)
+              const val = Number(form.get('fancoin_to_brl'))
+              if (val <= 0 || val > 1) return
+              settingsMutation.mutate({ fancoin_to_brl: val })
+            }}>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <Input
+                    label="Valor de 1 FanCoin (R$)"
+                    name="fancoin_to_brl"
+                    type="number"
+                    step="0.001"
+                    min="0.001"
+                    max="1"
+                    defaultValue={effectiveSettings.fancoin_to_brl}
+                  />
+                </div>
+                <div className="pt-5">
+                  <Button type="submit" loading={settingsMutation.isPending}>
+                    Salvar
+                  </Button>
+                </div>
+              </div>
+              <div className="p-3 bg-surface-light rounded-md text-xs text-muted space-y-1">
+                <p>1 FanCoin = <span className="font-bold text-foreground">R${effectiveSettings.fancoin_to_brl}</span></p>
+                <p>R$1,00 = <span className="font-bold text-foreground">{Math.round(1 / (effectiveSettings.fancoin_to_brl || 0.01)).toLocaleString()} FanCoins</span></p>
+                <p>R$100,00 = <span className="font-bold text-foreground">{Math.round(100 / (effectiveSettings.fancoin_to_brl || 0.01)).toLocaleString()} FanCoins</span></p>
+              </div>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Creator Bonus Configuration */}
       <Card>
         <CardHeader>
@@ -220,7 +267,6 @@ function SettingsTab({ providers, loadingProviders, settings, loadingSettings, s
                 max_daily_amount: Number(form.get('max_daily_amount')),
                 cooldown_hours: Number(form.get('cooldown_hours')),
                 min_payout: Number(form.get('min_payout')),
-                fancoin_to_brl: Number(form.get('fancoin_to_brl')),
               })
             }}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -229,7 +275,6 @@ function SettingsTab({ providers, loadingProviders, settings, loadingSettings, s
                 <Input label="Max saques por dia" name="max_daily_withdrawals" type="number" defaultValue={effectiveSettings.max_daily_withdrawals} />
                 <Input label="Max valor diario (R$)" name="max_daily_amount" type="number" step="0.01" defaultValue={effectiveSettings.max_daily_amount} />
                 <Input label="Cooldown entre saques (horas)" name="cooldown_hours" type="number" defaultValue={effectiveSettings.cooldown_hours} />
-                <Input label="Taxa FanCoin para BRL" name="fancoin_to_brl" type="number" step="0.001" defaultValue={effectiveSettings.fancoin_to_brl} />
               </div>
               {!settings && (
                 <div className="flex items-center gap-2 p-3 bg-warning/10 rounded text-xs text-warning">
