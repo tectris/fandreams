@@ -180,7 +180,7 @@ export async function createFancoinPayment(
 // ── MercadoPago Payment ──
 
 async function createMpPayment(payment: any, pkg: any, paymentMethod: string, appUrl: string) {
-  const apiUrl = env.NEXT_PUBLIC_APP_URL?.replace('://www.', '://api.').replace('://', '://api.') || 'https://api.myfans.my'
+  const apiUrl = env.NEXT_PUBLIC_APP_URL?.replace('://www.', '://api.').replace('://', '://api.') || 'https://api.fandreams.app'
 
   const preference = await mpFetch<MpPreference>('/checkout/preferences', {
     method: 'POST',
@@ -205,7 +205,7 @@ async function createMpPayment(payment: any, pkg: any, paymentMethod: string, ap
         pending: `${appUrl}/wallet?payment=pending&provider=mercadopago`,
       },
       auto_return: 'approved',
-      notification_url: `https://api.myfans.my/api/v1/payments/webhook/mercadopago`,
+      notification_url: `${apiUrl}/api/v1/payments/webhook/mercadopago`,
       statement_descriptor: 'MYFANS',
     }),
   })
@@ -228,6 +228,7 @@ async function createMpPayment(payment: any, pkg: any, paymentMethod: string, ap
 // ── NOWPayments Payment ──
 
 async function createNpPayment(payment: any, pkg: any, appUrl: string) {
+  const apiUrl = env.NEXT_PUBLIC_APP_URL?.replace('://www.', '://api.').replace('://', '://api.') || 'https://api.fandreams.app'
   const priceUsd = pkg.price / 5.0 // Approximate BRL to USD (configurable later via admin)
 
   const invoice = await npFetch<{
@@ -240,8 +241,8 @@ async function createNpPayment(payment: any, pkg: any, appUrl: string) {
       price_amount: priceUsd,
       price_currency: 'usd',
       order_id: payment.id,
-      order_description: `${pkg.coins.toLocaleString()} FanCoins - MyFans`,
-      ipn_callback_url: `https://api.myfans.my/api/v1/payments/webhook/nowpayments`,
+      order_description: `${pkg.coins.toLocaleString()} FanCoins - FanDreams`,
+      ipn_callback_url: `${apiUrl}/api/v1/payments/webhook/nowpayments`,
       success_url: `${appUrl}/wallet?payment=success&provider=nowpayments`,
       cancel_url: `${appUrl}/wallet?payment=failure&provider=nowpayments`,
     }),

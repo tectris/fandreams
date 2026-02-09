@@ -29,7 +29,7 @@ const envSchema = z.object({
   PAYPAL_CLIENT_SECRET: z.string().optional(),
   PAYPAL_SANDBOX: z.enum(['true', 'false']).default('true'),
   RESEND_API_KEY: z.string().optional(),
-  EMAIL_FROM: z.string().default('MyFans <noreply@myfans.my>'),
+  EMAIL_FROM: z.string().default('FanDreams <noreply@fandreams.app>'),
   NEXT_PUBLIC_APP_URL: z.string().default('http://localhost:3000'),
   CORS_ORIGINS: z.string().optional(),
   PLATFORM_FEE_PERCENT: z.coerce.number().default(12),
