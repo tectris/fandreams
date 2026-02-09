@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { authMiddleware } from '../middleware/auth'
 import * as notificationService from '../services/notification.service'
-import { success } from '../utils/response'
+import { success, error } from '../utils/response'
 
 const notificationsRoute = new Hono()
 
@@ -22,6 +22,7 @@ notificationsRoute.patch('/:id/read', authMiddleware, async (c) => {
   const { userId } = c.get('user')
   const id = c.req.param('id')
   const notif = await notificationService.markAsRead(userId, id)
+  if (!notif) return error(c, 404, 'NOT_FOUND', 'Notificacao nao encontrada')
   return success(c, notif)
 })
 
@@ -34,7 +35,8 @@ notificationsRoute.post('/read-all', authMiddleware, async (c) => {
 notificationsRoute.delete('/:id', authMiddleware, async (c) => {
   const { userId } = c.get('user')
   const id = c.req.param('id')
-  await notificationService.deleteNotification(userId, id)
+  const deleted = await notificationService.deleteNotification(userId, id)
+  if (!deleted) return error(c, 404, 'NOT_FOUND', 'Notificacao nao encontrada')
   return success(c, { deleted: true })
 })
 
