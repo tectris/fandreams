@@ -4,10 +4,24 @@ import { db } from '../config/database'
 import { AppError } from './auth.service'
 import { sendKycApprovedEmail, sendKycRejectedEmail } from './email.service'
 
+function validateDocumentKeyOwnership(key: string, userId: string): boolean {
+  // R2 keys follow pattern: {folder}/{userId}/{timestamp}-{filename}
+  const parts = key.split('/')
+  return parts.length >= 2 && parts[parts.length - 2] === userId
+}
+
 export async function submitKyc(
   userId: string,
   input: { documentFrontKey: string; documentBackKey: string; selfieKey: string },
 ) {
+  // Validate that document keys belong to the authenticated user
+  const keys = [input.documentFrontKey, input.documentBackKey, input.selfieKey]
+  for (const key of keys) {
+    if (!validateDocumentKeyOwnership(key, userId)) {
+      throw new AppError('INVALID_DOCUMENT', 'Documento invalido ou nao pertence ao usuario', 403)
+    }
+  }
+
   // Check if there's already a pending submission
   const [existing] = await db
     .select()
