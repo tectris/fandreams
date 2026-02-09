@@ -7,6 +7,18 @@ import { customAlphabet } from 'nanoid'
 
 const generateShortCode = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 8)
 
+/** Batch-generate shortCodes for any posts that are missing one. Mutates the array in place. */
+async function ensureShortCodes<T extends { id: string; shortCode: string | null }>(rows: T[]): Promise<T[]> {
+  const missing = rows.filter((r) => !r.shortCode)
+  if (missing.length === 0) return rows
+  for (const row of missing) {
+    const code = generateShortCode()
+    await db.update(posts).set({ shortCode: code }).where(eq(posts.id, row.id))
+    ;(row as any).shortCode = code
+  }
+  return rows
+}
+
 export async function createPost(creatorId: string, input: CreatePostInput) {
   // Block media upload for users without KYC verification (admins bypass)
   if (input.media && input.media.length > 0) {
@@ -229,6 +241,8 @@ export async function getFeed(userId: string, page = 1, limit = 20) {
     .limit(limit)
     .offset(offset)
 
+  await ensureShortCodes(feedPosts)
+
   const postIds = feedPosts.map((p) => p.id)
   const allMedia =
     postIds.length > 0
@@ -352,6 +366,8 @@ export async function getPublicFeed(page = 1, limit = 20) {
     .limit(limit)
     .offset(offset)
 
+  await ensureShortCodes(feedPosts)
+
   const postIds = feedPosts.map((p) => p.id)
   const allMedia =
     postIds.length > 0
@@ -406,6 +422,8 @@ export async function getCreatorPosts(creatorId: string, viewerId?: string, page
     .orderBy(desc(posts.isPinned), desc(posts.publishedAt))
     .limit(limit)
     .offset(offset)
+
+  await ensureShortCodes(feedPosts)
 
   const postIds = feedPosts.map((p) => p.id)
   const allMedia =
