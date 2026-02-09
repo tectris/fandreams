@@ -11,6 +11,7 @@ import {
   Plus,
   Shield,
   Crown,
+  Share2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store'
@@ -26,6 +27,7 @@ const creatorLinks = [
   { href: '/creator/dashboard', icon: BarChart3, label: 'Dashboard' },
   { href: '/creator/content', icon: Plus, label: 'Novo post' },
   { href: '/creator/subscription', icon: Crown, label: 'Planos' },
+  { href: '/creator/affiliates', icon: Share2, label: 'Afiliados' },
   { href: '/feed', icon: Home, label: 'Feed' },
   { href: '/explore', icon: Compass, label: 'Explorar' },
   { href: '/messages', icon: MessageCircle, label: 'Mensagens' },
@@ -36,6 +38,7 @@ const adminLinks = [
   { href: '/admin', icon: Shield, label: 'Admin' },
   { href: '/creator/content', icon: Plus, label: 'Novo post' },
   { href: '/creator/subscription', icon: Crown, label: 'Planos' },
+  { href: '/creator/affiliates', icon: Share2, label: 'Afiliados' },
   { href: '/feed', icon: Home, label: 'Feed' },
   { href: '/explore', icon: Compass, label: 'Explorar' },
   { href: '/messages', icon: MessageCircle, label: 'Mensagens' },

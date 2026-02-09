@@ -5,6 +5,7 @@ import { env } from '../config/env'
 import { AppError } from './auth.service'
 import { FANCOIN_PACKAGES } from '@fandreams/shared'
 import * as fancoinService from './fancoin.service'
+import * as affiliateService from './affiliate.service'
 import { getPlatformFeeRate } from './withdrawal.service'
 import { sendPaymentConfirmedEmail, sendSubscriptionActivatedEmail } from './email.service'
 
@@ -564,17 +565,27 @@ async function processPaymentConfirmation(
 
     if (payment.type === 'ppv' && payment.recipientId) {
       // Credit creator earnings as FanCoins (Option A: all earnings → FanCoins)
+      // Affiliate commissions are deducted from creator's gross share
       const creatorAmount = Number(payment.creatorAmount || 0)
       if (creatorAmount > 0) {
-        await fancoinService.creditEarnings(
+        const { totalCommissionBrl } = await affiliateService.distributeCommissions(
+          payment.id,
+          payment.userId,
           payment.recipientId,
           creatorAmount,
-          'ppv_received',
-          `PPV recebido - pagamento via ${meta?.paymentMethod || 'MP'}`,
-          meta?.postId,
         )
+        const creatorNet = creatorAmount - totalCommissionBrl
+        if (creatorNet > 0) {
+          await fancoinService.creditEarnings(
+            payment.recipientId,
+            creatorNet,
+            'ppv_received',
+            `PPV recebido - pagamento via ${meta?.paymentMethod || 'MP'}`,
+            meta?.postId,
+          )
+        }
       }
-      console.log(`PPV unlocked for user ${payment.userId}, post ${meta?.postId}, creator credited ${creatorAmount} BRL as FanCoins`)
+      console.log(`PPV unlocked for user ${payment.userId}, post ${meta?.postId}, creator credited as FanCoins`)
     }
 
     // Promo subscription: activate subscription for the promo duration
@@ -600,11 +611,32 @@ async function processPaymentConfirmation(
       if (payment.recipientId) {
         await db
           .update(creatorProfiles)
-          .set({
-            totalSubscribers: sql`${creatorProfiles.totalSubscribers} + 1`,
-            totalEarnings: sql`${creatorProfiles.totalEarnings} + ${creatorAmount}`,
-          })
+          .set({ totalSubscribers: sql`${creatorProfiles.totalSubscribers} + 1` })
           .where(eq(creatorProfiles.userId, payment.recipientId))
+
+        // Credit earnings as FanCoins with affiliate distribution
+        if (creatorAmount > 0) {
+          const { totalCommissionBrl } = await affiliateService.distributeCommissions(
+            payment.id,
+            payment.userId,
+            payment.recipientId,
+            creatorAmount,
+          )
+          const creatorNet = creatorAmount - totalCommissionBrl
+          if (creatorNet > 0) {
+            await fancoinService.creditEarnings(
+              payment.recipientId,
+              creatorNet,
+              'subscription_earned',
+              `Assinatura promo recebida`,
+              payment.id,
+            )
+          }
+        }
+
+        // Check bonus eligibility
+        const bonusService = await import('./bonus.service')
+        bonusService.checkBonusEligibility(payment.recipientId).catch(() => {})
       }
 
       console.log(`Promo subscription ${meta.subscriptionId} activated for ${durationDays} days`)

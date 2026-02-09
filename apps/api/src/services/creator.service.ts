@@ -3,6 +3,7 @@ import { users, creatorProfiles, subscriptionTiers, subscriptionPromos, subscrip
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import type { CreateTierInput, CreatePromoInput, UpdatePromoInput } from '@fandreams/shared'
+import * as bonusService from './bonus.service'
 
 export async function applyAsCreator(
   userId: string,
@@ -27,6 +28,9 @@ export async function applyAsCreator(
       tags: data.tags || [],
     })
     .returning()
+
+  // Create bonus for new creator (non-blocking)
+  bonusService.createBonusForCreator(userId).catch((e) => console.error('Failed to create bonus:', e))
 
   return profile
 }

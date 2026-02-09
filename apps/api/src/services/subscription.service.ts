@@ -5,6 +5,8 @@ import { env } from '../config/env'
 import { AppError } from './auth.service'
 import * as paymentService from './payment.service'
 import * as fancoinService from './fancoin.service'
+import * as affiliateService from './affiliate.service'
+import * as bonusService from './bonus.service'
 import { getPlatformFeeRate } from './withdrawal.service'
 import { sendSubscriptionCancelledEmail } from './email.service'
 
@@ -287,14 +289,23 @@ async function activateSubscription(fanId: string, creatorId: string, tierId?: s
       metadata: { subscriptionId: sub?.id, tierId },
     })
 
-    // Credit creator earnings as FanCoins
-    await fancoinService.creditEarnings(
+    // Credit creator earnings as FanCoins (with affiliate commission deduction)
+    const { totalCommissionBrl } = await affiliateService.distributeCommissions(
+      sub?.id || '',
+      fanId,
       creatorId,
       creatorAmount,
-      'subscription_earned',
-      'Assinatura recebida',
-      sub?.id,
     )
+    const creatorNet = creatorAmount - totalCommissionBrl
+    if (creatorNet > 0) {
+      await fancoinService.creditEarnings(
+        creatorId,
+        creatorNet,
+        'subscription_earned',
+        'Assinatura recebida',
+        sub?.id,
+      )
+    }
   }
 
   await db
@@ -303,6 +314,9 @@ async function activateSubscription(fanId: string, creatorId: string, tierId?: s
       totalSubscribers: sql`${creatorProfiles.totalSubscribers} + 1`,
     })
     .where(eq(creatorProfiles.userId, creatorId))
+
+  // Check bonus eligibility
+  bonusService.checkBonusEligibility(creatorId).catch(() => {})
 
   return sub
 }
@@ -350,13 +364,22 @@ export async function activateSubscriptionFromWebhook(
     const creatorAmount = amount - platformFee
 
     if (creatorAmount > 0) {
-      await fancoinService.creditEarnings(
+      const { totalCommissionBrl } = await affiliateService.distributeCommissions(
+        sub.id,
+        sub.fanId,
         sub.creatorId,
         creatorAmount,
-        'subscription_earned',
-        'Assinatura recebida via Mercado Pago',
-        sub.id,
       )
+      const creatorNet = creatorAmount - totalCommissionBrl
+      if (creatorNet > 0) {
+        await fancoinService.creditEarnings(
+          sub.creatorId,
+          creatorNet,
+          'subscription_earned',
+          'Assinatura recebida via Mercado Pago',
+          sub.id,
+        )
+      }
     }
 
     await db
@@ -365,6 +388,9 @@ export async function activateSubscriptionFromWebhook(
         totalSubscribers: sql`${creatorProfiles.totalSubscribers} + 1`,
       })
       .where(eq(creatorProfiles.userId, sub.creatorId))
+
+    // Check bonus eligibility
+    bonusService.checkBonusEligibility(sub.creatorId).catch(() => {})
 
     // Mark pending payment as completed
     await db
@@ -460,15 +486,24 @@ export async function recordSubscriptionPayment(
       metadata: { subscriptionId: sub.id, recurring: true },
     })
 
-    // Credit creator earnings as FanCoins
+    // Credit creator earnings as FanCoins (with affiliate commission deduction)
     if (creatorAmount > 0) {
-      await fancoinService.creditEarnings(
+      const { totalCommissionBrl } = await affiliateService.distributeCommissions(
+        sub.id,
+        sub.fanId,
         sub.creatorId,
         creatorAmount,
-        'subscription_earned',
-        'Assinatura mensal recebida via Mercado Pago',
-        sub.id,
       )
+      const creatorNet = creatorAmount - totalCommissionBrl
+      if (creatorNet > 0) {
+        await fancoinService.creditEarnings(
+          sub.creatorId,
+          creatorNet,
+          'subscription_earned',
+          'Assinatura mensal recebida via Mercado Pago',
+          sub.id,
+        )
+      }
     }
 
     console.log(`Recurring payment recorded for subscription ${sub.id}, creator credited ${creatorAmount} BRL as FanCoins`)

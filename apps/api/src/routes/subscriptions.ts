@@ -7,6 +7,7 @@ import { users } from '@fandreams/database'
 import * as subscriptionService from '../services/subscription.service'
 import * as gamificationService from '../services/gamification.service'
 import * as notificationService from '../services/notification.service'
+import * as affiliateService from '../services/affiliate.service'
 import { success, error } from '../utils/response'
 import { AppError } from '../services/auth.service'
 import { db } from '../config/database'
@@ -24,6 +25,12 @@ subscriptionsRoute.post('/', authMiddleware, validateBody(createSubscriptionSche
       body.paymentMethod,
       body.promoId,
     )
+
+    // Register affiliate referral if ref code provided (non-blocking)
+    if (body.refCode) {
+      affiliateService.registerReferral(userId, body.creatorId, body.refCode)
+        .catch((e) => console.error('Failed to register referral:', e))
+    }
 
     await gamificationService.addXp(userId, 'subscription_made')
 

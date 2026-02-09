@@ -5,6 +5,7 @@ export const createSubscriptionSchema = z.object({
   tierId: z.string().uuid().optional(),
   promoId: z.string().uuid().optional(),
   paymentMethod: z.enum(['pix', 'credit_card', 'crypto']).default('pix'),
+  refCode: z.string().max(20).optional(),
 })
 
 export const tipSchema = z.object({
