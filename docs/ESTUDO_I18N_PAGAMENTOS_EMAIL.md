@@ -349,19 +349,75 @@ Se a plataforma for exclusivamente SFW:
 5. **Chargebacks**: Segmento adulto tem 5-7x mais chargebacks. Reservar rolling reserve (~30% em CCBill)
 6. **Crypto como hedge**: NOWPayments (já integrado) serve como opção censorship-resistant
 
-### 2.6 Comparação de Custos (Assinatura de R$50)
+### 2.6 Estratégia com MercadoPago + PIX Independente (Backup)
+
+#### MercadoPago como ponto de partida
+
+Faz sentido continuar com MP no início. O MP proíbe **pornografia e webcam adulta**, mas não proíbe "plataformas de criadores de conteúdo" em geral. Enquanto a plataforma estiver posicionada como assinaturas de criadores (fitness, educação, lifestyle, entretenimento), o MP não tem motivo para bloquear.
+
+**Riscos com MP:**
+- Se conteúdo explícito aparecer e for denunciado
+- Se o compliance do MP fizer revisão do tipo de negócio
+- Se o volume crescer e chamar atenção
+
+**Mitigação: PIX independente como backup**
+
+É **muito prudente** ter um provedor PIX independente desde o início. Vantagens:
+1. Se MP bloquear a conta, o PIX continua funcionando no mesmo dia
+2. Taxas potencialmente menores (R$0.80 flat vs ~0.99% do MP)
+3. Mais controle sobre a experiência (QR code próprio, sem redirect)
+4. Caminho para Pix Automático (recorrência nativa) no futuro
+
+#### Provedores de PIX Independente Recomendados
+
+| Provedor | Taxa PIX | Mensal | Pix Automático | API | Destaques |
+|---|---|---|---|---|---|
+| **EFI (Gerencianet)** | 1.19% (negociável) | Grátis | **Sim (completo, 23 endpoints)** | Excelente | Mais maduro em Pix Automático |
+| **OpenPix/Woovi** | ~1% (ou R$0.50-0.85 flat) | Grátis | Em teste | Excelente | Participante direto BCB |
+| **AbacatePay** | R$0.80 flat | Grátis | Não | Excelente (15+ SDKs) | Favorito entre devs indie |
+| **PagHiper** | R$0.99 flat | Grátis | Não | Boa | Simples e direto |
+| **Transfeera** | ~R$0.30-1.00 (negociável) | Negociável | Não confirmado | Boa | ISO 27001, direto BCB |
+
+**Recomendação para o FanDreams:**
+
+1. **Curto prazo**: **OpenPix/Woovi** ou **AbacatePay** como backup PIX
+   - Woovi: R$0.50-0.85 flat, participante direto BCB, ótima API
+   - AbacatePay: R$0.80 flat, SDKs Node.js prontos, setup mais rápido
+
+2. **Médio prazo**: **EFI (Gerencianet)** quando quiser Pix Automático
+   - Única com suporte completo a Pix Automático (recorrência nativa do BCB)
+   - Substitui necessidade de cartão de crédito para assinaturas recorrentes
+   - 60 milhões de brasileiros sem cartão de crédito agora têm acesso a assinaturas via Pix Automático
+
+#### Sobre políticas de conteúdo dos provedores PIX
+
+Nenhum dos provedores PIX independentes publica lista de negócios restritos como o Stripe. Usam termos amplos ("práticas ilícitas/imorais"). Na prática:
+- **Evitar Asaas**: Cláusula de "moral e bons costumes" pode ser usada contra conteúdo adulto
+- **Woovi/OpenPix**: Restringe apenas armas/munições. Sem menção a conteúdo adulto
+- **EFI, Transfeera, Zoop**: Sem lista pública de restrições
+- **Recomendação**: Antes de integrar, entrar em contato e descrever o use case. Pedir confirmação por escrito
+
+#### Nota sobre Pix Automático (recorrência nativa)
+
+Desde **16/Jun/2025**, o Pix Automático está ativo no Brasil. Desde **01/Jan/2026**, é obrigatório para todas as instituições que já oferecem débito automático.
+
+Isso é **transformador para o FanDreams**: assinaturas recorrentes via PIX sem precisar de cartão de crédito. O usuário autoriza uma vez e as cobranças futuras são automáticas (semanal, mensal, trimestral, semestral ou anual).
+
+### 2.7 Comparação de Custos (Assinatura de R$50)
 
 | Provedor | Taxa | Criador recebe (após 8% plataforma) |
 |---|---|---|
+| **Woovi PIX (backup)** | **~R$0.50-0.85 flat** | **R$45.15-45.50** |
+| **AbacatePay PIX (backup)** | **R$0.80 flat** | **R$45.20** |
 | MercadoPago PIX | ~R$0.50 (0.99%) | R$45.50 |
 | Stripe PIX (via EBANX) | ~R$0.75-1.00 (1-2%) | R$44.50-45.00 |
 | MercadoPago Cartão | ~R$2.00-2.50 (4-5%) | R$43.50-44.00 |
 | Stripe Cartão (BR) | ~R$2.50 (3.99%+R$0.50) | R$43.50 |
 | PayPal | ~R$2.25 + markup FX | R$43.26 |
-| **CCBill (NSFW)** | **~R$5.40-7.25 (10.8-14.5%)** | **R$38.75-40.60** |
-| **Segpay (NSFW)** | **~R$2.00-7.50 (4-15%)** | **R$38.50-44.00** |
+| CCBill (NSFW) | ~R$5.40-7.25 (10.8-14.5%) | R$38.75-40.60 |
+| Segpay (NSFW) | ~R$2.00-7.50 (4-15%) | R$38.50-44.00 |
 
-### 2.7 Plano de Migração
+### 2.8 Plano de Migração
 
 **Se SFW:**
 
@@ -511,6 +567,7 @@ Para referência, aqui estão **todas** as variáveis que a API necessita (confo
 - [ ] Verificar domínio no Resend (DNS records)
 
 ### Curto Prazo (próximas sprints)
+- [ ] Integrar provedor PIX independente como backup (Woovi ou AbacatePay)
 - [ ] Configurar next-intl e extrair strings do pt-BR
 - [ ] **Definir se a plataforma terá conteúdo adulto/NSFW** (decisão que muda toda a estratégia de pagamentos)
 - [ ] Se SFW: Iniciar integração com Stripe Connect
