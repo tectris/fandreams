@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import PostDetailContent from './post-detail-content'
 
 const API_URL = (() => {
@@ -7,10 +8,16 @@ const API_URL = (() => {
   return normalized.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '')
 })()
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-
 type Props = {
   params: Promise<{ id: string }>
+}
+
+async function getBaseUrl() {
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL
+  const headersList = await headers()
+  const host = headersList.get('x-forwarded-host') || headersList.get('host') || 'www.fandreams.app'
+  const protocol = headersList.get('x-forwarded-proto') || 'https'
+  return `${protocol}://${host}`
 }
 
 async function fetchPostForMeta(code: string) {
@@ -29,10 +36,14 @@ async function fetchPostForMeta(code: string) {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params
-  const post = await fetchPostForMeta(id)
+  const [post, baseUrl] = await Promise.all([fetchPostForMeta(id), getBaseUrl()])
+
+  // Override metadataBase so og:image URLs resolve to the actual domain, not localhost
+  const metadataBase = new URL(baseUrl)
 
   if (!post) {
     return {
+      metadataBase,
       title: 'Post nao encontrado',
       description: 'Este post pode ter sido removido ou nao existe.',
     }
@@ -43,9 +54,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = post.contentText
     ? post.contentText.substring(0, 160)
     : `Confira este post de ${creatorName} no FanDreams`
-  const postUrl = `${APP_URL}/post/${post.shortCode || id}`
+  const postUrl = `${baseUrl}/post/${post.shortCode || id}`
 
   return {
+    metadataBase,
     title,
     description,
     openGraph: {
@@ -54,13 +66,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       url: postUrl,
       siteName: 'FanDreams',
       type: 'article',
-      // og:image is handled by opengraph-image.tsx convention file
     },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      // twitter:image is handled by opengraph-image.tsx convention file
     },
   }
 }
