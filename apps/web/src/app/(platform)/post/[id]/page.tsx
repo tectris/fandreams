@@ -29,20 +29,18 @@ async function fetchPostForMeta(code: string) {
 }
 
 function getOgImage(post: any): string | null {
-  if (!post.media || post.media.length === 0) return null
-
-  // For non-public posts, only use preview media to avoid leaking paid content
-  if (post.visibility !== 'public') {
-    const preview = post.media.find((m: any) => m.isPreview && m.storageKey)
-    if (preview) {
-      return preview.mediaType === 'video' ? preview.thumbnailUrl : preview.storageKey
-    }
-    return null
+  if (post.media && post.media.length > 0) {
+    const first = post.media[0]
+    // thumbnailUrl is never redacted by the API (only storageKey is nulled for locked content)
+    // so it's always safe to use as OG preview — for both images and videos
+    if (first.thumbnailUrl) return first.thumbnailUrl
+    // For public posts, storageKey contains the full image URL
+    if (first.mediaType === 'image' && first.storageKey) return first.storageKey
   }
 
-  const first = post.media[0]
-  if (first.mediaType === 'image' && first.storageKey) return first.storageKey
-  if (first.mediaType === 'video' && first.thumbnailUrl) return first.thumbnailUrl
+  // Fallback: creator avatar
+  if (post.creator?.avatarUrl) return post.creator.avatarUrl
+
   return null
 }
 
