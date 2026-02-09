@@ -62,11 +62,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   let ogImageUrl: string | null = null
   if (post.media && post.media.length > 0) {
     const first = post.media[0]
-    // thumbnailUrl works for both images and videos (Bunny CDN thumbnail)
-    // storageKey only works for images (for videos it's a Bunny GUID, not an image URL)
-    ogImageUrl = first.thumbnailUrl || (first.mediaType === 'image' ? first.storageKey : null) || null
+    // For images: use direct CDN URL (fast, reliable for WhatsApp)
+    // For videos: skip — storageKey is a Bunny GUID (not an image URL)
+    //   and Bunny CDN thumbnails may not be publicly accessible to WhatsApp crawlers
+    //   so we always fall through to the /api/og/ dynamic route for videos
+    if (first.mediaType === 'image') {
+      ogImageUrl = first.thumbnailUrl || first.storageKey || null
+    }
   }
-  // Fallback to dynamic OG image route for text-only posts or when no direct URL
+  // Fallback to dynamic OG image route for videos and text-only posts
   if (!ogImageUrl) {
     ogImageUrl = `${baseUrl}/api/og/${shortCode}`
   }

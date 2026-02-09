@@ -203,6 +203,16 @@ videoRoute.post('/webhook', async (c) => {
         resolutions: video.availableResolutions,
         size: video.storageSize,
       })
+
+      // Update DB with final thumbnail URL and video metadata after encoding
+      if (Status === 4) {
+        await postService.updateVideoMedia(VideoGuid, {
+          thumbnailUrl: bunny.getThumbnailUrl(VideoGuid, video.thumbnailFileName),
+          duration: video.length,
+          width: video.width,
+          height: video.height,
+        })
+      }
     }
 
     return c.json({ received: true })
