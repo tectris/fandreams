@@ -13,11 +13,11 @@ Dependencias:
     pip install requests aiohttp
 
 Uso (Round 1 — perfil FAN):
-    python myfans_fancoin_scanner.py --target https://api.myfans.my \\
+    python myfans_fancoin_scanner.py --target https://api.fandreams.app \\
         --email fan@test.com --password senha123
 
 Uso (Round 2 — perfil CREATOR):
-    python myfans_fancoin_scanner.py --target https://api.myfans.my \\
+    python myfans_fancoin_scanner.py --target https://api.fandreams.app \\
         --email creator@test.com --password senha123
 
 O script gera um relatorio JSON + Markdown que deve ser trazido de volta
@@ -983,7 +983,7 @@ def generate_json(report: ScanReport) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description="MyFans FanCoin Economy Security Scanner")
-    parser.add_argument("--target", required=True, help="API base URL (e.g., https://api.myfans.my)")
+    parser.add_argument("--target", required=True, help="API base URL (e.g., https://api.fandreams.app)")
     parser.add_argument("--email", required=True, help="User email for login")
     parser.add_argument("--password", required=True, help="User password")
     parser.add_argument("--creator-id", default=None, help="Creator UUID to use for tip tests (if not provided, tries to find one)")

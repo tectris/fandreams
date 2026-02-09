@@ -30,7 +30,7 @@ npx vitest run security-tests/internal/security-audit.test.ts
 3. Execute:
 
 ```bash
-python myfans_security_scanner.py --target https://api.myfans.my --verbose
+python myfans_security_scanner.py --target https://api.fandreams.app --verbose
 ```
 
 4. Copie o conteúdo de `external_scan_report.json` gerado

@@ -231,11 +231,11 @@ O script de ataque externo foi criado em:
 pip install requests aiohttp
 
 # Round 1 — Perfil FAN
-python myfans_fancoin_scanner.py --target https://api.myfans.my \
+python myfans_fancoin_scanner.py --target https://api.fandreams.app \
     --email fan@test.com --password senha123
 
 # Round 2 — Perfil CREATOR
-python myfans_fancoin_scanner.py --target https://api.myfans.my \
+python myfans_fancoin_scanner.py --target https://api.fandreams.app \
     --email creator@test.com --password senha123
 ```
 
