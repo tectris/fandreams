@@ -289,8 +289,7 @@ async function createMpPayment(payment: any, pkg: any, paymentMethod: string, ap
       external_reference: payment.id,
       payment_methods: paymentMethod === 'pix'
         ? {
-            excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }, { id: 'ticket' }],
-            default_payment_method_id: 'pix',
+            excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }],
             installments: 1,
           }
         : {
@@ -397,8 +396,7 @@ async function createMpPixPayment(payment: any, pkg: any, userId: string, appUrl
       ],
       external_reference: payment.id,
       payment_methods: {
-        excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }, { id: 'ticket' }],
-        default_payment_method_id: 'pix',
+        excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }],
         installments: 1,
       },
       back_urls: {
@@ -1019,8 +1017,7 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
         ],
         external_reference: payment.id,
         payment_methods: {
-          excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }, { id: 'ticket' }],
-          default_payment_method_id: 'pix',
+          excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }],
           installments: 1,
         },
         back_urls: {
