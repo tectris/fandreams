@@ -30,6 +30,9 @@ export default function CreatorProfilePage() {
   const [ppvPost, setPpvPost] = useState<any>(null)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
+  const [shareModalUrl, setShareModalUrl] = useState('')
+  const [shareModalTitle, setShareModalTitle] = useState('')
+  const [shareModalText, setShareModalText] = useState('')
   const [affiliateDrawerOpen, setAffiliateDrawerOpen] = useState(false)
   const [affiliateCopied, setAffiliateCopied] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
@@ -319,31 +322,47 @@ export default function CreatorProfilePage() {
     return `Confira o perfil de ${profile?.displayName || username} no FanDreams!`
   }
 
-  async function handleShare() {
+  async function openShareSheet(url: string, title: string, text: string) {
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
-        await navigator.share({
-          title: `${profile?.displayName || username} no FanDreams`,
-          text: getProfileShareText(),
-          url: getProfileShareUrl(),
-        })
+        await navigator.share({ title, text, url })
       } catch {
         // User cancelled
       }
     } else {
+      setShareModalUrl(url)
+      setShareModalTitle(title)
+      setShareModalText(text)
       setShowShareModal(true)
     }
   }
 
+  async function handleShare() {
+    openShareSheet(
+      getProfileShareUrl(),
+      `${profile?.displayName || username} no FanDreams`,
+      getProfileShareText(),
+    )
+  }
+
+  async function handleShareAffiliateLink(code: string) {
+    const url = `${window.location.origin}/creator/${username}?ref=${code}`
+    openShareSheet(
+      url,
+      `${profile?.displayName || username} no FanDreams`,
+      `Confira o perfil de ${profile?.displayName || username} no FanDreams!`,
+    )
+  }
+
   function handleProfileCopyLink() {
-    navigator.clipboard.writeText(getProfileShareUrl())
+    navigator.clipboard.writeText(shareModalUrl || getProfileShareUrl())
     toast.success('Link copiado!')
     setShowShareModal(false)
   }
 
   function handleProfileShareExternal(platform: string) {
-    const url = encodeURIComponent(getProfileShareUrl())
-    const text = encodeURIComponent(getProfileShareText())
+    const url = encodeURIComponent(shareModalUrl || getProfileShareUrl())
+    const text = encodeURIComponent(shareModalText || getProfileShareText())
     let shareUrl = ''
 
     switch (platform) {
@@ -509,7 +528,7 @@ export default function CreatorProfilePage() {
               </Button>
             )}
             {/* Share */}
-            <Button variant="ghost" size="sm" onClick={handleShare}>
+            <Button variant="ghost" size="sm" onClick={handleShare} title="Compartilhar">
               <SendHorizontal className="w-4 h-4" />
             </Button>
           </div>
@@ -760,7 +779,7 @@ export default function CreatorProfilePage() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <h3 className="font-semibold text-sm">Compartilhar perfil</h3>
+                <h3 className="font-semibold text-sm">Compartilhar</h3>
                 <button onClick={() => setShowShareModal(false)} className="p-1 rounded-sm hover:bg-surface-light text-muted hover:text-foreground">
                   <X className="w-4 h-4" />
                 </button>
@@ -797,7 +816,7 @@ export default function CreatorProfilePage() {
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-surface-light hover:bg-surface-light/80 border border-border transition-colors"
                 >
                   <Link2 className="w-4 h-4 text-muted shrink-0" />
-                  <span className="text-sm text-muted truncate flex-1 text-left">{typeof window !== 'undefined' ? getProfileShareUrl() : ''}</span>
+                  <span className="text-sm text-muted truncate flex-1 text-left">{typeof window !== 'undefined' ? (shareModalUrl || getProfileShareUrl()) : ''}</span>
                   <span className="text-xs font-medium text-primary shrink-0">Copiar</span>
                 </button>
               </div>
@@ -913,8 +932,17 @@ export default function CreatorProfilePage() {
                     <Button
                       size="sm"
                       onClick={() => handleCopyAffiliateLink(myAffiliateLink.code)}
+                      title="Copiar link"
                     >
                       {affiliateCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleShareAffiliateLink(myAffiliateLink.code)}
+                      title="Compartilhar link"
+                    >
+                      <SendHorizontal className="w-4 h-4" />
                     </Button>
                   </div>
 
