@@ -21,11 +21,17 @@ function extractVideoGuid(keyOrUrl: string): string {
   return keyOrUrl
 }
 
-/** Enrich video media items with a constructed thumbnailUrl when missing. */
+/** Enrich video media items: construct thumbnailUrl when missing or broken.
+ *  Broken URLs occur when a full HLS URL was passed to getThumbnailUrl,
+ *  producing double-nested CDN URLs like https://cdn/https://cdn/guid/... */
 function enrichMediaThumbnails<T extends { mediaType: string; storageKey: string; thumbnailUrl: string | null }>(media: T[]): T[] {
   return media.map((m) => {
-    if (m.mediaType === 'video' && !m.thumbnailUrl && m.storageKey) {
-      return { ...m, thumbnailUrl: getThumbnailUrl(extractVideoGuid(m.storageKey)) }
+    if (m.mediaType === 'video' && m.storageKey) {
+      const isMissing = !m.thumbnailUrl
+      const isBroken = m.thumbnailUrl && (m.thumbnailUrl.match(/:\/\//g) || []).length > 1
+      if (isMissing || isBroken) {
+        return { ...m, thumbnailUrl: getThumbnailUrl(extractVideoGuid(m.storageKey)) }
+      }
     }
     return m
   })
