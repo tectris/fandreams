@@ -31,4 +31,11 @@ notificationsRoute.post('/read-all', authMiddleware, async (c) => {
   return success(c, { success: true })
 })
 
+notificationsRoute.delete('/:id', authMiddleware, async (c) => {
+  const { userId } = c.get('user')
+  const id = c.req.param('id')
+  await notificationService.deleteNotification(userId, id)
+  return success(c, { deleted: true })
+})
+
 export default notificationsRoute
