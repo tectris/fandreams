@@ -407,25 +407,25 @@ export default function CreatorProfilePage() {
             <h1 className="text-2xl font-bold">{profile.displayName || profile.username}</h1>
             <p className="text-muted">@{profile.username}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {isOwner ? (
               <Link href="/settings">
-                <Button variant="outline">Editar perfil</Button>
+                <Button variant="outline" size="sm">Editar perfil</Button>
               </Link>
             ) : (
               <>
                 {isFollowing ? (
-                  <Button variant="outline" onClick={handleFollow} loading={unfollowMutation.isPending}>
+                  <Button variant="outline" size="sm" onClick={handleFollow} loading={unfollowMutation.isPending}>
                     <UserCheck className="w-4 h-4 mr-1" /> Seguindo
                   </Button>
                 ) : (
-                  <Button variant="outline" onClick={handleFollow} loading={followMutation.isPending}>
+                  <Button variant="outline" size="sm" onClick={handleFollow} loading={followMutation.isPending}>
                     <UserPlus className="w-4 h-4 mr-1" />
                     Seguir
                   </Button>
                 )}
                 {profile.creator && !isSubscribed && (
-                  <Button onClick={() => handleSubscribe()}>
+                  <Button size="sm" onClick={() => handleSubscribe()}>
                     <Crown className="w-4 h-4 mr-1" />
                     {Number(profile.creator.subscriptionPrice || 0) > 0
                       ? `Assinar ${formatCurrency(profile.creator.subscriptionPrice)}/mes`
@@ -433,12 +433,12 @@ export default function CreatorProfilePage() {
                   </Button>
                 )}
                 {isSubscribed && !subscription?.subscription?.isCancelled && (
-                  <Button variant="outline" onClick={() => setCancelModalOpen(true)}>
+                  <Button variant="outline" size="sm" onClick={() => setCancelModalOpen(true)}>
                     <Crown className="w-4 h-4 mr-1" /> Assinante
                   </Button>
                 )}
                 {isSubscribed && subscription?.subscription?.isCancelled && (
-                  <Button variant="outline" disabled className="text-muted">
+                  <Button variant="outline" size="sm" disabled className="text-muted">
                     <Crown className="w-4 h-4 mr-1" />
                     Ativo ate {new Date(subscription.subscription.currentPeriodEnd!).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
                   </Button>
@@ -446,7 +446,7 @@ export default function CreatorProfilePage() {
                 {/* Send Message */}
                 {profile.creator?.messagesEnabled !== false && (
                   <Link href={`/messages?to=${profile.id}`}>
-                    <Button variant="outline" size="sm" className="p-2" title="Enviar mensagem">
+                    <Button variant="outline" size="sm" title="Enviar mensagem">
                       <MessageCircle className="w-4 h-4" />
                     </Button>
                   </Link>
@@ -454,7 +454,7 @@ export default function CreatorProfilePage() {
               </>
             )}
             {/* Share */}
-            <Button variant="ghost" size="sm" onClick={handleShare} className="p-2">
+            <Button variant="ghost" size="sm" onClick={handleShare}>
               <SendHorizontal className="w-4 h-4" />
             </Button>
           </div>
