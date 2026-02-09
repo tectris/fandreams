@@ -80,6 +80,26 @@ videoRoute.post('/upload', authMiddleware, creatorMiddleware, async (c) => {
 })
 
 /**
+ * Check video encoding status (public - no auth required)
+ * Used by the video player to show encoding progress
+ */
+videoRoute.get('/encoding-status/:videoId', async (c) => {
+  try {
+    const videoId = c.req.param('videoId')
+    const video = await bunny.getVideo(videoId)
+    const STATUS_MAP: Record<number, string> = { 0: 'created', 1: 'uploaded', 2: 'processing', 3: 'transcoding', 4: 'finished', 5: 'error' }
+    return success(c, {
+      status: STATUS_MAP[video.status] || 'unknown',
+      encodeProgress: video.encodeProgress,
+      isReady: video.status === 4,
+    })
+  } catch (e) {
+    console.error('Video encoding status error:', e)
+    return error(c, 500, 'STATUS_ERROR', 'Erro ao verificar status do video')
+  }
+})
+
+/**
  * Check video encoding status
  * Poll this endpoint until status = 'finished'
  */

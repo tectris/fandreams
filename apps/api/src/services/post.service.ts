@@ -1,10 +1,11 @@
 import { eq, desc, and, or, sql, inArray, gt, like } from 'drizzle-orm'
-import { posts, postMedia, postLikes, postComments, postBookmarks, subscriptions, users, creatorProfiles, fancoinTransactions, postViews, payments } from '@fandreams/database'
+import { posts, postMedia, postLikes, postComments, postBookmarks, subscriptions, users, creatorProfiles, fancoinTransactions, postViews, payments, follows } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import type { CreatePostInput, UpdatePostInput } from '@fandreams/shared'
 import { customAlphabet } from 'nanoid'
 import { getThumbnailUrl } from './bunny.service'
+import { createNotification } from './notification.service'
 
 const generateShortCode = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 8)
 
@@ -47,6 +48,47 @@ async function ensureShortCodes<T extends { id: string; shortCode: string | null
     ;(row as any).shortCode = code
   }
   return rows
+}
+
+/** Notify all followers and active subscribers of a new post (fire-and-forget). */
+async function notifyFollowersOfNewPost(creatorId: string, postId: string, contentText?: string) {
+  const [creator] = await db
+    .select({ displayName: users.displayName, username: users.username })
+    .from(users)
+    .where(eq(users.id, creatorId))
+    .limit(1)
+  if (!creator) return
+
+  const name = creator.displayName || creator.username || 'Criador'
+
+  // Get unique user IDs from both followers and active subscribers
+  const followerRows = await db
+    .select({ userId: follows.followerId })
+    .from(follows)
+    .where(eq(follows.followingId, creatorId))
+  const subscriberRows = await db
+    .select({ userId: subscriptions.fanId })
+    .from(subscriptions)
+    .where(and(eq(subscriptions.creatorId, creatorId), eq(subscriptions.status, 'active')))
+
+  const userIds = new Set([
+    ...followerRows.map((r) => r.userId),
+    ...subscriberRows.map((r) => r.userId),
+  ])
+  // Don't notify the creator themselves
+  userIds.delete(creatorId)
+
+  const preview = contentText ? contentText.slice(0, 100) : undefined
+
+  for (const userId of userIds) {
+    await createNotification(
+      userId,
+      'new_post',
+      `${name} publicou um novo post`,
+      preview,
+      { postId, creatorId, creatorUsername: creator.username },
+    )
+  }
 }
 
 export async function createPost(creatorId: string, input: CreatePostInput) {
@@ -94,6 +136,11 @@ export async function createPost(creatorId: string, input: CreatePostInput) {
       })
     }
   }
+
+  // Notify followers and subscribers asynchronously (fire-and-forget)
+  notifyFollowersOfNewPost(creatorId, post.id, input.contentText).catch((err) =>
+    console.error('Error notifying followers of new post:', err),
+  )
 
   return post
 }
