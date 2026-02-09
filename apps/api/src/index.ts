@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { secureHeaders } from 'hono/secure-headers'
 import { bodyLimit } from 'hono/body-limit'
+import { HTTPException } from 'hono/http-exception'
 import { serve } from '@hono/node-server'
 import { env } from './config/env'
 import { apiRateLimit } from './middleware/rateLimit'
@@ -69,9 +70,7 @@ if (env.NODE_ENV !== 'production') {
 app.use('*', logger())
 app.use('*', secureHeaders())
 
-// Body size limit: 1MB for JSON, file uploads handled separately
-app.use('*', bodyLimit({ maxSize: 1024 * 1024 }))
-
+// CORS must run before bodyLimit so error responses always include CORS headers
 app.use(
   '*',
   cors({
@@ -85,6 +84,18 @@ app.use(
     allowHeaders: ['Content-Type', 'Authorization'],
   }),
 )
+
+// Body size limit: 500MB for upload routes, 1MB for everything else
+const uploadLimit = bodyLimit({ maxSize: 500 * 1024 * 1024 })
+const defaultLimit = bodyLimit({ maxSize: 1024 * 1024 })
+
+app.use('*', async (c, next) => {
+  const path = new URL(c.req.url).pathname.replace(/^\/api\/v1/, '')
+  if (path.startsWith('/upload') || path.startsWith('/media') || path.startsWith('/video') || path.startsWith('/kyc')) {
+    return uploadLimit(c, next)
+  }
+  return defaultLimit(c, next)
+})
 
 // Global rate limit (100 req/min per IP, with in-memory fallback)
 app.use('*', apiRateLimit)
@@ -135,6 +146,13 @@ app.get('/.well-known/security.txt', (c) => {
 })
 
 app.onError((err, c) => {
+  // Handle Hono HTTPException (e.g. bodyLimit 413) with correct status code
+  if (err instanceof HTTPException) {
+    return c.json(
+      { success: false, error: { code: 'HTTP_ERROR', message: err.message } },
+      err.status,
+    )
+  }
   console.error('Unhandled error:', err)
   return c.json(
     {
