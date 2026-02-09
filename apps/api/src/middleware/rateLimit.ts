@@ -207,6 +207,13 @@ export const sensitiveRateLimit = rateLimit({
   prefix: 'sensitive',
 })
 
+/** Rate limit for financial endpoints (tips, purchases) */
+export const financialRateLimit = rateLimit({
+  requests: 15,
+  window: '1 m',
+  prefix: 'financial',
+})
+
 /** Upload rate limit */
 export const uploadRateLimit = rateLimit({
   requests: 20,

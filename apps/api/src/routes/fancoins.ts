@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { purchaseFancoinsSchema, FANCOIN_PACKAGES } from '@fandreams/shared'
 import { validateBody } from '../middleware/validation'
 import { authMiddleware } from '../middleware/auth'
+import { financialRateLimit } from '../middleware/rateLimit'
 import * as fancoinService from '../services/fancoin.service'
 import * as gamificationService from '../services/gamification.service'
 import * as notificationService from '../services/notification.service'
@@ -35,7 +36,7 @@ fancoins.get('/packages', async (c) => {
   return success(c, FANCOIN_PACKAGES)
 })
 
-fancoins.post('/purchase', authMiddleware, validateBody(purchaseFancoinsSchema), async (c) => {
+fancoins.post('/purchase', authMiddleware, financialRateLimit, validateBody(purchaseFancoinsSchema), async (c) => {
   try {
     const { userId } = c.get('user')
     const body = c.req.valid('json')
@@ -53,7 +54,7 @@ const tipSchema = z.object({
   referenceId: z.string().uuid().optional(),
 })
 
-fancoins.post('/tip', authMiddleware, validateBody(tipSchema), async (c) => {
+fancoins.post('/tip', authMiddleware, financialRateLimit, validateBody(tipSchema), async (c) => {
   try {
     const { userId } = c.get('user')
     const body = c.req.valid('json')

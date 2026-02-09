@@ -143,7 +143,10 @@ paymentsRoute.post('/webhook/mercadopago', async (c) => {
             .update(manifest)
             .digest('hex')
 
-          if (computed !== hash) {
+          // Timing-safe comparison to prevent side-channel attacks
+          const computedBuf = Buffer.from(computed, 'utf8')
+          const hashBuf = Buffer.from(hash, 'utf8')
+          if (computedBuf.length !== hashBuf.length || !crypto.timingSafeEqual(computedBuf, hashBuf)) {
             console.warn('MP Webhook: invalid signature — rejecting')
             return c.json({ received: true, error: 'invalid_signature' }, 200)
           }
@@ -205,7 +208,9 @@ paymentsRoute.post('/webhook/nowpayments', async (c) => {
       if (sig) {
         const sorted = JSON.stringify(body, Object.keys(body).sort())
         const computed = crypto.createHmac('sha512', env.NOWPAYMENTS_IPN_SECRET).update(sorted).digest('hex')
-        if (computed !== sig) {
+        const computedBuf = Buffer.from(computed, 'utf8')
+        const sigBuf = Buffer.from(sig, 'utf8')
+        if (computedBuf.length !== sigBuf.length || !crypto.timingSafeEqual(computedBuf, sigBuf)) {
           console.warn('NP Webhook: invalid signature')
           return c.json({ received: true }, 200)
         }
