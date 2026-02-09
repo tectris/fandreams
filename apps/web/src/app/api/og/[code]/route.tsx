@@ -224,19 +224,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
     }
   }
 
+  // Pre-verify thumbnail is accessible (Satori fails silently on broken URLs)
+  if (thumbnailUrl) {
+    try {
+      const check = await fetch(thumbnailUrl, { method: 'HEAD' })
+      if (!check.ok) thumbnailUrl = null
+    } catch {
+      thumbnailUrl = null
+    }
+  }
+
   const hasVideo = post?.media?.[0]?.mediaType === 'video'
   const lockLabel = visibility === 'ppv' ? 'Conteudo Pago' : 'Exclusivo para Assinantes'
 
   const cardOpts = { creatorName, truncatedText, avatarUrl, isLocked, hasVideo, lockLabel }
 
-  // Try with thumbnail first; if Satori fails to fetch external image, retry without
-  if (thumbnailUrl) {
-    try {
-      return new ImageResponse(buildCard({ ...cardOpts, thumbnailUrl }), imgOpts)
-    } catch {
-      // External image fetch failed — fall through to card without thumbnail
-    }
-  }
-
-  return new ImageResponse(buildCard({ ...cardOpts, thumbnailUrl: null }), imgOpts)
+  return new ImageResponse(buildCard({ ...cardOpts, thumbnailUrl }), imgOpts)
 }

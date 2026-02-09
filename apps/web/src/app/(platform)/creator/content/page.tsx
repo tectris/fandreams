@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createPostSchema, type CreatePostInput } from '@fandreams/shared'
@@ -22,6 +23,7 @@ type UploadedMedia = {
 
 export default function CreateContentPage() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { user } = useAuthStore()
   const kycApproved = user?.kycStatus === 'approved' || user?.role === 'admin'
   const [loading, setLoading] = useState(false)
@@ -100,6 +102,7 @@ export default function CreateContentPage() {
       }
       await api.post('/posts', payload)
       toast.success('Post publicado!')
+      await queryClient.invalidateQueries({ queryKey: ['feed'] })
       router.push('/feed')
     } catch (e: any) {
       toast.error(e.message || 'Erro ao publicar')
