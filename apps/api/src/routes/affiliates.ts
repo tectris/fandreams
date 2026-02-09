@@ -15,10 +15,10 @@ const upsertProgramSchema = z.object({
   isActive: z.boolean(),
   levels: z.array(
     z.object({
-      level: z.number().int().min(1).max(2),
+      level: z.literal(1),
       commissionPercent: z.number().min(1).max(50),
     }),
-  ).max(2),
+  ).max(1),
 })
 
 affiliates.get('/program', authMiddleware, creatorMiddleware, async (c) => {

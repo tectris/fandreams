@@ -10,21 +10,18 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/utils'
 import {
-  Share2, Users, Coins, Link as LinkIcon, Copy, Check,
+  Share2, Users, Coins,
   TrendingUp, Loader2, Gift, Settings, BarChart3,
-  Plus, Trash2,
+  Check,
 } from 'lucide-react'
 import { toast } from 'sonner'
-
-type Level = { level: number; commissionPercent: number }
 
 export default function CreatorAffiliatesPage() {
   const user = useAuthStore((s) => s.user)
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'program' | 'stats' | 'bonus'>('program')
-  const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const [isActive, setIsActive] = useState(false)
-  const [levels, setLevels] = useState<Level[]>([{ level: 1, commissionPercent: 10 }])
+  const [commissionPercent, setCommissionPercent] = useState(10)
 
   const isCreator = user?.role === 'creator' || user?.role === 'admin'
 
@@ -61,16 +58,14 @@ export default function CreatorAffiliatesPage() {
   const programLoaded = !!program
   if (programLoaded && isActive === false && program.isActive) {
     setIsActive(program.isActive)
-    setLevels(program.levels?.map((l: any) => ({
-      level: l.level,
-      commissionPercent: Number(l.commissionPercent),
-    })) || [{ level: 1, commissionPercent: 10 }])
+    const l1 = program.levels?.find((l: any) => l.level === 1)
+    if (l1) setCommissionPercent(Number(l1.commissionPercent))
   }
 
   // ── Mutations ──
 
   const saveProgramMutation = useMutation({
-    mutationFn: async (data: { isActive: boolean; levels: Level[] }) => {
+    mutationFn: async (data: { isActive: boolean; levels: Array<{ level: number; commissionPercent: number }> }) => {
       return api.patch('/affiliates/program', data)
     },
     mutationKey: ['save-affiliate-program'],
@@ -92,31 +87,14 @@ export default function CreatorAffiliatesPage() {
 
   // ── Helpers ──
 
-  function copyToClipboard(text: string, code: string) {
-    navigator.clipboard.writeText(text)
-    setCopiedCode(code)
-    toast.success('Link copiado!')
-    setTimeout(() => setCopiedCode(null), 2000)
-  }
-
-  function handleAddLevel() {
-    if (levels.length >= 2) return
-    setLevels([...levels, { level: 2, commissionPercent: 5 }])
-  }
-
-  function handleRemoveLevel(index: number) {
-    setLevels(levels.filter((_, i) => i !== index))
-  }
-
   function handleSaveProgram() {
-    const totalPercent = levels.reduce((sum, l) => sum + l.commissionPercent, 0)
-    if (totalPercent > 50) {
-      toast.error('Total de comissoes nao pode ultrapassar 50%')
+    if (commissionPercent < 1 || commissionPercent > 50) {
+      toast.error('Comissao deve ser entre 1% e 50%')
       return
     }
     saveProgramMutation.mutate({
       isActive,
-      levels: levels.map((l, i) => ({ level: i + 1, commissionPercent: l.commissionPercent })),
+      levels: [{ level: 1, commissionPercent }],
     })
   }
 
@@ -127,9 +105,6 @@ export default function CreatorAffiliatesPage() {
       </div>
     )
   }
-
-  const totalPercent = levels.reduce((sum, l) => sum + l.commissionPercent, 0)
-  const appUrl = typeof window !== 'undefined' ? window.location.origin : ''
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
@@ -182,58 +157,36 @@ export default function CreatorAffiliatesPage() {
                 </CardContent>
               </Card>
 
-              {/* Commission Levels */}
+              {/* Commission */}
               <Card>
                 <CardHeader>
                   <h2 className="font-bold flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-primary" /> Niveis de Comissao
+                    <TrendingUp className="w-5 h-5 text-primary" /> Comissao do Afiliado
                   </h2>
                   <p className="text-xs text-muted mt-1">
-                    Configure ate 2 niveis. A comissao e descontada da sua parte (apos a taxa da plataforma de 8%).
-                    O total nao pode ultrapassar 50%.
+                    Percentual que o afiliado recebe por cada novo assinante trazido. A comissao e descontada da sua parte (apos a taxa da plataforma de 8%). Maximo 50%.
                   </p>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {levels.map((level, index) => (
-                      <div key={index} className="flex items-end gap-3 p-3 border border-border rounded-md">
-                        <div className="flex-1">
-                          <label className="text-xs text-muted block mb-1">
-                            Nivel {index + 1} {index === 0 ? '(Afiliado direto)' : '(Recrutador do afiliado)'}
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <Input
-                              type="number"
-                              min="1"
-                              max="50"
-                              step="0.5"
-                              value={level.commissionPercent}
-                              onChange={(e) => {
-                                const updated = [...levels]
-                                updated[index] = { ...updated[index], commissionPercent: Number(e.target.value) }
-                                setLevels(updated)
-                              }}
-                              className="w-24"
-                            />
-                            <span className="text-sm text-muted">%</span>
-                          </div>
+                    <div className="flex items-end gap-3 p-3 border border-border rounded-md">
+                      <div className="flex-1">
+                        <label className="text-xs text-muted block mb-1">
+                          Comissao por assinante referido
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            min="1"
+                            max="50"
+                            step="0.5"
+                            value={commissionPercent}
+                            onChange={(e) => setCommissionPercent(Number(e.target.value))}
+                            className="w-24"
+                          />
+                          <span className="text-sm text-muted">%</span>
                         </div>
-                        {index > 0 && (
-                          <Button variant="ghost" size="sm" onClick={() => handleRemoveLevel(index)}>
-                            <Trash2 className="w-4 h-4 text-error" />
-                          </Button>
-                        )}
                       </div>
-                    ))}
-
-                    {levels.length < 2 && (
-                      <Button variant="outline" size="sm" onClick={handleAddLevel}>
-                        <Plus className="w-4 h-4 mr-1" /> Adicionar nivel 2
-                      </Button>
-                    )}
-
-                    <div className={`text-sm font-medium ${totalPercent > 50 ? 'text-error' : 'text-muted'}`}>
-                      Total de comissoes: {totalPercent}% {totalPercent > 50 && '(max 50%)'}
                     </div>
 
                     {/* Simulation */}
@@ -241,11 +194,9 @@ export default function CreatorAffiliatesPage() {
                       <p className="font-medium text-foreground">Exemplo: Assinatura de R$30,00</p>
                       <p>Taxa plataforma (8%): <span className="text-foreground">R${(30 * 0.08).toFixed(2)}</span></p>
                       <p>Sua parte bruta: <span className="text-foreground">R${(30 * 0.92).toFixed(2)}</span></p>
-                      {levels.map((l, i) => (
-                        <p key={i}>Comissao N{i + 1} ({l.commissionPercent}%): <span className="text-warning">-R${((30 * 0.92) * (l.commissionPercent / 100)).toFixed(2)}</span></p>
-                      ))}
+                      <p>Comissao afiliado ({commissionPercent}%): <span className="text-warning">-R${((30 * 0.92) * (commissionPercent / 100)).toFixed(2)}</span></p>
                       <p className="font-medium text-success">
-                        Voce recebe: R${((30 * 0.92) * (1 - totalPercent / 100)).toFixed(2)}
+                        Voce recebe: R${((30 * 0.92) * (1 - commissionPercent / 100)).toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -254,7 +205,7 @@ export default function CreatorAffiliatesPage() {
                     <Button
                       onClick={handleSaveProgram}
                       loading={saveProgramMutation.isPending}
-                      disabled={totalPercent > 50}
+                      disabled={commissionPercent < 1 || commissionPercent > 50}
                     >
                       Salvar Programa
                     </Button>
@@ -271,19 +222,19 @@ export default function CreatorAffiliatesPage() {
                   <div className="space-y-3 text-sm text-muted">
                     <div className="flex items-start gap-3">
                       <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-xs font-bold text-primary">1</div>
-                      <p>Ative o programa e defina as comissoes por nivel.</p>
+                      <p>Ative o programa e defina a comissao.</p>
                     </div>
                     <div className="flex items-start gap-3">
                       <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-xs font-bold text-primary">2</div>
-                      <p>Usuarios geram links de afiliado para seu perfil e compartilham com potenciais assinantes.</p>
+                      <p>Usuarios visitam seu perfil e clicam em &quot;Tornar-se afiliado&quot; para gerar um link exclusivo.</p>
                     </div>
                     <div className="flex items-start gap-3">
                       <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-xs font-bold text-primary">3</div>
-                      <p>Quando alguem assina pelo link, o afiliado recebe comissao automatica em FanCoins em cada pagamento.</p>
+                      <p>O afiliado compartilha o link. Quando alguem assina pelo link, o afiliado ganha comissao automatica em FanCoins.</p>
                     </div>
                     <div className="flex items-start gap-3">
                       <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-xs font-bold text-primary">4</div>
-                      <p>A plataforma sempre retém 8%. As comissoes sao descontadas da sua parte.</p>
+                      <p>A plataforma sempre retem 8%. A comissao do afiliado e descontada da sua parte.</p>
                     </div>
                   </div>
                 </CardContent>
@@ -351,10 +302,10 @@ export default function CreatorAffiliatesPage() {
                         <div key={c.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                           <div>
                             <span className="text-sm font-medium">
-                              Nivel {c.level} - {c.commissionPercent}%
+                              {c.commissionPercent}%
                             </span>
                             <p className="text-xs text-muted">
-                              Afiliado: {c.affiliateUserId.slice(0, 8)}...
+                              {new Date(c.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
                             </p>
                           </div>
                           <div className="text-right">
