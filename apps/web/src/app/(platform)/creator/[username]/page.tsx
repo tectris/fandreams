@@ -671,13 +671,9 @@ export default function CreatorProfilePage() {
                   <p className="text-xs text-muted mb-3">
                     Compartilhe o link deste criador e ganhe comissao por cada novo assinante!
                   </p>
-                  <div className="flex items-center gap-3 text-xs text-muted mb-3">
-                    {affiliateProgram.levels?.map((l: any) => (
-                      <span key={l.level} className="flex items-center gap-1">
-                        <Coins className="w-3.5 h-3.5 text-warning" />
-                        Nivel {l.level}: <span className="font-semibold text-foreground">{Number(l.commissionPercent)}%</span>
-                      </span>
-                    ))}
+                  <div className="flex items-center gap-2 text-xs text-muted mb-3">
+                    <Coins className="w-3.5 h-3.5 text-warning" />
+                    Comissao: <span className="font-semibold text-foreground">{Number(affiliateProgram.levels?.[0]?.commissionPercent || 0)}%</span> por assinante
                   </div>
                   {myAffiliateLink ? (
                     <div className="flex items-center gap-2">

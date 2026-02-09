@@ -187,11 +187,8 @@ export default function AffiliateDashboardPage() {
               {commissions.map((c: any) => (
                 <div key={c.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                   <div>
-                    <span className="text-sm font-medium flex items-center gap-1">
-                      <Badge variant={c.level === 1 ? 'success' : 'warning'} className="text-xs">
-                        N{c.level}
-                      </Badge>
-                      {c.commissionPercent}%
+                    <span className="text-sm font-medium">
+                      {c.commissionPercent}% comissao
                     </span>
                     <p className="text-xs text-muted">
                       {new Date(c.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}

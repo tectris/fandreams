@@ -36,18 +36,10 @@ export async function upsertProgram(
   creatorId: string,
   params: { isActive: boolean; levels: Array<{ level: number; commissionPercent: number }> },
 ) {
-  // Validate: max 2 levels, each between 1-50%
-  if (params.levels.length > 2) throw new AppError('INVALID', 'Maximo 2 niveis de afiliados', 400)
-  for (const l of params.levels) {
-    if (l.commissionPercent < 1 || l.commissionPercent > 50) {
-      throw new AppError('INVALID', `Comissao nivel ${l.level} deve ser entre 1% e 50%`, 400)
-    }
-  }
-
-  // Total affiliate commission cannot exceed 50% of creator's share
-  const totalPercent = params.levels.reduce((sum, l) => sum + l.commissionPercent, 0)
-  if (totalPercent > 50) {
-    throw new AppError('INVALID', 'Total de comissoes de afiliados nao pode ultrapassar 50%', 400)
+  // Single level only
+  const level = params.levels[0]
+  if (level && (level.commissionPercent < 1 || level.commissionPercent > 50)) {
+    throw new AppError('INVALID', 'Comissao deve ser entre 1% e 50%', 400)
   }
 
   // Upsert program
@@ -56,28 +48,26 @@ export async function upsertProgram(
     .values({
       creatorId,
       isActive: params.isActive,
-      maxLevels: params.levels.length,
+      maxLevels: 1,
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
       target: affiliatePrograms.creatorId,
       set: {
         isActive: params.isActive,
-        maxLevels: params.levels.length,
+        maxLevels: 1,
         updatedAt: new Date(),
       },
     })
 
-  // Delete old levels and insert new ones
+  // Delete old levels and insert the single level
   await db.delete(affiliateLevels).where(eq(affiliateLevels.creatorId, creatorId))
-  if (params.levels.length > 0) {
-    await db.insert(affiliateLevels).values(
-      params.levels.map((l) => ({
-        creatorId,
-        level: l.level,
-        commissionPercent: String(l.commissionPercent),
-      })),
-    )
+  if (level) {
+    await db.insert(affiliateLevels).values({
+      creatorId,
+      level: 1,
+      commissionPercent: String(level.commissionPercent),
+    })
   }
 
   return getProgram(creatorId)
@@ -197,30 +187,13 @@ export async function registerReferral(referredUserId: string, creatorId: string
 
   if (existing) return null
 
-  // Check for L2: was this affiliate (L1) themselves recruited by someone for this creator?
-  let l2AffiliateId: string | null = null
-  const [l1AsReferred] = await db
-    .select({ l1AffiliateId: affiliateReferrals.l1AffiliateId })
-    .from(affiliateReferrals)
-    .where(
-      and(
-        eq(affiliateReferrals.referredUserId, link.affiliateUserId),
-        eq(affiliateReferrals.creatorId, creatorId),
-      ),
-    )
-    .limit(1)
-
-  if (l1AsReferred) {
-    l2AffiliateId = l1AsReferred.l1AffiliateId
-  }
-
   const [referral] = await db
     .insert(affiliateReferrals)
     .values({
       referredUserId,
       creatorId,
       l1AffiliateId: link.affiliateUserId,
-      l2AffiliateId,
+      l2AffiliateId: null,
       linkId: link.id,
     })
     .returning()
@@ -268,75 +241,41 @@ export async function distributeCommissions(
 
   let totalCommissionBrl = 0
 
-  // L1 Commission (direct referrer)
-  const l1Level = program.levels.find((l) => l.level === 1)
-  if (l1Level && referral.l1AffiliateId) {
-    const l1Percent = Number(l1Level.commissionPercent)
-    const l1Brl = Math.round(creatorGrossBrl * (l1Percent / 100) * 100) / 100
-    const l1Coins = await brlToFancoins(l1Brl)
+  // Commission to the direct referrer
+  const commissionLevel = program.levels.find((l) => l.level === 1)
+  if (commissionLevel && referral.l1AffiliateId) {
+    const percent = Number(commissionLevel.commissionPercent)
+    const amountBrl = Math.round(creatorGrossBrl * (percent / 100) * 100) / 100
+    const coins = await brlToFancoins(amountBrl)
 
-    if (l1Coins > 0) {
-      // Credit FanCoins to L1 affiliate
+    if (coins > 0) {
       await fancoinService.creditEarnings(
         referral.l1AffiliateId,
-        l1Brl,
+        amountBrl,
         'affiliate_commission' as any,
-        `Comissao L1 (${l1Percent}%) - afiliado`,
+        `Comissao (${percent}%) - afiliado`,
         paymentId,
       )
 
-      // Record commission
       await db.insert(affiliateCommissions).values({
         affiliateUserId: referral.l1AffiliateId,
         creatorId,
         paymentId,
         level: 1,
-        commissionPercent: l1Level.commissionPercent,
-        amountBrl: String(l1Brl),
-        coinsCredit: l1Coins,
+        commissionPercent: commissionLevel.commissionPercent,
+        amountBrl: String(amountBrl),
+        coinsCredit: coins,
       })
 
-      // Update link total earned
       if (referral.linkId) {
         await db
           .update(affiliateLinks)
-          .set({ totalEarned: sql`${affiliateLinks.totalEarned} + ${l1Brl}` })
+          .set({ totalEarned: sql`${affiliateLinks.totalEarned} + ${amountBrl}` })
           .where(eq(affiliateLinks.id, referral.linkId))
       }
 
-      totalCommissionBrl += l1Brl
-      distributions.push({ userId: referral.l1AffiliateId, level: 1, amountBrl: l1Brl, coins: l1Coins })
-    }
-  }
-
-  // L2 Commission (recruiter of L1)
-  const l2Level = program.levels.find((l) => l.level === 2)
-  if (l2Level && referral.l2AffiliateId) {
-    const l2Percent = Number(l2Level.commissionPercent)
-    const l2Brl = Math.round(creatorGrossBrl * (l2Percent / 100) * 100) / 100
-    const l2Coins = await brlToFancoins(l2Brl)
-
-    if (l2Coins > 0) {
-      await fancoinService.creditEarnings(
-        referral.l2AffiliateId,
-        l2Brl,
-        'affiliate_commission' as any,
-        `Comissao L2 (${l2Percent}%) - afiliado`,
-        paymentId,
-      )
-
-      await db.insert(affiliateCommissions).values({
-        affiliateUserId: referral.l2AffiliateId,
-        creatorId,
-        paymentId,
-        level: 2,
-        commissionPercent: l2Level.commissionPercent,
-        amountBrl: String(l2Brl),
-        coinsCredit: l2Coins,
-      })
-
-      totalCommissionBrl += l2Brl
-      distributions.push({ userId: referral.l2AffiliateId, level: 2, amountBrl: l2Brl, coins: l2Coins })
+      totalCommissionBrl += amountBrl
+      distributions.push({ userId: referral.l1AffiliateId, level: 1, amountBrl, coins })
     }
   }
 
