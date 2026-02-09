@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import Hls from 'hls.js'
 
 interface VideoPlayerProps {
@@ -15,6 +15,8 @@ export function VideoPlayer({ src, className = '', poster, onPlay, onPause }: Vi
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [isEncoding, setIsEncoding] = useState(false)
 
   useEffect(() => {
     const video = videoRef.current
@@ -25,17 +27,44 @@ export function VideoPlayer({ src, className = '', poster, onPlay, onPause }: Vi
       hlsRef.current.destroy()
       hlsRef.current = null
     }
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
+    setIsEncoding(false)
 
     const isHls = src.includes('.m3u8') || src.includes('playlist')
 
     if (isHls && Hls.isSupported()) {
-      const hls = new Hls({
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-      })
-      hls.loadSource(src)
-      hls.attachMedia(video)
-      hlsRef.current = hls
+      const loadHls = () => {
+        if (hlsRef.current) {
+          hlsRef.current.destroy()
+          hlsRef.current = null
+        }
+        const hls = new Hls({
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+        })
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          setIsEncoding(false)
+        })
+
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (data.fatal && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            setIsEncoding(true)
+            hls.destroy()
+            hlsRef.current = null
+            retryTimerRef.current = setTimeout(loadHls, 10000)
+          }
+        })
+
+        hls.loadSource(src)
+        hls.attachMedia(video)
+        hlsRef.current = hls
+      }
+
+      loadHls()
     } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
       // Safari native HLS
       video.src = src
@@ -48,6 +77,10 @@ export function VideoPlayer({ src, className = '', poster, onPlay, onPause }: Vi
       if (hlsRef.current) {
         hlsRef.current.destroy()
         hlsRef.current = null
+      }
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current)
+        retryTimerRef.current = null
       }
     }
   }, [src])
@@ -93,6 +126,13 @@ export function VideoPlayer({ src, className = '', poster, onPlay, onPause }: Vi
         onPause={onPause}
         style={{ display: 'block' }}
       />
+      {isEncoding && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 text-white gap-3">
+          <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          <p className="text-sm font-medium">Processando vídeo...</p>
+          <p className="text-xs text-white/60">O vídeo está sendo processado e estará disponível em breve</p>
+        </div>
+      )}
     </div>
   )
 }
