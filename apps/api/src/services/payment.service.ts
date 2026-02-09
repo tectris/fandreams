@@ -28,13 +28,20 @@ async function mpFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new AppError('PAYMENT_UNAVAILABLE', 'MercadoPago nao configurado', 503)
   }
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${env.MERCADOPAGO_ACCESS_TOKEN}`,
+    ...(options.headers as Record<string, string> || {}),
+  }
+
+  // MercadoPago requires X-Idempotency-Key for POST requests
+  if (options.method === 'POST' && !headers['X-Idempotency-Key']) {
+    headers['X-Idempotency-Key'] = crypto.randomUUID()
+  }
+
   const res = await fetch(`${getMpApi()}${path}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${env.MERCADOPAGO_ACCESS_TOKEN}`,
-      ...(options.headers || {}),
-    },
+    headers,
   })
 
   const data = await res.json()
