@@ -8,11 +8,24 @@ import { getThumbnailUrl } from './bunny.service'
 
 const generateShortCode = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 8)
 
+/** Extract Bunny video GUID from either a full HLS URL or a raw GUID.
+ *  e.g. "https://cdn.example.com/abc-123/playlist.m3u8" → "abc-123"
+ *       "abc-123" → "abc-123" */
+function extractVideoGuid(keyOrUrl: string): string {
+  if (keyOrUrl.startsWith('http')) {
+    try {
+      const parts = new URL(keyOrUrl).pathname.split('/').filter(Boolean)
+      if (parts.length > 0) return parts[0]
+    } catch {}
+  }
+  return keyOrUrl
+}
+
 /** Enrich video media items with a constructed thumbnailUrl when missing. */
 function enrichMediaThumbnails<T extends { mediaType: string; storageKey: string; thumbnailUrl: string | null }>(media: T[]): T[] {
   return media.map((m) => {
     if (m.mediaType === 'video' && !m.thumbnailUrl && m.storageKey) {
-      return { ...m, thumbnailUrl: getThumbnailUrl(m.storageKey) }
+      return { ...m, thumbnailUrl: getThumbnailUrl(extractVideoGuid(m.storageKey)) }
     }
     return m
   })
@@ -71,7 +84,7 @@ export async function createPost(creatorId: string, input: CreatePostInput) {
         storageKey: m.key,
         sortOrder: i,
         // For videos, construct Bunny CDN thumbnail URL from the video GUID
-        ...(m.mediaType === 'video' ? { thumbnailUrl: getThumbnailUrl(m.key) } : {}),
+        ...(m.mediaType === 'video' ? { thumbnailUrl: getThumbnailUrl(extractVideoGuid(m.key)) } : {}),
       })
     }
   }
