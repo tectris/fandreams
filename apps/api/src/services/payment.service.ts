@@ -8,7 +8,7 @@ import * as fancoinService from './fancoin.service'
 import * as affiliateService from './affiliate.service'
 import { getPlatformFeeRate } from './withdrawal.service'
 import { sendPaymentConfirmedEmail, sendSubscriptionActivatedEmail } from './email.service'
-import * as efiService from './efi.service'
+import * as openpixService from './openpix.service'
 
 // ── MercadoPago ──
 
@@ -223,7 +223,7 @@ async function ppFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 // ── Unified Payment Creation ──
 
-export type PaymentProvider = 'mercadopago' | 'nowpayments' | 'paypal' | 'efi'
+export type PaymentProvider = 'mercadopago' | 'nowpayments' | 'paypal' | 'openpix'
 export type PaymentMethod = 'pix' | 'credit_card' | 'crypto' | 'paypal'
 
 export async function createFancoinPayment(
@@ -235,9 +235,9 @@ export async function createFancoinPayment(
   const pkg = FANCOIN_PACKAGES.find((p) => p.id === packageId)
   if (!pkg) throw new AppError('NOT_FOUND', 'Pacote nao encontrado', 404)
 
-  // Auto-route PIX to EFI when configured, regardless of requested provider
-  const effectiveProvider = (paymentMethod === 'pix' && efiService.isEfiConfigured())
-    ? 'efi' as PaymentProvider
+  // Auto-route PIX to OpenPix when configured, regardless of requested provider
+  const effectiveProvider = (paymentMethod === 'pix' && openpixService.isOpenPixConfigured())
+    ? 'openpix' as PaymentProvider
     : provider
 
   const feeRate = await getPlatformFeeRate()
@@ -260,8 +260,8 @@ export async function createFancoinPayment(
   const appUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
   switch (effectiveProvider) {
-    case 'efi':
-      return createEfiPixPayment(payment, pkg, userId)
+    case 'openpix':
+      return createOpenPixPayment(payment, pkg)
     case 'mercadopago':
       // PIX → Transparent Checkout (QR code in-app), Card → Checkout Pro (redirect)
       if (paymentMethod === 'pix') {
@@ -525,12 +525,12 @@ async function createPpPayment(payment: any, pkg: any, appUrl: string) {
   }
 }
 
-// ── EFI PIX Payment ──
+// ── OpenPix PIX Payment ──
 
-async function createEfiPixPayment(payment: any, pkg: any, userId: string) {
+async function createOpenPixPayment(payment: any, pkg: any) {
   const description = `${pkg.coins.toLocaleString()} FanCoins${pkg.bonus > 0 ? ` (+${pkg.bonus} bonus)` : ''} - FanDreams`
 
-  const efiResult = await efiService.createPixCharge({
+  const result = await openpixService.createPixCharge({
     amount: pkg.price,
     description,
     externalReference: payment.id,
@@ -539,21 +539,22 @@ async function createEfiPixPayment(payment: any, pkg: any, userId: string) {
   await db
     .update(payments)
     .set({
-      providerTxId: efiResult.txid,
-      metadata: { ...(payment.metadata as any), efiTxid: efiResult.txid, efiLocationId: efiResult.locationId },
+      providerTxId: result.correlationID,
+      metadata: { ...(payment.metadata as any), openpixCorrelationID: result.correlationID },
     })
     .where(eq(payments.id, payment.id))
 
   return {
     paymentId: payment.id,
-    provider: 'efi' as const,
+    provider: 'openpix' as const,
     pixData: {
-      qrCodeBase64: efiResult.qrCodeBase64,
-      qrCode: efiResult.pixCopiaECola,
-      expiresAt: efiResult.expiresAt,
+      qrCodeBase64: result.qrCodeImageUrl, // URL to QR code image
+      qrCode: result.brCode,
+      expiresAt: result.expiresAt,
     },
+    paymentLinkUrl: result.paymentLinkUrl,
     package: pkg,
-    sandbox: efiService.isEfiSandbox(),
+    sandbox: openpixService.isOpenPixSandbox(),
   }
 }
 
@@ -627,43 +628,31 @@ export async function handleNowPaymentsWebhook(body: any) {
   })
 }
 
-export async function handleEfiWebhook(body: any) {
-  const pixPayments = efiService.parseWebhookPayload(body)
+export async function handleOpenPixWebhook(body: any) {
+  const parsed = openpixService.parseWebhookPayload(body)
 
-  if (pixPayments.length === 0) {
+  if (!parsed) {
     return { processed: false }
   }
 
-  const results = []
-  for (const pix of pixPayments) {
-    // Find payment by EFI txid stored in providerTxId
-    const [payment] = await db
-      .select()
-      .from(payments)
-      .where(eq(payments.providerTxId, pix.txid))
-      .limit(1)
-
-    if (!payment) {
-      console.warn('EFI Webhook: payment not found for txid', pix.txid)
-      results.push({ txid: pix.txid, processed: false })
-      continue
-    }
-
-    const result = await processPaymentConfirmation(
-      payment.id,
-      'completed',
-      pix.txid,
-      {
-        efiEndToEndId: pix.endToEndId,
-        efiAmount: pix.amount,
-        efiPaidAt: pix.paidAt,
-        efiPayerName: pix.payerName,
-      },
-    )
-    results.push({ txid: pix.txid, ...result })
+  // Only process completed charges
+  if (parsed.event !== 'OPENPIX:CHARGE_COMPLETED') {
+    return { processed: true, event: parsed.event, status: 'ignored' }
   }
 
-  return { processed: true, results }
+  // correlationID is the payment ID
+  const paymentId = parsed.correlationID
+  return processPaymentConfirmation(
+    paymentId,
+    'completed',
+    parsed.transactionID,
+    {
+      openpixEvent: parsed.event,
+      openpixAmount: parsed.value,
+      openpixPaidAt: parsed.paidAt,
+      openpixPayerName: parsed.payerName,
+    },
+  )
 }
 
 export async function handlePaypalWebhook(body: any) {
@@ -876,21 +865,21 @@ async function processPaymentConfirmation(
 export function getAvailableProviders() {
   const providers: Array<{ id: PaymentProvider; label: string; methods: string[]; sandbox: boolean }> = []
 
-  // EFI handles PIX when configured; MP handles credit card only
-  if (efiService.isEfiConfigured()) {
+  // OpenPix handles PIX when configured; MP handles credit card only
+  if (openpixService.isOpenPixConfigured()) {
     providers.push({
-      id: 'efi',
+      id: 'openpix',
       label: 'PIX',
       methods: ['pix'],
-      sandbox: efiService.isEfiSandbox(),
+      sandbox: openpixService.isOpenPixSandbox(),
     })
   }
 
   if (env.MERCADOPAGO_ACCESS_TOKEN) {
-    const methods = efiService.isEfiConfigured() ? ['credit_card'] : ['pix', 'credit_card']
+    const methods = openpixService.isOpenPixConfigured() ? ['credit_card'] : ['pix', 'credit_card']
     providers.push({
       id: 'mercadopago',
-      label: efiService.isEfiConfigured() ? 'Cartao de Credito' : 'MercadoPago',
+      label: openpixService.isOpenPixConfigured() ? 'Cartao de Credito' : 'MercadoPago',
       methods,
       sandbox: isMpSandbox(),
     })
@@ -935,14 +924,14 @@ export async function getPaymentStatus(paymentId: string, userId: string) {
   if (!payment) throw new AppError('NOT_FOUND', 'Pagamento nao encontrado', 404)
 
   // Proactive verification: if payment is still pending, check provider directly
-  if (payment.status === 'pending' && payment.paymentProvider === 'efi') {
+  if (payment.status === 'pending' && payment.paymentProvider === 'openpix') {
     try {
-      const efiResult = await proactivelyVerifyEfiPayment(paymentId, payment.providerTxId)
-      if (efiResult && efiResult.status === 'completed') {
+      const opResult = await proactivelyVerifyOpenPixPayment(paymentId, payment.providerTxId)
+      if (opResult && opResult.status === 'completed') {
         return { ...payment, status: 'completed' }
       }
     } catch (e) {
-      console.warn('Proactive EFI verification failed (non-critical):', e)
+      console.warn('Proactive OpenPix verification failed (non-critical):', e)
     }
   }
 
@@ -997,24 +986,24 @@ async function proactivelyVerifyMpPayment(paymentId: string) {
   return null
 }
 
-// ── EFI Proactive Verification ──
+// ── OpenPix Proactive Verification ──
 
-async function proactivelyVerifyEfiPayment(paymentId: string, txid: string | null) {
-  if (!txid || !efiService.isEfiConfigured()) return null
+async function proactivelyVerifyOpenPixPayment(paymentId: string, correlationID: string | null) {
+  if (!correlationID || !openpixService.isOpenPixConfigured()) return null
 
   try {
-    const chargeStatus = await efiService.getChargeStatus(txid)
-    if (chargeStatus.status === 'CONCLUIDA') {
+    const chargeStatus = await openpixService.getChargeStatus(correlationID)
+    if (chargeStatus.status === 'COMPLETED') {
       const result = await processPaymentConfirmation(
         paymentId,
         'completed',
-        txid,
-        { efiStatus: chargeStatus.status, verifiedViaPolling: true },
+        correlationID,
+        { openpixStatus: chargeStatus.status, verifiedViaPolling: true },
       )
       return result
     }
   } catch (e) {
-    console.warn('EFI charge status check failed:', e)
+    console.warn('OpenPix charge status check failed:', e)
   }
 
   return null
@@ -1055,8 +1044,8 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
   const appUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   const webhookUrl = getWebhookBaseUrl()
 
-  // Route PIX to EFI when configured
-  const effectiveProvider = (paymentMethod === 'pix' && efiService.isEfiConfigured()) ? 'efi' : 'mercadopago'
+  // Route PIX to OpenPix when configured
+  const effectiveProvider = (paymentMethod === 'pix' && openpixService.isOpenPixConfigured()) ? 'openpix' : 'mercadopago'
 
   const [payment] = await db
     .insert(payments)
@@ -1077,9 +1066,9 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
     ? `PPV: ${post.contentText.slice(0, 60)}${post.contentText.length > 60 ? '...' : ''}`
     : 'Conteudo PPV - FanDreams'
 
-  // PIX via EFI (preferred when configured)
-  if (paymentMethod === 'pix' && efiService.isEfiConfigured()) {
-    const efiResult = await efiService.createPixCharge({
+  // PIX via OpenPix (preferred when configured)
+  if (paymentMethod === 'pix' && openpixService.isOpenPixConfigured()) {
+    const opResult = await openpixService.createPixCharge({
       amount,
       description,
       externalReference: payment.id,
@@ -1088,19 +1077,19 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
     await db
       .update(payments)
       .set({
-        providerTxId: efiResult.txid,
-        metadata: { ...(payment.metadata as any), efiTxid: efiResult.txid, efiLocationId: efiResult.locationId },
+        providerTxId: opResult.correlationID,
+        metadata: { ...(payment.metadata as any), openpixCorrelationID: opResult.correlationID },
       })
       .where(eq(payments.id, payment.id))
 
     return {
       paymentId: payment.id,
       pixData: {
-        qrCodeBase64: efiResult.qrCodeBase64,
-        qrCode: efiResult.pixCopiaECola,
-        expiresAt: efiResult.expiresAt,
+        qrCodeBase64: opResult.qrCodeImageUrl,
+        qrCode: opResult.brCode,
+        expiresAt: opResult.expiresAt,
       },
-      sandbox: efiService.isEfiSandbox(),
+      sandbox: openpixService.isOpenPixSandbox(),
     }
   }
 

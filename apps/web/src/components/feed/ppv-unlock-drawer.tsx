@@ -272,7 +272,7 @@ export function PpvUnlockDrawer({ open, onClose, onUnlocked, post }: PpvUnlockDr
             <div className="flex flex-col items-center gap-4 py-4">
               <div className="bg-white rounded-lg p-4">
                 <img
-                  src={pixData.qrCodeBase64.startsWith('data:') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`}
+                  src={pixData.qrCodeBase64.startsWith('http') ? pixData.qrCodeBase64 : pixData.qrCodeBase64.startsWith('data:') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`}
                   alt="QR Code PIX"
                   className="w-52 h-52"
                 />

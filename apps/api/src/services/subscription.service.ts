@@ -7,7 +7,7 @@ import * as paymentService from './payment.service'
 import * as fancoinService from './fancoin.service'
 import * as affiliateService from './affiliate.service'
 import * as bonusService from './bonus.service'
-import * as efiService from './efi.service'
+import * as openpixService from './openpix.service'
 import { getPlatformFeeRate } from './withdrawal.service'
 import { sendSubscriptionCancelledEmail } from './email.service'
 
@@ -94,9 +94,9 @@ export async function createSubscriptionCheckout(
     const periodEnd = new Date(now)
     periodEnd.setDate(periodEnd.getDate() + durationDays)
 
-    // Route PIX to EFI when configured
-    const useEfi = paymentMethod === 'pix' && efiService.isEfiConfigured()
-    const promoProvider = useEfi ? 'efi' : 'mercadopago'
+    // Route PIX to OpenPix when configured
+    const useOpenPix = paymentMethod === 'pix' && openpixService.isOpenPixConfigured()
+    const promoProvider = useOpenPix ? 'openpix' : 'mercadopago'
 
     const [sub] = await db
       .insert(subscriptions)
@@ -153,9 +153,9 @@ export async function createSubscriptionCheckout(
 
     const durationLabel = durationDays === 90 ? '3 meses' : durationDays === 180 ? '6 meses' : '12 meses'
 
-    // PIX via EFI
-    if (useEfi) {
-      const efiResult = await efiService.createPixCharge({
+    // PIX via OpenPix
+    if (useOpenPix) {
+      const opResult = await openpixService.createPixCharge({
         amount,
         description: `Assinatura ${durationLabel} - ${creatorName} - FanDreams`,
         externalReference: payment.id,
@@ -164,20 +164,20 @@ export async function createSubscriptionCheckout(
       await db
         .update(payments)
         .set({
-          providerTxId: efiResult.txid,
-          metadata: { ...(payment.metadata as any), efiTxid: efiResult.txid, efiLocationId: efiResult.locationId },
+          providerTxId: opResult.correlationID,
+          metadata: { ...(payment.metadata as any), openpixCorrelationID: opResult.correlationID },
         })
         .where(eq(payments.id, payment.id))
 
       return {
         subscription: sub,
         pixData: {
-          qrCodeBase64: efiResult.qrCodeBase64,
-          qrCode: efiResult.pixCopiaECola,
-          expiresAt: efiResult.expiresAt,
+          qrCodeBase64: opResult.qrCodeImageUrl,
+          qrCode: opResult.brCode,
+          expiresAt: opResult.expiresAt,
         },
         paymentId: payment.id,
-        sandbox: efiService.isEfiSandbox(),
+        sandbox: openpixService.isOpenPixSandbox(),
         isPromo: true,
       }
     }

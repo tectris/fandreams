@@ -290,7 +290,7 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
                 <div className="text-center space-y-4">
                   <div className="bg-white rounded-lg p-4 inline-block mx-auto">
                     <img
-                      src={pixData.qrCodeBase64.startsWith('data:') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`}
+                      src={pixData.qrCodeBase64.startsWith('http') ? pixData.qrCodeBase64 : pixData.qrCodeBase64.startsWith('data:') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`}
                       alt="QR Code PIX"
                       className="w-48 h-48 mx-auto"
                     />

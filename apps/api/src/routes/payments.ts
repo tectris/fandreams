@@ -197,28 +197,26 @@ paymentsRoute.post('/webhook', async (c) => {
   }
 })
 
-// EFI Pay PIX webhook
-// EFI sends POST to the registered webhook URL when a PIX payment is received.
-// When using x-skip-mtls-checking, we validate by IP whitelist (34.193.116.226).
-paymentsRoute.post('/webhook/efi', async (c) => {
+// OpenPix/Woovi PIX webhook
+// OpenPix sends POST with webhook payload when a PIX charge status changes.
+// Signature verified via HMAC-SHA1 in the service layer.
+paymentsRoute.post('/webhook/openpix', async (c) => {
   try {
-    const body = await c.req.json()
-    const result = await paymentService.handleEfiWebhook(body)
-    return c.json({ received: true, ...result }, 200)
-  } catch (err) {
-    console.error('EFI Webhook error:', err)
-    return c.json({ received: true }, 200)
-  }
-})
+    const rawBody = await c.req.text()
 
-// EFI appends /pix to the registered webhook URL, so we also handle that path
-paymentsRoute.post('/webhook/efi/pix', async (c) => {
-  try {
-    const body = await c.req.json()
-    const result = await paymentService.handleEfiWebhook(body)
+    // Verify webhook signature
+    const signature = c.req.header('x-webhook-secret')
+    const { verifyWebhookSignature } = await import('../services/openpix.service')
+    if (!verifyWebhookSignature(rawBody, signature)) {
+      console.warn('OpenPix Webhook: invalid signature — rejecting')
+      return c.json({ received: true, error: 'invalid_signature' }, 200)
+    }
+
+    const body = JSON.parse(rawBody)
+    const result = await paymentService.handleOpenPixWebhook(body)
     return c.json({ received: true, ...result }, 200)
   } catch (err) {
-    console.error('EFI Webhook /pix error:', err)
+    console.error('OpenPix Webhook error:', err)
     return c.json({ received: true }, 200)
   }
 })
