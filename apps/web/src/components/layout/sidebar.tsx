@@ -12,6 +12,10 @@ import {
   Shield,
   Crown,
   Share2,
+  Users,
+  Megaphone,
+  Lock,
+  TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store'
@@ -20,6 +24,9 @@ const fanLinks = [
   { href: '/feed', icon: Home, label: 'Feed' },
   { href: '/explore', icon: Compass, label: 'Explorar' },
   { href: '/messages', icon: MessageCircle, label: 'Mensagens' },
+  { href: '/pitch', icon: Megaphone, label: 'Pitch' },
+  { href: '/guilds', icon: Users, label: 'Guildas' },
+  { href: '/commitments', icon: Lock, label: 'Compromissos' },
   { href: '/affiliates', icon: Share2, label: 'Afiliados' },
   { href: '/settings', icon: Settings, label: 'Configuracoes' },
 ]
@@ -28,6 +35,9 @@ const creatorLinks = [
   { href: '/creator/dashboard', icon: BarChart3, label: 'Dashboard' },
   { href: '/creator/content', icon: Plus, label: 'Novo post' },
   { href: '/creator/subscription', icon: Crown, label: 'Planos' },
+  { href: '/creator/score', icon: TrendingUp, label: 'Score' },
+  { href: '/guilds', icon: Users, label: 'Guildas' },
+  { href: '/pitch', icon: Megaphone, label: 'Pitch' },
   { href: '/creator/affiliates', icon: Share2, label: 'Afiliados' },
   { href: '/feed', icon: Home, label: 'Feed' },
   { href: '/explore', icon: Compass, label: 'Explorar' },
@@ -39,6 +49,9 @@ const adminLinks = [
   { href: '/admin', icon: Shield, label: 'Admin' },
   { href: '/creator/content', icon: Plus, label: 'Novo post' },
   { href: '/creator/subscription', icon: Crown, label: 'Planos' },
+  { href: '/creator/score', icon: TrendingUp, label: 'Score' },
+  { href: '/guilds', icon: Users, label: 'Guildas' },
+  { href: '/pitch', icon: Megaphone, label: 'Pitch' },
   { href: '/creator/affiliates', icon: Share2, label: 'Afiliados' },
   { href: '/feed', icon: Home, label: 'Feed' },
   { href: '/explore', icon: Compass, label: 'Explorar' },

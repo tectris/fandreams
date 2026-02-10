@@ -1,9 +1,71 @@
 import { eq, and, sql } from 'drizzle-orm'
-import { fancoinWallets, fancoinTransactions, creatorProfiles, users, posts, payments } from '@fandreams/database'
+import { fancoinWallets, fancoinTransactions, creatorProfiles, users, posts, payments, userGamification } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
-import { FANCOIN_PACKAGES } from '@fandreams/shared'
+import { FANCOIN_PACKAGES, ECOSYSTEM_FUND_RATE, FAN_TIER_MULTIPLIERS } from '@fandreams/shared'
 import { getPlatformFeeRate, brlToFancoins } from './withdrawal.service'
+
+// ── Ecosystem Fund ──
+
+/** Platform wallet ID for ecosystem fund accumulation */
+const ECOSYSTEM_FUND_USER_ID = '00000000-0000-0000-0000-000000000001'
+
+/**
+ * Deduct ecosystem fund contribution (1%) from a transaction amount.
+ * Returns the amount after ecosystem fund deduction.
+ * The deducted amount is recorded as a transaction on the platform fund wallet.
+ */
+async function collectEcosystemFund(amount: number, description: string): Promise<number> {
+  const fundAmount = Math.floor(amount * ECOSYSTEM_FUND_RATE)
+  if (fundAmount <= 0) return amount
+
+  // Credit ecosystem fund wallet (fire-and-forget, never blocks main tx)
+  try {
+    await getWallet(ECOSYSTEM_FUND_USER_ID)
+    await db
+      .update(fancoinWallets)
+      .set({
+        balance: sql`${fancoinWallets.balance} + ${fundAmount}`,
+        totalEarned: sql`${fancoinWallets.totalEarned} + ${fundAmount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(fancoinWallets.userId, ECOSYSTEM_FUND_USER_ID))
+
+    await db.insert(fancoinTransactions).values({
+      userId: ECOSYSTEM_FUND_USER_ID,
+      type: 'ecosystem_fund',
+      amount: fundAmount,
+      balanceAfter: 0, // placeholder — actual balance tracked in wallet
+      description,
+    })
+  } catch (e) {
+    console.error('Ecosystem fund collection error (non-blocking):', e)
+  }
+
+  return amount - fundAmount
+}
+
+// ── Fan Tier Spending Multiplier ──
+
+/**
+ * Get the spending power multiplier for a user based on their fan tier.
+ * Higher tiers get more value per FanCoin spent.
+ * e.g. Obsidian tier: 100 FanCoins spent = 130 FanCoins value to creator
+ */
+async function getTierMultiplier(userId: string): Promise<number> {
+  try {
+    const [profile] = await db
+      .select({ fanTier: userGamification.fanTier })
+      .from(userGamification)
+      .where(eq(userGamification.userId, userId))
+      .limit(1)
+
+    const tier = (profile?.fanTier || 'bronze') as keyof typeof FAN_TIER_MULTIPLIERS
+    return FAN_TIER_MULTIPLIERS[tier] ?? 1.0
+  } catch {
+    return 1.0
+  }
+}
 
 export async function getWallet(userId: string) {
   const [wallet] = await db
@@ -125,9 +187,17 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
 
   const newSenderBalance = Number(debitResult.balance)
 
+  // Tier multiplier: higher tier fans get a platform fee discount (platform absorbs the difference).
+  // The total distributed never exceeds the amount debited from the sender.
+  // e.g. Obsidian (1.3x): platform fee is reduced by 30%, so more of the original amount goes to the creator.
+  const tierMultiplier = await getTierMultiplier(fromUserId)
   const feeRate = await getPlatformFeeRate()
-  const platformCut = Math.floor(amount * feeRate)
-  const creatorAmount = amount - platformCut
+  const adjustedFeeRate = feeRate / tierMultiplier // Higher tier = lower effective fee
+  const platformCut = Math.floor(amount * adjustedFeeRate)
+  const afterFee = amount - platformCut
+
+  // Ecosystem fund: 1% of after-fee amount goes to platform fund
+  const creatorAmount = await collectEcosystemFund(afterFee, `Fundo ecossistema: tip @${sender?.username} -> @${receiver?.username}`)
 
   // ATOMIC credit: add to creator wallet
   const [creditResult] = await db
@@ -181,7 +251,32 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
     await db.update(posts).set({ tipCount: sql`${posts.tipCount} + 1` }).where(eq(posts.id, referenceId))
   }
 
-  return { sent: amount, creatorReceived: creatorAmount, platformFee: platformCut }
+  // Trigger revenue-based vesting for creator's bonus grants (non-blocking)
+  try {
+    const { processRevenueVesting } = await import('./bonus-grant.service')
+    await processRevenueVesting(toCreatorId, creatorAmount)
+  } catch (e) {
+    console.error('Revenue vesting error (non-blocking):', e)
+  }
+
+  // Auto guild treasury contribution if creator is in a guild (non-blocking)
+  try {
+    const { guildMembers: gm } = await import('@fandreams/database')
+    const [membership] = await db
+      .select({ guildId: gm.guildId })
+      .from(gm)
+      .where(eq(gm.userId, toCreatorId))
+      .limit(1)
+    if (membership) {
+      const { contributeTreasury } = await import('./guild.service')
+      await contributeTreasury(membership.guildId, toCreatorId, creatorAmount)
+    }
+  } catch (e) {
+    console.error('Guild treasury contribution error (non-blocking):', e)
+  }
+
+  const ecosystemFund = afterFee - creatorAmount
+  return { sent: amount, creatorReceived: creatorAmount, platformFee: platformCut, ecosystemFund, tierMultiplier }
 }
 
 /**
@@ -273,9 +368,15 @@ export async function unlockPpv(userId: string, postId: string) {
   // Convert ppvPrice (BRL) to FanCoins using dynamic rate
   const priceInCoins = await brlToFancoins(Number(post.ppvPrice))
 
+  // Tier multiplier: higher tier fans get a platform fee discount on PPV too
+  const tierMultiplier = await getTierMultiplier(userId)
   const ppvFeeRate = await getPlatformFeeRate()
-  const platformCut = Math.floor(priceInCoins * ppvFeeRate)
-  const creatorAmount = priceInCoins - platformCut
+  const adjustedFeeRate = ppvFeeRate / tierMultiplier
+  const platformCut = Math.floor(priceInCoins * adjustedFeeRate)
+  const afterFee = priceInCoins - platformCut
+
+  // Ecosystem fund: 1% to platform fund
+  const creatorAmount = await collectEcosystemFund(afterFee, `Fundo ecossistema: PPV ${postId}`)
 
   // ATOMIC debit from buyer: prevents race condition / double-unlock
   // Consume bonusBalance first (non-withdrawable coins are spent before withdrawable ones)
@@ -356,6 +457,14 @@ export async function unlockPpv(userId: string, postId: string) {
     .set({ totalEarnings: sql`${creatorProfiles.totalEarnings} + ${creatorAmountBrl}` })
     .where(eq(creatorProfiles.userId, post.creatorId))
 
+  // Trigger revenue-based vesting for creator's bonus grants (non-blocking)
+  try {
+    const { processRevenueVesting } = await import('./bonus-grant.service')
+    await processRevenueVesting(post.creatorId, creatorAmount)
+  } catch (e) {
+    console.error('Revenue vesting error (non-blocking):', e)
+  }
+
   return { unlocked: true, fancoinsSpent: priceInCoins, newBalance }
 }
 
@@ -370,8 +479,11 @@ export async function creditEarnings(
   description: string,
   referenceId?: string,
 ) {
-  const coinsEarned = await brlToFancoins(creatorAmountBrl)
-  if (coinsEarned <= 0) return { credited: 0, newBalance: 0 }
+  const rawCoins = await brlToFancoins(creatorAmountBrl)
+  if (rawCoins <= 0) return { credited: 0, newBalance: 0 }
+
+  // Ecosystem fund: 1% from external earnings too
+  const coinsEarned = await collectEcosystemFund(rawCoins, `Fundo ecossistema: ${type}`)
 
   // Ensure wallet exists
   await getWallet(creatorId)
@@ -403,6 +515,14 @@ export async function creditEarnings(
     .update(creatorProfiles)
     .set({ totalEarnings: sql`${creatorProfiles.totalEarnings} + ${creatorAmountBrl}` })
     .where(eq(creatorProfiles.userId, creatorId))
+
+  // Trigger revenue-based vesting for creator's bonus grants (non-blocking)
+  try {
+    const { processRevenueVesting } = await import('./bonus-grant.service')
+    await processRevenueVesting(creatorId, coinsEarned)
+  } catch (e) {
+    console.error('Revenue vesting error (non-blocking):', e)
+  }
 
   return { credited: coinsEarned, newBalance }
 }

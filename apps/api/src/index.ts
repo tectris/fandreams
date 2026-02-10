@@ -28,6 +28,10 @@ import withdrawals from './routes/withdrawals'
 import notificationsRoute from './routes/notifications'
 import messagesRoute from './routes/messages'
 import affiliatesRoute from './routes/affiliates'
+import guildsRoute from './routes/guilds'
+import pitchRoute from './routes/pitch'
+import commitmentsRoute from './routes/commitments'
+import creatorScoreRoute from './routes/creator-score'
 
 const app = new Hono().basePath('/api/v1')
 
@@ -106,6 +110,9 @@ app.use('/auth/*', auditLog)
 app.use('/admin/*', auditLog)
 app.use('/payments/*', auditLog)
 app.use('/users/me/password', auditLog)
+app.use('/guilds/*', auditLog)
+app.use('/pitch/*', auditLog)
+app.use('/commitments/*', auditLog)
 
 app.route('/auth', auth)
 app.route('/users', usersRoute)
@@ -126,6 +133,10 @@ app.route('/withdrawals', withdrawals)
 app.route('/notifications', notificationsRoute)
 app.route('/messages', messagesRoute)
 app.route('/affiliates', affiliatesRoute)
+app.route('/guilds', guildsRoute)
+app.route('/pitch', pitchRoute)
+app.route('/commitments', commitmentsRoute)
+app.route('/creator-score', creatorScoreRoute)
 
 // Health check — hide version in production
 app.get('/health', (c) => {
@@ -185,5 +196,49 @@ setInterval(async () => {
     console.error('Error expiring subscriptions:', e)
   }
 }, 15 * 60 * 1000)
+
+// Periodic task: complete expired fan commitments every 30 minutes
+import { completeExpiredCommitments } from './services/commitment.service'
+setInterval(async () => {
+  try {
+    const result = await completeExpiredCommitments()
+    if (result.completed > 0) console.log(`Completed ${result.completed} expired commitments`)
+  } catch (e) {
+    console.error('Error completing commitments:', e)
+  }
+}, 30 * 60 * 1000)
+
+// Periodic task: expire ended pitch campaigns every hour
+import { expireEndedCampaigns } from './services/pitch.service'
+setInterval(async () => {
+  try {
+    const result = await expireEndedCampaigns()
+    if (result.expired > 0) console.log(`Expired ${result.expired} pitch campaigns`)
+  } catch (e) {
+    console.error('Error expiring pitch campaigns:', e)
+  }
+}, 60 * 60 * 1000)
+
+// Periodic task: process time-based bonus vesting every hour
+import { processTimeVesting } from './services/bonus-grant.service'
+setInterval(async () => {
+  try {
+    const count = await processTimeVesting()
+    if (count > 0) console.log(`Processed ${count} time-based bonus vestings`)
+  } catch (e) {
+    console.error('Error processing bonus vesting:', e)
+  }
+}, 60 * 60 * 1000)
+
+// Periodic task: recalculate creator scores daily (every 24h)
+import { recalculateAllScores } from './services/creator-score.service'
+setInterval(async () => {
+  try {
+    const result = await recalculateAllScores()
+    console.log(`Recalculated ${result.updated}/${result.total} creator scores`)
+  } catch (e) {
+    console.error('Error recalculating creator scores:', e)
+  }
+}, 24 * 60 * 60 * 1000)
 
 export default app
