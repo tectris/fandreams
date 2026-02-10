@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Cookie, X } from 'lucide-react'
+import { API_BASE_URL } from '@/lib/api'
 
 const COOKIE_CONSENT_KEY = 'cookie_consent'
 
@@ -24,15 +25,17 @@ export function CookieConsent() {
 
     // Record consent on backend (fire and forget)
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const base = API_URL.match(/^https?:\/\//) ? API_URL : `https://${API_URL}`
-      const url = base.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '')
-      fetch(`${url}/api/v1/platform/cookie-consent`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/platform/cookie-consent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accepted }),
-      }).catch(() => {})
-    } catch {}
+      })
+      if (!res.ok) {
+        console.warn('[CookieConsent] Failed to record consent:', res.status)
+      }
+    } catch (err) {
+      console.warn('[CookieConsent] Network error recording consent:', err)
+    }
   }
 
   if (!visible) return null

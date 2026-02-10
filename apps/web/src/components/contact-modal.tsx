@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { X, Send, Mail, Phone, Loader2, CheckCircle2 } from 'lucide-react'
+import { API_BASE_URL } from '@/lib/api'
 
 type ContactModalProps = {
   open: boolean
@@ -45,10 +46,7 @@ export function ContactModal({ open, onClose }: ContactModalProps) {
 
     setLoading(true)
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const base = API_URL.match(/^https?:\/\//) ? API_URL : `https://${API_URL}`
-      const url = base.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '')
-      const res = await fetch(`${url}/api/v1/platform/contact`, {
+      const res = await fetch(`${API_BASE_URL}/api/v1/platform/contact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, whatsapp: whatsapp || undefined, message, honeypot, timestamp: formTimestamp }),

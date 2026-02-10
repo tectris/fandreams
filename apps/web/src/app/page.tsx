@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Flame, ArrowRight, CreditCard, Bitcoin, QrCode, Shield, ChevronRight, Image, Video } from 'lucide-react'
 import { CookieConsent } from '@/components/cookie-consent'
 import { ContactModal } from '@/components/contact-modal'
+import { PageContentModal } from '@/components/page-content-modal'
 
 const MOCK_CREATORS = [
   { username: 'isabellamorais', displayName: 'Isabella M.', photos: 142, videos: 38 },
@@ -51,6 +52,7 @@ function InitialsAvatar({ name }: { name: string }) {
 
 export default function LandingPage() {
   const [contactOpen, setContactOpen] = useState(false)
+  const [pageModal, setPageModal] = useState<{ key: string; title: string } | null>(null)
 
   return (
     <div className="min-h-screen bg-background">
@@ -317,10 +319,10 @@ export default function LandingPage() {
               <span className="font-semibold text-sm text-foreground tracking-tight">FanDreams</span>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-muted">
-              <Link href="/termos" className="hover:text-foreground transition-colors">Termos de Uso</Link>
-              <Link href="/privacidade" className="hover:text-foreground transition-colors">Politica de Privacidade</Link>
-              <Link href="/dmca" className="hover:text-foreground transition-colors">DMCA</Link>
-              <Link href="/compliance" className="hover:text-foreground transition-colors">Compliance</Link>
+              <button onClick={() => setPageModal({ key: 'terms_and_conditions', title: 'Termos de Uso' })} className="hover:text-foreground transition-colors">Termos de Uso</button>
+              <button onClick={() => setPageModal({ key: 'privacy_policy', title: 'Politica de Privacidade' })} className="hover:text-foreground transition-colors">Politica de Privacidade</button>
+              <button onClick={() => setPageModal({ key: 'dmca', title: 'DMCA' })} className="hover:text-foreground transition-colors">DMCA</button>
+              <button onClick={() => setPageModal({ key: 'compliance', title: 'Compliance' })} className="hover:text-foreground transition-colors">Compliance</button>
               <button onClick={() => setContactOpen(true)} className="hover:text-foreground transition-colors">
                 Contato
               </button>
@@ -339,6 +341,14 @@ export default function LandingPage() {
 
       {/* ─── Contact Modal ─── */}
       <ContactModal open={contactOpen} onClose={() => setContactOpen(false)} />
+
+      {/* ─── Page Content Modal (Terms, Privacy, DMCA, Compliance) ─── */}
+      <PageContentModal
+        open={!!pageModal}
+        onClose={() => setPageModal(null)}
+        pageKey={pageModal?.key || ''}
+        fallbackTitle={pageModal?.title || ''}
+      />
     </div>
   )
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Flame, ArrowLeft } from 'lucide-react'
+import { API_BASE_URL } from '@/lib/api'
 
 export default function TermsPage() {
   const [content, setContent] = useState<{ title: string; content: string; updatedAt: string } | null>(null)
@@ -11,10 +12,7 @@ export default function TermsPage() {
   useEffect(() => {
     async function load() {
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-        const base = API_URL.match(/^https?:\/\//) ? API_URL : `https://${API_URL}`
-        const url = base.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '')
-        const res = await fetch(`${url}/api/v1/platform/page/terms_and_conditions`)
+        const res = await fetch(`${API_BASE_URL}/api/v1/platform/page/terms_and_conditions`)
         const json = await res.json()
         if (json.success && json.data) {
           setContent(json.data)
