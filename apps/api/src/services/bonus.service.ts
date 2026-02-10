@@ -86,7 +86,7 @@ export async function claimBonus(creatorId: string) {
     }
   }
 
-  // Credit FanCoins
+  // Credit FanCoins — bonus coins are non-withdrawable (added to bonusBalance)
   const wallet = await fancoinService.getWallet(creatorId)
   const newBalance = wallet.balance + bonus.bonusCoins
 
@@ -96,6 +96,7 @@ export async function claimBonus(creatorId: string) {
     .update(fancoinWallets)
     .set({
       balance: newBalance,
+      bonusBalance: wallet.bonusBalance + bonus.bonusCoins,
       totalEarned: wallet.totalEarned + bonus.bonusCoins,
       updatedAt: new Date(),
     })
@@ -106,7 +107,7 @@ export async function claimBonus(creatorId: string) {
     type: 'bonus_claimed',
     amount: bonus.bonusCoins,
     balanceAfter: newBalance,
-    description: `Bonus de boas-vindas: ${bonus.bonusCoins.toLocaleString()} FanCoins`,
+    description: `Bonus de boas-vindas: ${bonus.bonusCoins.toLocaleString()} FanCoins (nao sacavel)`,
   })
 
   await db

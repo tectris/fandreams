@@ -22,7 +22,16 @@ fancoins.get('/wallet', authMiddleware, async (c) => {
     fancoinService.getWallet(userId),
     getFancoinToBrl(),
   ])
-  return success(c, { ...wallet, fancoinToBrl })
+  const balance = Number(wallet.balance || 0)
+  const bonusBalance = Number(wallet.bonusBalance || 0)
+  const withdrawableBalance = Math.max(0, balance - bonusBalance)
+  return success(c, {
+    ...wallet,
+    fancoinToBrl,
+    withdrawableBalance,
+    withdrawableBalanceBrl: withdrawableBalance * fancoinToBrl,
+    bonusBalanceBrl: bonusBalance * fancoinToBrl,
+  })
 })
 
 fancoins.get('/transactions', authMiddleware, async (c) => {

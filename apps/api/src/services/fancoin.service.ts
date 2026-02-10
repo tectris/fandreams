@@ -59,11 +59,12 @@ export async function purchaseFancoins(userId: string, packageId: string) {
   // Ensure wallet exists
   await getWallet(userId)
 
-  // Atomic credit: always succeeds (no balance check needed for purchases)
+  // Atomic credit: all purchased coins are non-withdrawable (bonusBalance)
   const [updated] = await db
     .update(fancoinWallets)
     .set({
       balance: sql`${fancoinWallets.balance} + ${pkg.coins}`,
+      bonusBalance: sql`${fancoinWallets.bonusBalance} + ${pkg.coins}`,
       totalEarned: sql`${fancoinWallets.totalEarned} + ${pkg.coins}`,
       updatedAt: new Date(),
     })
@@ -104,11 +105,12 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
     .limit(1)
 
   // ATOMIC debit: deduct from sender only if balance >= amount
-  // This single SQL statement prevents double-spend race conditions
+  // Consume bonusBalance first (non-withdrawable coins are spent before withdrawable ones)
   const [debitResult] = await db
     .update(fancoinWallets)
     .set({
       balance: sql`${fancoinWallets.balance} - ${amount}`,
+      bonusBalance: sql`GREATEST(0, ${fancoinWallets.bonusBalance} - ${amount})`,
       totalSpent: sql`${fancoinWallets.totalSpent} + ${amount}`,
       updatedAt: new Date(),
     })
@@ -186,6 +188,10 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
  * Credit FanCoins after a confirmed payment.
  * Called by the payment webhook handler.
  * Uses atomic SQL to prevent double-credit from concurrent webhooks.
+ *
+ * All purchased FanCoins (base + bonus) are non-withdrawable (bonusBalance).
+ * They can be spent on tips, PPV, etc. but never withdrawn as cash.
+ * Only coins earned from other users (tips, PPV, subscriptions) are withdrawable.
  */
 export async function creditPurchase(userId: string, totalCoins: number, label: string, paymentId: string) {
   // Check idempotency: if a transaction with this paymentId already exists, skip
@@ -206,11 +212,12 @@ export async function creditPurchase(userId: string, totalCoins: number, label: 
   // Ensure wallet exists
   await getWallet(userId)
 
-  // Atomic credit
+  // Atomic credit: all purchased coins go to both balance AND bonusBalance (non-withdrawable)
   const [updated] = await db
     .update(fancoinWallets)
     .set({
       balance: sql`${fancoinWallets.balance} + ${totalCoins}`,
+      bonusBalance: sql`${fancoinWallets.bonusBalance} + ${totalCoins}`,
       totalEarned: sql`${fancoinWallets.totalEarned} + ${totalCoins}`,
       updatedAt: new Date(),
     })
@@ -271,10 +278,12 @@ export async function unlockPpv(userId: string, postId: string) {
   const creatorAmount = priceInCoins - platformCut
 
   // ATOMIC debit from buyer: prevents race condition / double-unlock
+  // Consume bonusBalance first (non-withdrawable coins are spent before withdrawable ones)
   const [debitResult] = await db
     .update(fancoinWallets)
     .set({
       balance: sql`${fancoinWallets.balance} - ${priceInCoins}`,
+      bonusBalance: sql`GREATEST(0, ${fancoinWallets.bonusBalance} - ${priceInCoins})`,
       totalSpent: sql`${fancoinWallets.totalSpent} + ${priceInCoins}`,
       updatedAt: new Date(),
     })
@@ -404,11 +413,12 @@ export async function rewardEngagement(userId: string, type: string, amount: num
   // Ensure wallet exists
   await getWallet(userId)
 
-  // Atomic credit
+  // Atomic credit — engagement rewards are non-withdrawable (bonusBalance)
   const [updated] = await db
     .update(fancoinWallets)
     .set({
       balance: sql`${fancoinWallets.balance} + ${amount}`,
+      bonusBalance: sql`${fancoinWallets.bonusBalance} + ${amount}`,
       totalEarned: sql`${fancoinWallets.totalEarned} + ${amount}`,
       updatedAt: new Date(),
     })

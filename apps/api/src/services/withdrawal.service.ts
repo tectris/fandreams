@@ -1,5 +1,5 @@
 import { eq, and, gte, sql, desc, count } from 'drizzle-orm'
-import { payouts, fancoinWallets, fancoinTransactions, platformSettings } from '@fandreams/database'
+import { payouts, fancoinWallets, fancoinTransactions, platformSettings, creatorProfiles } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import { PAYOUT_CONFIG } from '@fandreams/shared'
@@ -150,7 +150,7 @@ async function assessWithdrawalRisk(creatorId: string, amount: number, fancoinAm
 
   // 6. Withdrawal amount vs total earned ratio (withdrawing > 80% of total earned is suspicious)
   const [walletData] = await db
-    .select({ balance: fancoinWallets.balance, totalEarned: fancoinWallets.totalEarned })
+    .select({ balance: fancoinWallets.balance, bonusBalance: fancoinWallets.bonusBalance, totalEarned: fancoinWallets.totalEarned })
     .from(fancoinWallets)
     .where(eq(fancoinWallets.userId, creatorId))
     .limit(1)
@@ -160,6 +160,34 @@ async function assessWithdrawalRisk(creatorId: string, amount: number, fancoinAm
     if (ratio > 0.9) {
       flags.push('HIGH_WITHDRAWAL_RATIO')
       score += 25
+    }
+  }
+
+  // 7. Check if withdrawing close to full withdrawable balance (bonus-aware)
+  if (walletData) {
+    const withdrawable = Number(walletData.balance) - Number(walletData.bonusBalance)
+    if (withdrawable > 0 && fancoinAmount / withdrawable > 0.95) {
+      flags.push('FULL_WITHDRAWABLE_DRAIN')
+      score += 20
+    }
+  }
+
+  // 8. New creator check: flag creators who recently converted from fan
+  //    and have a high bonus balance (potential arbitrage attempt)
+  const [creatorProfile] = await db
+    .select({ createdAt: creatorProfiles.createdAt, totalEarnings: creatorProfiles.totalEarnings })
+    .from(creatorProfiles)
+    .where(eq(creatorProfiles.userId, creatorId))
+    .limit(1)
+
+  if (creatorProfile) {
+    const creatorAge = (now.getTime() - new Date(creatorProfile.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+    const totalCreatorEarnings = Number(creatorProfile.totalEarnings || 0)
+
+    // Creator < 30 days old with low earnings: likely converted from fan recently
+    if (creatorAge < 30 && totalCreatorEarnings < amount * 2) {
+      flags.push('NEW_CREATOR_LOW_EARNINGS')
+      score += 35
     }
   }
 
@@ -198,15 +226,28 @@ export async function requestWithdrawal(
     throw new AppError('MIN_PAYOUT', `Saque minimo: R$ ${minPayout.toFixed(2)}`, 400)
   }
 
-  // Pre-check balance (the atomic debit below is the real guard, this gives early feedback)
+  // Pre-check balance AND withdrawable amount
+  // Only coins earned from other users (tips, PPV, subscriptions) are withdrawable.
+  // Purchased coins, bonuses, and rewards are non-withdrawable (bonusBalance).
   const [wallet] = await db
-    .select({ balance: fancoinWallets.balance })
+    .select({ balance: fancoinWallets.balance, bonusBalance: fancoinWallets.bonusBalance })
     .from(fancoinWallets)
     .where(eq(fancoinWallets.userId, creatorId))
     .limit(1)
 
   if (!wallet || Number(wallet.balance) < fancoinAmount) {
     throw new AppError('INSUFFICIENT_BALANCE', 'Saldo insuficiente de FanCoins', 400)
+  }
+
+  const withdrawableBalance = Number(wallet.balance) - Number(wallet.bonusBalance)
+  if (withdrawableBalance < fancoinAmount) {
+    const withdrawableBrl = withdrawableBalance * fancoinToBrl
+    throw new AppError(
+      'BONUS_NOT_WITHDRAWABLE',
+      `Saldo sacavel: ${withdrawableBalance.toLocaleString()} FanCoins (R$ ${withdrawableBrl.toFixed(2)}). ` +
+      `FanCoins de compras, bonus e recompensas nao podem ser sacados — apenas gastos na plataforma.`,
+      400,
+    )
   }
 
   // Validate method-specific details
@@ -230,7 +271,8 @@ export async function requestWithdrawal(
   const manualThreshold = await getSetting('manual_approval_threshold', PAYOUT_CONFIG.manualApprovalThreshold)
   const needsApproval = brlAmount >= manualThreshold || risk.score >= 50
 
-  // ATOMIC debit: deduct only if balance >= fancoinAmount (prevents race condition)
+  // ATOMIC debit: deduct only if balance >= fancoinAmount AND withdrawable >= fancoinAmount
+  // The withdrawable guard (balance - bonus_balance) prevents race conditions on bonus coins
   const [debitResult] = await db
     .update(fancoinWallets)
     .set({
@@ -239,7 +281,7 @@ export async function requestWithdrawal(
       updatedAt: new Date(),
     })
     .where(
-      sql`${fancoinWallets.userId} = ${creatorId} AND ${fancoinWallets.balance} >= ${fancoinAmount}`,
+      sql`${fancoinWallets.userId} = ${creatorId} AND ${fancoinWallets.balance} >= ${fancoinAmount} AND (${fancoinWallets.balance} - ${fancoinWallets.bonusBalance}) >= ${fancoinAmount}`,
     )
     .returning({ balance: fancoinWallets.balance })
 
@@ -307,10 +349,18 @@ export async function getCreatorEarnings(creatorId: string) {
     .from(payouts)
     .where(and(eq(payouts.creatorId, creatorId), eq(payouts.status, 'completed')))
 
+  const balance = Number(wallet?.balance || 0)
+  const bonusBalance = Number(wallet?.bonusBalance || 0)
+  const withdrawableBalance = Math.max(0, balance - bonusBalance)
+
   return {
-    wallet: wallet || { balance: 0, totalEarned: 0, totalSpent: 0 },
+    wallet: wallet || { balance: 0, bonusBalance: 0, totalEarned: 0, totalSpent: 0 },
     fancoinToBrl,
-    balanceBrl: Number(wallet?.balance || 0) * fancoinToBrl,
+    balanceBrl: balance * fancoinToBrl,
+    withdrawableBalance,
+    withdrawableBalanceBrl: withdrawableBalance * fancoinToBrl,
+    bonusBalance,
+    bonusBalanceBrl: bonusBalance * fancoinToBrl,
     totalWithdrawnBrl: Number(totalWithdrawn?.total || 0),
     payouts: myPayouts,
   }
