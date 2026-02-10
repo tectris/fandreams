@@ -242,7 +242,7 @@ export default function LandingPage() {
                   <QrCode className="w-6 h-6 text-success shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-foreground">PIX</p>
-                    <p className="text-xs text-muted">Saque instantaneo, 24/7</p>
+                    <p className="text-xs text-muted">Saque seguro, 24/7</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4 p-4 bg-surface rounded-sm">
