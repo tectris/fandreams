@@ -5,7 +5,7 @@ import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Shield, Users, FileText, Star, UserCheck, DollarSign } from 'lucide-react'
+import { Shield, Users, FileText, Star, UserCheck, DollarSign, Globe, MessageSquare } from 'lucide-react'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
 import { useRouter } from 'next/navigation'
@@ -151,6 +151,36 @@ export default function AdminDashboardPage() {
                 <div>
                   <p className="font-medium">Gestao de Pagamentos</p>
                   <p className="text-xs text-muted">Saques, aprovacoes e configuracoes</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/admin/content">
+          <Card className="hover:border-primary/50 transition-colors cursor-pointer">
+            <CardContent className="pt-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-sm">
+                  <FileText className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium">Conteudo & Mensagens</p>
+                  <p className="text-xs text-muted">Termos, privacidade, cookies e contato</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/admin/seo">
+          <Card className="hover:border-success/50 transition-colors cursor-pointer">
+            <CardContent className="pt-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-success/10 rounded-sm">
+                  <Globe className="w-5 h-5 text-success" />
+                </div>
+                <div>
+                  <p className="font-medium">Logo & SEO</p>
+                  <p className="text-xs text-muted">Logo, keywords, pixel e Google Ads</p>
                 </div>
               </div>
             </CardContent>

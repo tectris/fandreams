@@ -32,6 +32,10 @@ function WalletContent() {
   const [pixKey, setPixKey] = useState('')
   const [cryptoAddress, setCryptoAddress] = useState('')
   const [cryptoNetwork, setCryptoNetwork] = useState('TRC20')
+  const [otpStep, setOtpStep] = useState(false)
+  const [otpCode, setOtpCode] = useState('')
+  const [otpSending, setOtpSending] = useState(false)
+  const [otpVerifying, setOtpVerifying] = useState(false)
 
   useEffect(() => {
     if (paymentStatus === 'success') {
@@ -120,16 +124,47 @@ function WalletContent() {
     )
   }
 
-  function handleWithdraw() {
+  async function handleRequestOtp() {
     const amount = Number(withdrawAmount)
     if (!amount || amount <= 0) { toast.error('Informe o valor em FanCoins'); return }
-    withdrawMutation.mutate({
-      method: withdrawMethod,
-      fancoinAmount: amount,
-      pixKey: withdrawMethod === 'pix' ? pixKey : undefined,
-      cryptoAddress: withdrawMethod === 'crypto' ? cryptoAddress : undefined,
-      cryptoNetwork: withdrawMethod === 'crypto' ? cryptoNetwork : undefined,
-    })
+    if (withdrawMethod === 'pix' && !pixKey) { toast.error('Informe a chave PIX'); return }
+    if (withdrawMethod === 'crypto' && !cryptoAddress) { toast.error('Informe o endereco crypto'); return }
+
+    setOtpSending(true)
+    try {
+      await api.post('/platform/otp/request', { purpose: 'withdrawal' })
+      setOtpStep(true)
+      toast.success('Codigo de verificacao enviado para seu email!')
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao enviar codigo')
+    } finally {
+      setOtpSending(false)
+    }
+  }
+
+  async function handleVerifyAndWithdraw() {
+    if (!otpCode || otpCode.length !== 6) { toast.error('Informe o codigo de 6 digitos'); return }
+
+    setOtpVerifying(true)
+    try {
+      await api.post('/platform/otp/verify', { code: otpCode, purpose: 'withdrawal' })
+
+      // OTP verified, proceed with withdrawal
+      const amount = Number(withdrawAmount)
+      withdrawMutation.mutate({
+        method: withdrawMethod,
+        fancoinAmount: amount,
+        pixKey: withdrawMethod === 'pix' ? pixKey : undefined,
+        cryptoAddress: withdrawMethod === 'crypto' ? cryptoAddress : undefined,
+        cryptoNetwork: withdrawMethod === 'crypto' ? cryptoNetwork : undefined,
+      })
+      setOtpStep(false)
+      setOtpCode('')
+    } catch (e: any) {
+      toast.error(e.message || 'Codigo invalido')
+    } finally {
+      setOtpVerifying(false)
+    }
   }
 
   const isPurchasing = checkoutMutation.isPending || directPurchaseMutation.isPending
@@ -338,9 +373,39 @@ function WalletContent() {
               </div>
             </div>
 
-            <Button className="w-full" loading={withdrawMutation.isPending} onClick={handleWithdraw}>
-              Solicitar Saque
-            </Button>
+            {otpStep ? (
+              <div className="space-y-3 p-4 bg-surface border border-primary/20 rounded-md">
+                <p className="text-sm font-medium text-foreground">Verificacao por email</p>
+                <p className="text-xs text-muted">Enviamos um codigo de 6 digitos para seu email. Informe abaixo para confirmar o saque.</p>
+                <Input
+                  label="Codigo OTP"
+                  placeholder="000000"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  maxLength={6}
+                  className="text-center text-lg tracking-widest font-mono"
+                />
+                <div className="flex gap-2">
+                  <Button className="flex-1" loading={otpVerifying || withdrawMutation.isPending} onClick={handleVerifyAndWithdraw}>
+                    Confirmar Saque
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setOtpStep(false); setOtpCode('') }}>
+                    Cancelar
+                  </Button>
+                </div>
+                <button
+                  onClick={handleRequestOtp}
+                  disabled={otpSending}
+                  className="text-xs text-primary hover:underline disabled:opacity-50"
+                >
+                  {otpSending ? 'Enviando...' : 'Reenviar codigo'}
+                </button>
+              </div>
+            ) : (
+              <Button className="w-full" loading={otpSending} onClick={handleRequestOtp}>
+                Solicitar Saque
+              </Button>
+            )}
 
             {/* Payout History */}
             {earnings?.payouts?.length > 0 && (
