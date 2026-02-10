@@ -321,6 +321,43 @@ export async function sendKycApprovedEmail(to: string, displayName: string): Pro
   })
 }
 
+export async function sendWithdrawalOtpEmail(to: string, code: string): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: `Codigo de verificacao para saque - FanDreams`,
+    html: baseTemplate(`
+      ${heading('Codigo de verificacao')}
+      ${paragraph('Voce solicitou um saque na sua conta FanDreams. Use o codigo abaixo para confirmar a operacao:')}
+      <div style="text-align: center; margin: 28px 0;">
+        <div style="display: inline-block; background: #1a1a23; border: 2px solid #e11d48; border-radius: 12px; padding: 20px 40px;">
+          <span style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #f0f0f5; font-family: 'Courier New', monospace;">${code}</span>
+        </div>
+      </div>
+      ${infoBox(`Este codigo expira em ${highlight('10 minutos')}. Nao compartilhe com ninguem.`)}
+      ${paragraph('Se voce nao solicitou este saque, ignore este email e entre em contato com o suporte imediatamente.')}
+    `),
+  })
+}
+
+export async function sendContactConfirmationEmail(to: string, name: string): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: 'Mensagem recebida - FanDreams',
+    html: baseTemplate(`
+      ${heading(`Obrigado, ${name}!`)}
+      ${paragraph('Sua mensagem foi recebida com sucesso. Nossa equipe ira analisar e responder o mais breve possivel.')}
+      ${divider()}
+      ${paragraph(`${highlight('Canais oficiais de contato:')}`)}
+      <ul style="margin: 0 0 16px; padding-left: 20px; color: #b0b0c0; font-size: 14px; line-height: 2;">
+        <li>invest@fandream.app</li>
+        <li>contato@fandream.app</li>
+        <li>dpo@fandream.app</li>
+      </ul>
+      ${paragraph('Atenciosamente, Equipe FanDreams.')}
+    `),
+  })
+}
+
 export async function sendKycRejectedEmail(
   to: string,
   data: { displayName: string; reason?: string },

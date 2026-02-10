@@ -32,6 +32,7 @@ import guildsRoute from './routes/guilds'
 import pitchRoute from './routes/pitch'
 import commitmentsRoute from './routes/commitments'
 import creatorScoreRoute from './routes/creator-score'
+import platformRoute from './routes/platform'
 
 const app = new Hono().basePath('/api/v1')
 
@@ -113,6 +114,8 @@ app.use('/users/me/password', auditLog)
 app.use('/guilds/*', auditLog)
 app.use('/pitch/*', auditLog)
 app.use('/commitments/*', auditLog)
+app.use('/platform/admin/*', auditLog)
+app.use('/platform/otp/*', auditLog)
 
 app.route('/auth', auth)
 app.route('/users', usersRoute)
@@ -137,6 +140,7 @@ app.route('/guilds', guildsRoute)
 app.route('/pitch', pitchRoute)
 app.route('/commitments', commitmentsRoute)
 app.route('/creator-score', creatorScoreRoute)
+app.route('/platform', platformRoute)
 
 // Health check — hide version in production
 app.get('/health', (c) => {

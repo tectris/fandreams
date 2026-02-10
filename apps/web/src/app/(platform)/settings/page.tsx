@@ -334,6 +334,27 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Legal */}
+      <Card className="mb-6">
+        <CardHeader>
+          <h2 className="font-bold flex items-center gap-2">
+            <Shield className="w-5 h-5 text-primary" />
+            Termos e Privacidade
+          </h2>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Link href="/termos" className="flex items-center justify-between py-2 group">
+            <span className="text-sm text-foreground group-hover:text-primary transition-colors">Termos de Uso</span>
+            <ArrowRight className="w-4 h-4 text-muted group-hover:text-primary transition-colors" />
+          </Link>
+          <div className="border-t border-border" />
+          <Link href="/privacidade" className="flex items-center justify-between py-2 group">
+            <span className="text-sm text-foreground group-hover:text-primary transition-colors">Politica de Privacidade</span>
+            <ArrowRight className="w-4 h-4 text-muted group-hover:text-primary transition-colors" />
+          </Link>
+        </CardContent>
+      </Card>
+
       {/* Logout */}
       <Button variant="danger" className="w-full" onClick={handleLogout}>
         <LogOut className="w-4 h-4 mr-2" />

@@ -1,5 +1,10 @@
+'use client'
+
+import { useState } from 'react'
 import Link from 'next/link'
 import { Flame, ArrowRight, CreditCard, Bitcoin, QrCode, Shield, ChevronRight, Image, Video } from 'lucide-react'
+import { CookieConsent } from '@/components/cookie-consent'
+import { ContactModal } from '@/components/contact-modal'
 
 const MOCK_CREATORS = [
   { username: 'isabellamorais', displayName: 'Isabella M.', photos: 142, videos: 38 },
@@ -45,6 +50,8 @@ function InitialsAvatar({ name }: { name: string }) {
 }
 
 export default function LandingPage() {
+  const [contactOpen, setContactOpen] = useState(false)
+
   return (
     <div className="min-h-screen bg-background">
       {/* ─── Header ─── */}
@@ -310,11 +317,13 @@ export default function LandingPage() {
               <span className="font-semibold text-sm text-foreground tracking-tight">FanDreams</span>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-muted">
-              <Link href="#" className="hover:text-foreground transition-colors">Termos de Uso</Link>
-              <Link href="#" className="hover:text-foreground transition-colors">Politica de Privacidade</Link>
+              <Link href="/termos" className="hover:text-foreground transition-colors">Termos de Uso</Link>
+              <Link href="/privacidade" className="hover:text-foreground transition-colors">Politica de Privacidade</Link>
               <Link href="#" className="hover:text-foreground transition-colors">DMCA</Link>
               <Link href="#" className="hover:text-foreground transition-colors">Compliance</Link>
-              <Link href="#" className="hover:text-foreground transition-colors">Contato</Link>
+              <button onClick={() => setContactOpen(true)} className="hover:text-foreground transition-colors">
+                Contato
+              </button>
             </div>
             <p className="text-xs text-muted/60">2026 FanDreams</p>
           </div>
@@ -324,6 +333,12 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* ─── Cookie Consent ─── */}
+      <CookieConsent />
+
+      {/* ─── Contact Modal ─── */}
+      <ContactModal open={contactOpen} onClose={() => setContactOpen(false)} />
     </div>
   )
 }
