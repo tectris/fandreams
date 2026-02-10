@@ -4,10 +4,10 @@ import './globals.css'
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://www.fandreams.app'),
-  title: { default: 'FanDreams — Crie, compartilhe, monetize', template: '%s | FanDreams' },
+  title: { default: 'FanDreams — Seu conteudo. Suas regras.', template: '%s | FanDreams' },
   description:
-    'A plataforma de monetizacao para criadores de conteudo com menor taxa do mercado. Gamificacao, FanCoins e muito mais.',
-  keywords: ['criadores', 'monetizacao', 'conteudo', 'assinatura', 'fancoins'],
+    'Monetize seu conteudo com a menor taxa do mercado. 92% para o criador, saque instantaneo via PIX e Crypto.',
+  keywords: ['criadores', 'monetizacao', 'conteudo', 'assinatura', 'fancoins', 'pix'],
   openGraph: {
     siteName: 'FanDreams',
     type: 'website',
