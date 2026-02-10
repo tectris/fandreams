@@ -6,6 +6,10 @@ export const fancoinWallets = pgTable('fancoin_wallets', {
     .primaryKey()
     .references(() => users.id, { onDelete: 'cascade' }),
   balance: bigint('balance', { mode: 'number' }).default(0).notNull(),
+  /** Non-withdrawable coins (purchase bonuses, creator bonuses, engagement rewards).
+   *  These can be spent on tips/PPV but cannot be withdrawn as cash.
+   *  Withdrawable amount = balance - bonusBalance */
+  bonusBalance: bigint('bonus_balance', { mode: 'number' }).default(0).notNull(),
   totalEarned: bigint('total_earned', { mode: 'number' }).default(0).notNull(),
   totalSpent: bigint('total_spent', { mode: 'number' }).default(0).notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
