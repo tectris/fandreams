@@ -13,6 +13,9 @@ import * as reports from './schema/reports'
 import * as follows from './schema/follows'
 import * as views from './schema/views'
 import * as affiliates from './schema/affiliates'
+import * as guilds from './schema/guilds'
+import * as pitch from './schema/pitch'
+import * as commitments from './schema/commitments'
 
 export const schema = {
   ...users,
@@ -28,6 +31,9 @@ export const schema = {
   ...follows,
   ...views,
   ...affiliates,
+  ...guilds,
+  ...pitch,
+  ...commitments,
 }
 
 export function createDb(databaseUrl: string) {
@@ -50,3 +56,6 @@ export * from './schema/reports'
 export * from './schema/follows'
 export * from './schema/views'
 export * from './schema/affiliates'
+export * from './schema/guilds'
+export * from './schema/pitch'
+export * from './schema/commitments'
