@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { FileText, Save, Eye, Cookie, MessageSquare, ArrowLeft } from 'lucide-react'
+import { FileText, Save, Eye, Cookie, MessageSquare, ArrowLeft, ShieldCheck, Scale } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
@@ -21,7 +21,7 @@ export default function AdminContentPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
 
-  const [activeTab, setActiveTab] = useState<'terms' | 'privacy' | 'cookies' | 'messages'>('terms')
+  const [activeTab, setActiveTab] = useState<'terms' | 'privacy' | 'dmca' | 'compliance' | 'cookies' | 'messages'>('terms')
 
   // Terms
   const [termsTitle, setTermsTitle] = useState('Termos de Uso')
@@ -30,6 +30,14 @@ export default function AdminContentPage() {
   // Privacy
   const [privacyTitle, setPrivacyTitle] = useState('Politica de Privacidade')
   const [privacyContent, setPrivacyContent] = useState('')
+
+  // DMCA
+  const [dmcaTitle, setDmcaTitle] = useState('DMCA')
+  const [dmcaContent, setDmcaContent] = useState('')
+
+  // Compliance
+  const [complianceTitle, setComplianceTitle] = useState('Compliance')
+  const [complianceContent, setComplianceContent] = useState('')
 
   useEffect(() => {
     if (user && user.role !== 'admin') router.push('/feed')
@@ -48,6 +56,24 @@ export default function AdminContentPage() {
     queryKey: ['admin', 'page', 'privacy_policy'],
     queryFn: async () => {
       const res = await api.get<PageContent>('/platform/page/privacy_policy')
+      return res.data
+    },
+    enabled: user?.role === 'admin',
+  })
+
+  const { data: dmcaData } = useQuery({
+    queryKey: ['admin', 'page', 'dmca'],
+    queryFn: async () => {
+      const res = await api.get<PageContent>('/platform/page/dmca')
+      return res.data
+    },
+    enabled: user?.role === 'admin',
+  })
+
+  const { data: complianceData } = useQuery({
+    queryKey: ['admin', 'page', 'compliance'],
+    queryFn: async () => {
+      const res = await api.get<PageContent>('/platform/page/compliance')
       return res.data
     },
     enabled: user?.role === 'admin',
@@ -86,6 +112,20 @@ export default function AdminContentPage() {
     }
   }, [privacyData])
 
+  useEffect(() => {
+    if (dmcaData) {
+      setDmcaTitle(dmcaData.title || 'DMCA')
+      setDmcaContent(dmcaData.content || '')
+    }
+  }, [dmcaData])
+
+  useEffect(() => {
+    if (complianceData) {
+      setComplianceTitle(complianceData.title || 'Compliance')
+      setComplianceContent(complianceData.content || '')
+    }
+  }, [complianceData])
+
   const saveTermsMutation = useMutation({
     mutationFn: () => api.post('/platform/admin/page/terms_and_conditions', { title: termsTitle, content: termsContent }),
     onSuccess: () => {
@@ -100,6 +140,24 @@ export default function AdminContentPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'page', 'privacy_policy'] })
       toast.success('Politica de Privacidade salva!')
+    },
+    onError: (e: any) => toast.error(e.message),
+  })
+
+  const saveDmcaMutation = useMutation({
+    mutationFn: () => api.post('/platform/admin/page/dmca', { title: dmcaTitle, content: dmcaContent }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'page', 'dmca'] })
+      toast.success('DMCA salvo!')
+    },
+    onError: (e: any) => toast.error(e.message),
+  })
+
+  const saveComplianceMutation = useMutation({
+    mutationFn: () => api.post('/platform/admin/page/compliance', { title: complianceTitle, content: complianceContent }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'page', 'compliance'] })
+      toast.success('Compliance salvo!')
     },
     onError: (e: any) => toast.error(e.message),
   })
@@ -128,6 +186,12 @@ export default function AdminContentPage() {
         </Button>
         <Button variant={activeTab === 'privacy' ? 'primary' : 'ghost'} size="sm" onClick={() => setActiveTab('privacy')}>
           <FileText className="w-4 h-4 mr-1" /> Privacidade
+        </Button>
+        <Button variant={activeTab === 'dmca' ? 'primary' : 'ghost'} size="sm" onClick={() => setActiveTab('dmca')}>
+          <ShieldCheck className="w-4 h-4 mr-1" /> DMCA
+        </Button>
+        <Button variant={activeTab === 'compliance' ? 'primary' : 'ghost'} size="sm" onClick={() => setActiveTab('compliance')}>
+          <Scale className="w-4 h-4 mr-1" /> Compliance
         </Button>
         <Button variant={activeTab === 'cookies' ? 'primary' : 'ghost'} size="sm" onClick={() => setActiveTab('cookies')}>
           <Cookie className="w-4 h-4 mr-1" /> Cookies
@@ -205,6 +269,76 @@ export default function AdminContentPage() {
             </div>
             <Button onClick={() => savePrivacyMutation.mutate()} loading={savePrivacyMutation.isPending}>
               <Save className="w-4 h-4 mr-1" /> Salvar Politica
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* DMCA Editor */}
+      {activeTab === 'dmca' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold">DMCA</h2>
+              <Link href="/dmca" target="_blank">
+                <Button variant="ghost" size="sm"><Eye className="w-4 h-4 mr-1" /> Visualizar</Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Input
+              label="Titulo"
+              value={dmcaTitle}
+              onChange={(e) => setDmcaTitle(e.target.value)}
+            />
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-foreground">Conteudo (HTML)</label>
+              <textarea
+                value={dmcaContent}
+                onChange={(e) => setDmcaContent(e.target.value)}
+                rows={20}
+                placeholder="<h2>DMCA Policy</h2><p>FanDreams respeita os direitos de propriedade intelectual...</p>"
+                className="w-full px-4 py-2.5 rounded-sm bg-surface-light border border-border text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary resize-y font-mono text-sm"
+              />
+              <p className="text-xs text-muted">Use tags HTML: h2, h3, p, ul, li, a, strong, em</p>
+            </div>
+            <Button onClick={() => saveDmcaMutation.mutate()} loading={saveDmcaMutation.isPending}>
+              <Save className="w-4 h-4 mr-1" /> Salvar DMCA
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Compliance Editor */}
+      {activeTab === 'compliance' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold">Compliance</h2>
+              <Link href="/compliance" target="_blank">
+                <Button variant="ghost" size="sm"><Eye className="w-4 h-4 mr-1" /> Visualizar</Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Input
+              label="Titulo"
+              value={complianceTitle}
+              onChange={(e) => setComplianceTitle(e.target.value)}
+            />
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-foreground">Conteudo (HTML)</label>
+              <textarea
+                value={complianceContent}
+                onChange={(e) => setComplianceContent(e.target.value)}
+                rows={20}
+                placeholder="<h2>Programa de Compliance</h2><p>O FanDreams mantem um programa robusto de compliance...</p>"
+                className="w-full px-4 py-2.5 rounded-sm bg-surface-light border border-border text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary resize-y font-mono text-sm"
+              />
+              <p className="text-xs text-muted">Use tags HTML: h2, h3, p, ul, li, a, strong, em</p>
+            </div>
+            <Button onClick={() => saveComplianceMutation.mutate()} loading={saveComplianceMutation.isPending}>
+              <Save className="w-4 h-4 mr-1" /> Salvar Compliance
             </Button>
           </CardContent>
         </Card>

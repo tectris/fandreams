@@ -223,7 +223,7 @@ export async function getPageContent(key: string): Promise<{ title: string; cont
 }
 
 export async function setPageContent(key: string, title: string, content: string, adminId: string) {
-  const allowedKeys = ['terms_and_conditions', 'privacy_policy']
+  const allowedKeys = ['terms_and_conditions', 'privacy_policy', 'dmca', 'compliance']
   if (!allowedKeys.includes(key)) {
     throw new AppError('INVALID_KEY', 'Chave invalida', 400)
   }

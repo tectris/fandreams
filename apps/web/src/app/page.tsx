@@ -319,8 +319,8 @@ export default function LandingPage() {
             <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-muted">
               <Link href="/termos" className="hover:text-foreground transition-colors">Termos de Uso</Link>
               <Link href="/privacidade" className="hover:text-foreground transition-colors">Politica de Privacidade</Link>
-              <Link href="#" className="hover:text-foreground transition-colors">DMCA</Link>
-              <Link href="#" className="hover:text-foreground transition-colors">Compliance</Link>
+              <Link href="/dmca" className="hover:text-foreground transition-colors">DMCA</Link>
+              <Link href="/compliance" className="hover:text-foreground transition-colors">Compliance</Link>
               <button onClick={() => setContactOpen(true)} className="hover:text-foreground transition-colors">
                 Contato
               </button>

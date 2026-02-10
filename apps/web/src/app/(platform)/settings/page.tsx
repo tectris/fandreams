@@ -352,6 +352,16 @@ export default function SettingsPage() {
             <span className="text-sm text-foreground group-hover:text-primary transition-colors">Politica de Privacidade</span>
             <ArrowRight className="w-4 h-4 text-muted group-hover:text-primary transition-colors" />
           </Link>
+          <div className="border-t border-border" />
+          <Link href="/dmca" className="flex items-center justify-between py-2 group">
+            <span className="text-sm text-foreground group-hover:text-primary transition-colors">DMCA</span>
+            <ArrowRight className="w-4 h-4 text-muted group-hover:text-primary transition-colors" />
+          </Link>
+          <div className="border-t border-border" />
+          <Link href="/compliance" className="flex items-center justify-between py-2 group">
+            <span className="text-sm text-foreground group-hover:text-primary transition-colors">Compliance</span>
+            <ArrowRight className="w-4 h-4 text-muted group-hover:text-primary transition-colors" />
+          </Link>
         </CardContent>
       </Card>
 
