@@ -1,31 +1,31 @@
 import Link from 'next/link'
-import { Flame, ArrowRight, CreditCard, Bitcoin, QrCode, Shield, ChevronRight } from 'lucide-react'
+import { Flame, ArrowRight, CreditCard, Bitcoin, QrCode, Shield, ChevronRight, Image, Video } from 'lucide-react'
 
 const MOCK_CREATORS = [
-  { username: 'isabellamorais', displayName: 'Isabella M.', category: 'Lifestyle' },
-  { username: 'rafasilva', displayName: 'Rafa Silva', category: 'Fitness' },
-  { username: 'brunacosta', displayName: 'Bruna C.', category: 'Fotografia' },
-  { username: 'lucas.art', displayName: 'Lucas Art', category: 'Conteudo' },
-  { username: 'amandafr', displayName: 'Amanda F.', category: 'Modelo' },
-  { username: 'thaisgomes', displayName: 'Thais G.', category: 'Lifestyle' },
-  { username: 'carolprado', displayName: 'Carol P.', category: 'Fitness' },
-  { username: 'daniribeiro', displayName: 'Dani R.', category: 'Fotografia' },
-  { username: 'fernandajs', displayName: 'Fernanda J.', category: 'Modelo' },
-  { username: 'julianamoura', displayName: 'Juliana M.', category: 'Conteudo' },
+  { username: 'isabellamorais', displayName: 'Isabella M.', photos: 142, videos: 38 },
+  { username: 'rafasilva', displayName: 'Rafa Silva', photos: 87, videos: 24 },
+  { username: 'brunacosta', displayName: 'Bruna C.', photos: 215, videos: 61 },
+  { username: 'lucas.art', displayName: 'Lucas Art', photos: 63, videos: 19 },
+  { username: 'amandafr', displayName: 'Amanda F.', photos: 194, videos: 52 },
+  { username: 'thaisgomes', displayName: 'Thais G.', photos: 108, videos: 33 },
+  { username: 'carolprado', displayName: 'Carol P.', photos: 176, videos: 45 },
+  { username: 'daniribeiro', displayName: 'Dani R.', photos: 231, videos: 72 },
+  { username: 'fernandajs', displayName: 'Fernanda J.', photos: 95, videos: 28 },
+  { username: 'julianamoura', displayName: 'Juliana M.', photos: 157, videos: 41 },
 ]
 
 const MOCK_TESTIMONIALS = [
   {
     quote: 'Migrei de outra plataforma e em 3 meses meu faturamento triplicou. A taxa de 8% faz diferenca real no fim do mes.',
-    author: 'Criadora de conteudo fitness',
+    author: 'Criadora com 12k assinantes',
   },
   {
-    quote: 'Saque via PIX na hora. Sem esperar 5 dias uteis, sem surpresa. Isso muda tudo.',
-    author: 'Modelo e influenciadora digital',
+    quote: 'Saque via PIX seguro e rapido. Sem esperar 5 dias uteis, sem surpresa. Isso muda tudo.',
+    author: 'Criadora com 8k assinantes',
   },
   {
     quote: 'A gamificacao faz meus fas voltarem todo dia. Nenhuma outra plataforma tem isso.',
-    author: 'Criador de conteudo lifestyle',
+    author: 'Criador com 5k assinantes',
   },
 ]
 
@@ -80,7 +80,7 @@ export default function LandingPage() {
             Suas regras.
           </h1>
           <p className="mt-6 text-base sm:text-lg text-muted max-w-xl mx-auto leading-relaxed">
-            Monetize o que voce cria com as menores taxas do Brasil, pagamento instantaneo via PIX e uma comunidade que valoriza quem cria.
+            Monetize o que voce cria com as menores taxas do Brasil, saque seguro via PIX e uma comunidade que valoriza quem cria.
           </p>
           <div className="mt-10">
             <Link
@@ -96,18 +96,20 @@ export default function LandingPage() {
 
       {/* ─── Stats Strip ─── */}
       <section className="border-y border-border/40">
-        <div className="max-w-3xl mx-auto px-6 py-10 grid grid-cols-3 gap-4 text-center">
-          <div>
+        <div className="max-w-3xl mx-auto px-6 py-10 flex flex-col sm:flex-row items-center justify-center gap-8 sm:gap-0 text-center">
+          <div className="sm:flex-1">
             <p className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">92%</p>
             <p className="text-xs sm:text-sm text-muted mt-1">para o criador</p>
           </div>
-          <div className="border-x border-border/40">
-            <p className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">Instantaneo</p>
+          <div className="hidden sm:block w-px h-10 bg-border/40" />
+          <div className="sm:flex-1">
+            <p className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">Seguro</p>
             <p className="text-xs sm:text-sm text-muted mt-1">saque via PIX</p>
           </div>
-          <div>
-            <p className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">3</p>
-            <p className="text-xs sm:text-sm text-muted mt-1">formas de pagamento</p>
+          <div className="hidden sm:block w-px h-10 bg-border/40" />
+          <div className="sm:flex-1">
+            <p className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">PIX</p>
+            <p className="text-xs sm:text-sm text-muted mt-1">cartao e crypto</p>
           </div>
         </div>
       </section>
@@ -130,7 +132,10 @@ export default function LandingPage() {
                   <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
                     @{creator.username}
                   </p>
-                  <p className="text-xs text-muted">{creator.category}</p>
+                  <p className="flex items-center gap-2.5 text-xs text-muted mt-0.5">
+                    <span className="inline-flex items-center gap-1"><Image className="w-3 h-3" />{creator.photos}</span>
+                    <span className="inline-flex items-center gap-1"><Video className="w-3 h-3" />{creator.videos}</span>
+                  </p>
                 </div>
               </div>
             ))}
@@ -226,10 +231,10 @@ export default function LandingPage() {
               <div>
                 <p className="text-xs font-medium text-success uppercase tracking-wider mb-4">Pagamento</p>
                 <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight">
-                  Pagamento instantaneo
+                  Pagamento seguro
                 </h2>
                 <p className="mt-4 text-muted leading-relaxed">
-                  Saque via PIX cai na hora. Crypto em minutos. Sem esperar dias uteis, sem surpresa no extrato.
+                  Saque via PIX de forma segura. USDT para quem prefere crypto. Sem esperar dias uteis, sem surpresa no extrato.
                 </p>
               </div>
               <div className="space-y-3">
@@ -250,8 +255,8 @@ export default function LandingPage() {
                 <div className="flex items-center gap-4 p-4 bg-surface rounded-sm">
                   <Bitcoin className="w-6 h-6 text-warning shrink-0" />
                   <div>
-                    <p className="text-sm font-medium text-foreground">Crypto</p>
-                    <p className="text-xs text-muted">USDT via TRC20, ERC20, BEP20</p>
+                    <p className="text-sm font-medium text-foreground">USDT</p>
+                    <p className="text-xs text-muted">Stablecoin, sem volatilidade</p>
                   </div>
                 </div>
               </div>
