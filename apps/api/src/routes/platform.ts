@@ -57,6 +57,13 @@ platform.post('/contact', sensitiveRateLimit, async (c) => {
     }
 
     const msg = await platformService.createContactMessage({ name, email, whatsapp, message })
+
+    // Send notification email to contato@fandream.app (fire and forget)
+    const { sendContactNotificationEmail } = await import('../services/email.service')
+    sendContactNotificationEmail({ name, email, whatsapp, message }).catch((err) =>
+      console.error('Failed to send contact notification email:', err),
+    )
+
     return success(c, { sent: true, id: msg.id })
   } catch (e) {
     if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)

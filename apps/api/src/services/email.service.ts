@@ -339,6 +339,48 @@ export async function sendWithdrawalOtpEmail(to: string, code: string): Promise<
   })
 }
 
+export async function sendContactNotificationEmail(data: {
+  name: string
+  email: string
+  whatsapp?: string
+  message: string
+}): Promise<boolean> {
+  const whatsappRow = data.whatsapp
+    ? `<tr><td style="padding: 12px 16px; border-bottom: 1px solid #23232d;"><span style="font-size: 13px; color: #6b6b7b;">WhatsApp</span><br /><span style="font-size: 15px; color: #f0f0f5;">${data.whatsapp}</span></td></tr>`
+    : ''
+
+  return sendEmail({
+    to: 'contato@fandream.app',
+    subject: `Nova mensagem de contato - ${data.name}`,
+    html: baseTemplate(`
+      ${heading('Nova mensagem de contato')}
+      ${paragraph('Uma nova mensagem foi enviada pelo formulario de contato da plataforma.')}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #1a1a23; border: 1px solid #23232d; border-radius: 8px; margin: 16px 0;">
+        <tr>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #23232d;">
+            <span style="font-size: 13px; color: #6b6b7b;">Nome</span><br />
+            <span style="font-size: 15px; color: #f0f0f5; font-weight: 600;">${data.name}</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #23232d;">
+            <span style="font-size: 13px; color: #6b6b7b;">E-mail</span><br />
+            <a href="mailto:${data.email}" style="font-size: 15px; color: #e11d48; text-decoration: none;">${data.email}</a>
+          </td>
+        </tr>
+        ${whatsappRow}
+        <tr>
+          <td style="padding: 12px 16px;">
+            <span style="font-size: 13px; color: #6b6b7b;">Mensagem</span><br />
+            <span style="font-size: 15px; color: #f0f0f5; line-height: 1.6; white-space: pre-wrap;">${data.message}</span>
+          </td>
+        </tr>
+      </table>
+      ${paragraph('Responda diretamente para o e-mail do remetente acima.')}
+    `),
+  })
+}
+
 export async function sendContactConfirmationEmail(to: string, name: string): Promise<boolean> {
   return sendEmail({
     to,
