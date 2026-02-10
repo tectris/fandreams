@@ -3,6 +3,8 @@ const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 const normalizedUrl = rawApiUrl.match(/^https?:\/\//) ? rawApiUrl : `https://${rawApiUrl}`
 const API_URL = normalizedUrl.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '')
 
+export const API_BASE_URL = API_URL
+
 type ApiResponse<T> = {
   success: boolean
   data: T

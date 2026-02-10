@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { FileText, Save, Eye, Cookie, MessageSquare, ArrowLeft, ShieldCheck, Scale } from 'lucide-react'
+import { HtmlEditor } from '@/components/html-editor'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
@@ -221,17 +222,11 @@ export default function AdminContentPage() {
               value={termsTitle}
               onChange={(e) => setTermsTitle(e.target.value)}
             />
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-foreground">Conteudo (HTML)</label>
-              <textarea
-                value={termsContent}
-                onChange={(e) => setTermsContent(e.target.value)}
-                rows={20}
-                placeholder="<h2>1. Aceitacao dos Termos</h2><p>Ao acessar e utilizar o FanDreams...</p>"
-                className="w-full px-4 py-2.5 rounded-sm bg-surface-light border border-border text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary resize-y font-mono text-sm"
-              />
-              <p className="text-xs text-muted">Use tags HTML: h2, h3, p, ul, li, a, strong, em</p>
-            </div>
+            <HtmlEditor
+              value={termsContent}
+              onChange={setTermsContent}
+              placeholder="<h2>1. Aceitacao dos Termos</h2><p>Ao acessar e utilizar o FanDreams...</p>"
+            />
             <Button onClick={() => saveTermsMutation.mutate()} loading={saveTermsMutation.isPending}>
               <Save className="w-4 h-4 mr-1" /> Salvar Termos
             </Button>
@@ -256,17 +251,11 @@ export default function AdminContentPage() {
               value={privacyTitle}
               onChange={(e) => setPrivacyTitle(e.target.value)}
             />
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-foreground">Conteudo (HTML)</label>
-              <textarea
-                value={privacyContent}
-                onChange={(e) => setPrivacyContent(e.target.value)}
-                rows={20}
-                placeholder="<h2>1. Informacoes que coletamos</h2><p>Coletamos informacoes que voce nos fornece...</p>"
-                className="w-full px-4 py-2.5 rounded-sm bg-surface-light border border-border text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary resize-y font-mono text-sm"
-              />
-              <p className="text-xs text-muted">Use tags HTML: h2, h3, p, ul, li, a, strong, em</p>
-            </div>
+            <HtmlEditor
+              value={privacyContent}
+              onChange={setPrivacyContent}
+              placeholder="<h2>1. Informacoes que coletamos</h2><p>Coletamos informacoes que voce nos fornece...</p>"
+            />
             <Button onClick={() => savePrivacyMutation.mutate()} loading={savePrivacyMutation.isPending}>
               <Save className="w-4 h-4 mr-1" /> Salvar Politica
             </Button>
@@ -291,17 +280,11 @@ export default function AdminContentPage() {
               value={dmcaTitle}
               onChange={(e) => setDmcaTitle(e.target.value)}
             />
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-foreground">Conteudo (HTML)</label>
-              <textarea
-                value={dmcaContent}
-                onChange={(e) => setDmcaContent(e.target.value)}
-                rows={20}
-                placeholder="<h2>DMCA Policy</h2><p>FanDreams respeita os direitos de propriedade intelectual...</p>"
-                className="w-full px-4 py-2.5 rounded-sm bg-surface-light border border-border text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary resize-y font-mono text-sm"
-              />
-              <p className="text-xs text-muted">Use tags HTML: h2, h3, p, ul, li, a, strong, em</p>
-            </div>
+            <HtmlEditor
+              value={dmcaContent}
+              onChange={setDmcaContent}
+              placeholder="<h2>DMCA Policy</h2><p>FanDreams respeita os direitos de propriedade intelectual...</p>"
+            />
             <Button onClick={() => saveDmcaMutation.mutate()} loading={saveDmcaMutation.isPending}>
               <Save className="w-4 h-4 mr-1" /> Salvar DMCA
             </Button>
@@ -326,17 +309,11 @@ export default function AdminContentPage() {
               value={complianceTitle}
               onChange={(e) => setComplianceTitle(e.target.value)}
             />
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-foreground">Conteudo (HTML)</label>
-              <textarea
-                value={complianceContent}
-                onChange={(e) => setComplianceContent(e.target.value)}
-                rows={20}
-                placeholder="<h2>Programa de Compliance</h2><p>O FanDreams mantem um programa robusto de compliance...</p>"
-                className="w-full px-4 py-2.5 rounded-sm bg-surface-light border border-border text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary resize-y font-mono text-sm"
-              />
-              <p className="text-xs text-muted">Use tags HTML: h2, h3, p, ul, li, a, strong, em</p>
-            </div>
+            <HtmlEditor
+              value={complianceContent}
+              onChange={setComplianceContent}
+              placeholder="<h2>Programa de Compliance</h2><p>O FanDreams mantem um programa robusto de compliance...</p>"
+            />
             <Button onClick={() => saveComplianceMutation.mutate()} loading={saveComplianceMutation.isPending}>
               <Save className="w-4 h-4 mr-1" /> Salvar Compliance
             </Button>
