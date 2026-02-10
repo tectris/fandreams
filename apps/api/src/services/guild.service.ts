@@ -233,16 +233,17 @@ export async function contributeTreasury(guildId: string, userId: string, earnin
 
   if (!debit) return null
 
-  // Credit guild treasury
-  const newTreasuryBalance = guild.treasuryBalance + contribution
-
-  await db
+  // ATOMIC credit guild treasury (prevents race condition on concurrent contributions)
+  const [updatedGuild] = await db
     .update(guilds)
     .set({
-      treasuryBalance: newTreasuryBalance,
+      treasuryBalance: sql`${guilds.treasuryBalance} + ${contribution}`,
       updatedAt: new Date(),
     })
     .where(eq(guilds.id, guildId))
+    .returning({ treasuryBalance: guilds.treasuryBalance })
+
+  const newTreasuryBalance = Number(updatedGuild?.treasuryBalance ?? 0)
 
   // Record transaction
   await db.insert(guildTreasuryTransactions).values({

@@ -11,10 +11,13 @@ const pitch = new Hono()
 
 // ── Public Routes ──
 
+const ALLOWED_CAMPAIGN_STATUSES = ['active', 'funded', 'delivered', 'failed']
+
 pitch.get('/campaigns', async (c) => {
-  const page = Number(c.req.query('page') || 1)
-  const limit = Number(c.req.query('limit') || 20)
-  const status = c.req.query('status') || 'active'
+  const page = Math.max(1, Math.floor(Number(c.req.query('page') || 1)))
+  const limit = Math.min(100, Math.max(1, Math.floor(Number(c.req.query('limit') || 20))))
+  const rawStatus = c.req.query('status') || 'active'
+  const status = ALLOWED_CAMPAIGN_STATUSES.includes(rawStatus) ? rawStatus : 'active'
   const category = c.req.query('category')
   const result = await pitchService.listCampaigns(page, limit, status, category)
   return paginated(c, result.items, { page: result.page, limit: result.limit, total: result.total })

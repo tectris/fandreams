@@ -105,7 +105,7 @@ export async function processRevenueVesting(userId: string, revenueAmount: numbe
     const unlockAmount = Math.floor(revenueAmount * rate)
     if (unlockAmount <= 0) continue
 
-    const remaining = grant.totalAmount - grant.unlockedAmount - grant.spentAmount
+    const remaining = Math.max(0, grant.totalAmount - grant.unlockedAmount - grant.spentAmount)
     const actualUnlock = Math.min(unlockAmount, remaining)
     if (actualUnlock <= 0) continue
 
@@ -163,13 +163,13 @@ export async function processTimeVesting() {
     )
 
   for (const grant of grants) {
-    const remaining = grant.totalAmount - grant.unlockedAmount - grant.spentAmount
+    const remaining = Math.max(0, grant.totalAmount - grant.unlockedAmount - grant.spentAmount)
     if (remaining <= 0) continue
 
     await db
       .update(bonusGrants)
       .set({
-        unlockedAmount: grant.totalAmount - grant.spentAmount,
+        unlockedAmount: Math.max(0, grant.totalAmount - grant.spentAmount),
         vestingComplete: true,
         status: 'fully_vested',
         updatedAt: new Date(),
@@ -201,12 +201,12 @@ export async function completeConditionVesting(grantId: string) {
   if (!grant) throw new AppError('NOT_FOUND', 'Bonus grant nao encontrado', 404)
   if (grant.vestingComplete) return grant
 
-  const remaining = grant.totalAmount - grant.unlockedAmount - grant.spentAmount
+  const remaining = Math.max(0, grant.totalAmount - grant.unlockedAmount - grant.spentAmount)
 
   await db
     .update(bonusGrants)
     .set({
-      unlockedAmount: grant.totalAmount - grant.spentAmount,
+      unlockedAmount: Math.max(0, grant.totalAmount - grant.spentAmount),
       vestingComplete: true,
       status: 'fully_vested',
       updatedAt: new Date(),

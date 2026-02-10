@@ -187,13 +187,14 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
 
   const newSenderBalance = Number(debitResult.balance)
 
-  // Apply tier multiplier: higher tier fans give more value to creators
+  // Tier multiplier: higher tier fans get a platform fee discount (platform absorbs the difference).
+  // The total distributed never exceeds the amount debited from the sender.
+  // e.g. Obsidian (1.3x): platform fee is reduced by 30%, so more of the original amount goes to the creator.
   const tierMultiplier = await getTierMultiplier(fromUserId)
-  const effectiveAmount = Math.floor(amount * tierMultiplier)
-
   const feeRate = await getPlatformFeeRate()
-  const platformCut = Math.floor(effectiveAmount * feeRate)
-  const afterFee = effectiveAmount - platformCut
+  const adjustedFeeRate = feeRate / tierMultiplier // Higher tier = lower effective fee
+  const platformCut = Math.floor(amount * adjustedFeeRate)
+  const afterFee = amount - platformCut
 
   // Ecosystem fund: 1% of after-fee amount goes to platform fund
   const creatorAmount = await collectEcosystemFund(afterFee, `Fundo ecossistema: tip @${sender?.username} -> @${receiver?.username}`)
@@ -275,7 +276,7 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
   }
 
   const ecosystemFund = afterFee - creatorAmount
-  return { sent: amount, effectiveAmount, creatorReceived: creatorAmount, platformFee: platformCut, ecosystemFund, tierMultiplier }
+  return { sent: amount, creatorReceived: creatorAmount, platformFee: platformCut, ecosystemFund, tierMultiplier }
 }
 
 /**
@@ -367,13 +368,12 @@ export async function unlockPpv(userId: string, postId: string) {
   // Convert ppvPrice (BRL) to FanCoins using dynamic rate
   const priceInCoins = await brlToFancoins(Number(post.ppvPrice))
 
-  // Apply tier multiplier: higher tier fans give more value to creators on PPV too
+  // Tier multiplier: higher tier fans get a platform fee discount on PPV too
   const tierMultiplier = await getTierMultiplier(userId)
-  const effectivePpvCoins = Math.floor(priceInCoins * tierMultiplier)
-
   const ppvFeeRate = await getPlatformFeeRate()
-  const platformCut = Math.floor(effectivePpvCoins * ppvFeeRate)
-  const afterFee = effectivePpvCoins - platformCut
+  const adjustedFeeRate = ppvFeeRate / tierMultiplier
+  const platformCut = Math.floor(priceInCoins * adjustedFeeRate)
+  const afterFee = priceInCoins - platformCut
 
   // Ecosystem fund: 1% to platform fund
   const creatorAmount = await collectEcosystemFund(afterFee, `Fundo ecossistema: PPV ${postId}`)

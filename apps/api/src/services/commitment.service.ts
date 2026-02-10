@@ -1,5 +1,5 @@
 import { eq, and, sql, lt, desc } from 'drizzle-orm'
-import { fanCommitments, fancoinWallets, fancoinTransactions } from '@fandreams/database'
+import { fanCommitments, fancoinWallets, fancoinTransactions, users } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import { COMMITMENT_CONFIG } from '@fandreams/shared'
