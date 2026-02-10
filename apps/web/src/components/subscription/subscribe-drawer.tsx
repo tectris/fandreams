@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { X, Crown, CreditCard, QrCode, Loader2, CheckCircle, ExternalLink } from 'lucide-react'
+import { X, Crown, CreditCard, QrCode, Loader2, CheckCircle, ExternalLink, Copy, Clock } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -36,7 +36,13 @@ interface SubscribeDrawerProps {
   } | null
 }
 
-type DrawerState = 'choose' | 'processing' | 'waiting' | 'success' | 'error'
+type DrawerState = 'choose' | 'processing' | 'waiting' | 'pix' | 'success' | 'error'
+
+interface PixData {
+  qrCodeBase64: string
+  qrCode: string
+  expiresAt?: string
+}
 
 function getDurationLabel(days: number) {
   if (days === 90) return '3 meses'
@@ -65,6 +71,7 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
   const [error, setError] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('credit_card')
   const [selectedPromo, setSelectedPromo] = useState<Promo | null>(null)
+  const [pixData, setPixData] = useState<PixData | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const popupRef = useRef<Window | null>(null)
   const paymentIdRef = useRef<string | null>(null)
@@ -89,6 +96,7 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
       setState('choose')
       setError('')
       setSelectedPromo(null)
+      setPixData(null)
       paymentIdRef.current = null
       if (pollRef.current) clearInterval(pollRef.current)
       pollRef.current = null
@@ -142,7 +150,13 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
       })
       const data = res.data
 
-      if (data.checkoutUrl) {
+      if (data.pixData) {
+        // PIX inline QR code (promo subscription via OpenPix)
+        paymentIdRef.current = data.paymentId || null
+        setPixData(data.pixData)
+        setState('pix')
+        startPolling()
+      } else if (data.checkoutUrl) {
         if (data.paymentId) {
           paymentIdRef.current = data.paymentId
         }
@@ -385,6 +399,50 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
                 <ExternalLink className="w-4 h-4 mr-1" />
                 Reabrir janela de pagamento
               </Button>
+            </div>
+          )}
+
+          {/* State: PIX QR Code */}
+          {state === 'pix' && pixData && (
+            <div className="flex flex-col items-center gap-4 py-4">
+              <div className="bg-white rounded-lg p-4">
+                <img
+                  src={pixData.qrCodeBase64.startsWith('http') ? pixData.qrCodeBase64 : pixData.qrCodeBase64.startsWith('data:') ? pixData.qrCodeBase64 : `data:image/png;base64,${pixData.qrCodeBase64}`}
+                  alt="QR Code PIX"
+                  className="w-52 h-52"
+                />
+              </div>
+              <div className="w-full">
+                <p className="text-sm font-medium text-center mb-2">Escaneie o QR Code ou copie o codigo</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={pixData.qrCode}
+                    className="flex-1 text-xs bg-surface-light border border-border rounded px-2 py-2 font-mono truncate"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(pixData.qrCode)
+                      toast.success('Codigo PIX copiado!')
+                    }}
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                <p className="text-sm text-muted">Aguardando pagamento...</p>
+              </div>
+              {pixData.expiresAt && (
+                <div className="flex items-center gap-1 text-xs text-muted">
+                  <Clock className="w-3 h-3" />
+                  Expira em 30 minutos
+                </div>
+              )}
             </div>
           )}
 
