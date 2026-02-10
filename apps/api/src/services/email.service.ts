@@ -350,7 +350,7 @@ export async function sendContactNotificationEmail(data: {
     : ''
 
   return sendEmail({
-    to: 'contato@fandream.app',
+    to: 'contato@fandreams.app',
     subject: `Nova mensagem de contato - ${data.name}`,
     html: baseTemplate(`
       ${heading('Nova mensagem de contato')}
