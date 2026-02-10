@@ -197,6 +197,43 @@ paymentsRoute.post('/webhook', async (c) => {
   }
 })
 
+// OpenPix/Woovi PIX webhook
+// OpenPix sends POST with webhook payload when a PIX charge status changes.
+// On registration, OpenPix sends a test POST to verify the URL returns 200.
+paymentsRoute.post('/webhook/openpix', async (c) => {
+  try {
+    const rawBody = await c.req.text()
+
+    // Empty body = OpenPix webhook URL verification request
+    if (!rawBody || rawBody.trim() === '' || rawBody.trim() === '{}') {
+      console.log('OpenPix Webhook: verification ping received')
+      return c.json({ received: true }, 200)
+    }
+
+    const body = JSON.parse(rawBody)
+
+    // Test event from OpenPix during webhook setup
+    if (body.event === 'OPENPIX:WEBHOOK_VERIFICATION' || !body.charge) {
+      console.log('OpenPix Webhook: test event received:', body.event)
+      return c.json({ received: true }, 200)
+    }
+
+    // Verify webhook signature (skip if secret not configured)
+    const signature = c.req.header('x-webhook-secret')
+    const { verifyWebhookSignature } = await import('../services/openpix.service')
+    if (!verifyWebhookSignature(rawBody, signature)) {
+      console.warn('OpenPix Webhook: invalid signature — rejecting')
+      return c.json({ received: true, error: 'invalid_signature' }, 200)
+    }
+
+    const result = await paymentService.handleOpenPixWebhook(body)
+    return c.json({ received: true, ...result }, 200)
+  } catch (err) {
+    console.error('OpenPix Webhook error:', err)
+    return c.json({ received: true }, 200)
+  }
+})
+
 // NOWPayments IPN webhook
 paymentsRoute.post('/webhook/nowpayments', async (c) => {
   try {

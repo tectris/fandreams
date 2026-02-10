@@ -7,6 +7,7 @@ import * as paymentService from './payment.service'
 import * as fancoinService from './fancoin.service'
 import * as affiliateService from './affiliate.service'
 import * as bonusService from './bonus.service'
+import * as openpixService from './openpix.service'
 import { getPlatformFeeRate } from './withdrawal.service'
 import { sendSubscriptionCancelledEmail } from './email.service'
 
@@ -93,6 +94,10 @@ export async function createSubscriptionCheckout(
     const periodEnd = new Date(now)
     periodEnd.setDate(periodEnd.getDate() + durationDays)
 
+    // Route PIX to OpenPix when configured
+    const useOpenPix = paymentMethod === 'pix' && openpixService.isOpenPixConfigured()
+    const promoProvider = useOpenPix ? 'openpix' : 'mercadopago'
+
     const [sub] = await db
       .insert(subscriptions)
       .values({
@@ -101,7 +106,7 @@ export async function createSubscriptionCheckout(
         tierId,
         status: 'pending',
         pricePaid: price,
-        paymentProvider: 'mercadopago',
+        paymentProvider: promoProvider,
         currentPeriodStart: now,
         currentPeriodEnd: now,
         autoRenew: false, // promo subscriptions don't auto-renew
@@ -112,7 +117,7 @@ export async function createSubscriptionCheckout(
           status: 'pending',
           tierId,
           pricePaid: price,
-          paymentProvider: 'mercadopago',
+          paymentProvider: promoProvider,
           cancelledAt: null,
           autoRenew: false,
           updatedAt: now,
@@ -133,7 +138,7 @@ export async function createSubscriptionCheckout(
         amount: price,
         platformFee: String(platformFee),
         creatorAmount: String(creatorAmount),
-        paymentProvider: 'mercadopago',
+        paymentProvider: promoProvider,
         status: 'pending',
         metadata: {
           subscriptionId: sub.id,
@@ -148,6 +153,36 @@ export async function createSubscriptionCheckout(
 
     const durationLabel = durationDays === 90 ? '3 meses' : durationDays === 180 ? '6 meses' : '12 meses'
 
+    // PIX via OpenPix
+    if (useOpenPix) {
+      const opResult = await openpixService.createPixCharge({
+        amount,
+        description: `Assinatura ${durationLabel} - ${creatorName} - FanDreams`,
+        externalReference: payment.id,
+      })
+
+      await db
+        .update(payments)
+        .set({
+          providerTxId: opResult.correlationID,
+          metadata: { ...(payment.metadata as any), openpixCorrelationID: opResult.correlationID },
+        })
+        .where(eq(payments.id, payment.id))
+
+      return {
+        subscription: sub,
+        pixData: {
+          qrCodeBase64: opResult.qrCodeImageUrl,
+          qrCode: opResult.brCode,
+          expiresAt: opResult.expiresAt,
+        },
+        paymentId: payment.id,
+        sandbox: openpixService.isOpenPixSandbox(),
+        isPromo: true,
+      }
+    }
+
+    // Credit card or PIX via MercadoPago (fallback)
     const mpResult = await paymentService.createPromoSubscriptionPayment({
       paymentId: payment.id,
       creatorName,

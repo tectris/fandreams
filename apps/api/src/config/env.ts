@@ -20,6 +20,11 @@ const envSchema = z.object({
   BUNNY_LIBRARY_ID: z.string().optional(),
   BUNNY_CDN_HOSTNAME: z.string().optional(),
   API_URL: z.string().optional(),
+  // OpenPix / Woovi (PIX)
+  OPENPIX_APP_ID: z.string().optional(),
+  OPENPIX_WEBHOOK_SECRET: z.string().optional(),
+  OPENPIX_SANDBOX: z.enum(['true', 'false']).default('true'),
+
   MERCADOPAGO_ACCESS_TOKEN: z.string().optional(),
   MERCADOPAGO_WEBHOOK_SECRET: z.string().optional(),
   MERCADOPAGO_SANDBOX: z.enum(['true', 'false']).default('true'),

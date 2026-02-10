@@ -8,6 +8,7 @@ import * as fancoinService from './fancoin.service'
 import * as affiliateService from './affiliate.service'
 import { getPlatformFeeRate } from './withdrawal.service'
 import { sendPaymentConfirmedEmail, sendSubscriptionActivatedEmail } from './email.service'
+import * as openpixService from './openpix.service'
 
 // ── MercadoPago ──
 
@@ -222,7 +223,7 @@ async function ppFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 // ── Unified Payment Creation ──
 
-export type PaymentProvider = 'mercadopago' | 'nowpayments' | 'paypal'
+export type PaymentProvider = 'mercadopago' | 'nowpayments' | 'paypal' | 'openpix'
 export type PaymentMethod = 'pix' | 'credit_card' | 'crypto' | 'paypal'
 
 export async function createFancoinPayment(
@@ -234,6 +235,11 @@ export async function createFancoinPayment(
   const pkg = FANCOIN_PACKAGES.find((p) => p.id === packageId)
   if (!pkg) throw new AppError('NOT_FOUND', 'Pacote nao encontrado', 404)
 
+  // Auto-route PIX to OpenPix when configured, regardless of requested provider
+  const effectiveProvider = (paymentMethod === 'pix' && openpixService.isOpenPixConfigured())
+    ? 'openpix' as PaymentProvider
+    : provider
+
   const feeRate = await getPlatformFeeRate()
 
   // Create internal payment record
@@ -243,17 +249,19 @@ export async function createFancoinPayment(
       userId,
       type: 'fancoin_purchase',
       amount: String(pkg.price),
-      currency: provider === 'nowpayments' ? 'USD' : 'BRL',
+      currency: effectiveProvider === 'nowpayments' ? 'USD' : 'BRL',
       platformFee: String(pkg.price * feeRate),
-      paymentProvider: provider,
+      paymentProvider: effectiveProvider,
       status: 'pending',
-      metadata: { packageId, coins: pkg.coins, bonus: pkg.bonus, paymentMethod, provider },
+      metadata: { packageId, coins: pkg.coins, bonus: pkg.bonus, paymentMethod, provider: effectiveProvider },
     })
     .returning()
 
   const appUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
-  switch (provider) {
+  switch (effectiveProvider) {
+    case 'openpix':
+      return createOpenPixPayment(payment, pkg)
     case 'mercadopago':
       // PIX → Transparent Checkout (QR code in-app), Card → Checkout Pro (redirect)
       if (paymentMethod === 'pix') {
@@ -517,6 +525,39 @@ async function createPpPayment(payment: any, pkg: any, appUrl: string) {
   }
 }
 
+// ── OpenPix PIX Payment ──
+
+async function createOpenPixPayment(payment: any, pkg: any) {
+  const description = `${pkg.coins.toLocaleString()} FanCoins${pkg.bonus > 0 ? ` (+${pkg.bonus} bonus)` : ''} - FanDreams`
+
+  const result = await openpixService.createPixCharge({
+    amount: pkg.price,
+    description,
+    externalReference: payment.id,
+  })
+
+  await db
+    .update(payments)
+    .set({
+      providerTxId: result.correlationID,
+      metadata: { ...(payment.metadata as any), openpixCorrelationID: result.correlationID },
+    })
+    .where(eq(payments.id, payment.id))
+
+  return {
+    paymentId: payment.id,
+    provider: 'openpix' as const,
+    pixData: {
+      qrCodeBase64: result.qrCodeImageUrl, // URL to QR code image
+      qrCode: result.brCode,
+      expiresAt: result.expiresAt,
+    },
+    paymentLinkUrl: result.paymentLinkUrl,
+    package: pkg,
+    sandbox: openpixService.isOpenPixSandbox(),
+  }
+}
+
 // ── Webhooks ──
 
 export async function handleMercadoPagoWebhook(type: string, dataId: string) {
@@ -585,6 +626,33 @@ export async function handleNowPaymentsWebhook(body: any) {
     payAmount: body.pay_amount,
     actuallyPaid: body.actually_paid,
   })
+}
+
+export async function handleOpenPixWebhook(body: any) {
+  const parsed = openpixService.parseWebhookPayload(body)
+
+  if (!parsed) {
+    return { processed: false }
+  }
+
+  // Only process completed charges
+  if (parsed.event !== 'OPENPIX:CHARGE_COMPLETED') {
+    return { processed: true, event: parsed.event, status: 'ignored' }
+  }
+
+  // correlationID is the payment ID
+  const paymentId = parsed.correlationID
+  return processPaymentConfirmation(
+    paymentId,
+    'completed',
+    parsed.transactionID,
+    {
+      openpixEvent: parsed.event,
+      openpixAmount: parsed.value,
+      openpixPaidAt: parsed.paidAt,
+      openpixPayerName: parsed.payerName,
+    },
+  )
 }
 
 export async function handlePaypalWebhook(body: any) {
@@ -797,11 +865,22 @@ async function processPaymentConfirmation(
 export function getAvailableProviders() {
   const providers: Array<{ id: PaymentProvider; label: string; methods: string[]; sandbox: boolean }> = []
 
+  // OpenPix handles PIX when configured; MP handles credit card only
+  if (openpixService.isOpenPixConfigured()) {
+    providers.push({
+      id: 'openpix',
+      label: 'PIX',
+      methods: ['pix'],
+      sandbox: openpixService.isOpenPixSandbox(),
+    })
+  }
+
   if (env.MERCADOPAGO_ACCESS_TOKEN) {
+    const methods = openpixService.isOpenPixConfigured() ? ['credit_card'] : ['pix', 'credit_card']
     providers.push({
       id: 'mercadopago',
-      label: 'MercadoPago',
-      methods: ['pix', 'credit_card'],
+      label: openpixService.isOpenPixConfigured() ? 'Cartao de Credito' : 'MercadoPago',
+      methods,
       sandbox: isMpSandbox(),
     })
   }
@@ -844,8 +923,18 @@ export async function getPaymentStatus(paymentId: string, userId: string) {
 
   if (!payment) throw new AppError('NOT_FOUND', 'Pagamento nao encontrado', 404)
 
-  // Proactive verification: if payment is still pending and was made via MercadoPago,
-  // check directly with MP API to see if it's been approved (webhook may be delayed)
+  // Proactive verification: if payment is still pending, check provider directly
+  if (payment.status === 'pending' && payment.paymentProvider === 'openpix') {
+    try {
+      const opResult = await proactivelyVerifyOpenPixPayment(paymentId, payment.providerTxId)
+      if (opResult && opResult.status === 'completed') {
+        return { ...payment, status: 'completed' }
+      }
+    } catch (e) {
+      console.warn('Proactive OpenPix verification failed (non-critical):', e)
+    }
+  }
+
   if (payment.status === 'pending' && payment.paymentProvider === 'mercadopago') {
     try {
       const mpResult = await proactivelyVerifyMpPayment(paymentId)
@@ -897,6 +986,29 @@ async function proactivelyVerifyMpPayment(paymentId: string) {
   return null
 }
 
+// ── OpenPix Proactive Verification ──
+
+async function proactivelyVerifyOpenPixPayment(paymentId: string, correlationID: string | null) {
+  if (!correlationID || !openpixService.isOpenPixConfigured()) return null
+
+  try {
+    const chargeStatus = await openpixService.getChargeStatus(correlationID)
+    if (chargeStatus.status === 'COMPLETED') {
+      const result = await processPaymentConfirmation(
+        paymentId,
+        'completed',
+        correlationID,
+        { openpixStatus: chargeStatus.status, verifiedViaPolling: true },
+      )
+      return result
+    }
+  } catch (e) {
+    console.warn('OpenPix charge status check failed:', e)
+  }
+
+  return null
+}
+
 // ── PPV Payment via MercadoPago ──
 
 export async function createPpvPayment(userId: string, postId: string, paymentMethod: string) {
@@ -932,6 +1044,9 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
   const appUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   const webhookUrl = getWebhookBaseUrl()
 
+  // Route PIX to OpenPix when configured
+  const effectiveProvider = (paymentMethod === 'pix' && openpixService.isOpenPixConfigured()) ? 'openpix' : 'mercadopago'
+
   const [payment] = await db
     .insert(payments)
     .values({
@@ -941,7 +1056,7 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
       amount: post.ppvPrice,
       platformFee: String(platformFee),
       creatorAmount: String(creatorAmount),
-      paymentProvider: 'mercadopago',
+      paymentProvider: effectiveProvider,
       status: 'pending',
       metadata: { postId, paymentMethod },
     })
@@ -951,7 +1066,34 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
     ? `PPV: ${post.contentText.slice(0, 60)}${post.contentText.length > 60 ? '...' : ''}`
     : 'Conteudo PPV - FanDreams'
 
-  // PIX → Transparent Checkout (QR code in-app) with Checkout Pro fallback
+  // PIX via OpenPix (preferred when configured)
+  if (paymentMethod === 'pix' && openpixService.isOpenPixConfigured()) {
+    const opResult = await openpixService.createPixCharge({
+      amount,
+      description,
+      externalReference: payment.id,
+    })
+
+    await db
+      .update(payments)
+      .set({
+        providerTxId: opResult.correlationID,
+        metadata: { ...(payment.metadata as any), openpixCorrelationID: opResult.correlationID },
+      })
+      .where(eq(payments.id, payment.id))
+
+    return {
+      paymentId: payment.id,
+      pixData: {
+        qrCodeBase64: opResult.qrCodeImageUrl,
+        qrCode: opResult.brCode,
+        expiresAt: opResult.expiresAt,
+      },
+      sandbox: openpixService.isOpenPixSandbox(),
+    }
+  }
+
+  // PIX via MercadoPago (fallback)
   if (paymentMethod === 'pix') {
     const [user] = await db
       .select({ email: users.email, displayName: users.displayName, username: users.username })
