@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -43,6 +43,24 @@ export function PostViewer({ profile, onClose }: PostViewerProps) {
       setCurrentIndex((prev) => prev - 1)
     }
   }, [currentIndex])
+
+  // Keyboard navigation for desktop
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        goToPrev()
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        goToNext()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [goToNext, goToPrev, onClose])
 
   const handleDragEnd = useCallback(
     (_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
@@ -135,7 +153,7 @@ export function PostViewer({ profile, onClose }: PostViewerProps) {
                     />
                   )}
                   {/* Lock overlay */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/30 z-10">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/30">
                     <div className="w-20 h-20 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center border border-border">
                       <Lock className="w-8 h-8 text-primary" />
                     </div>
@@ -160,24 +178,6 @@ export function PostViewer({ profile, onClose }: PostViewerProps) {
                   draggable={false}
                 />
               ) : null}
-
-              {/* Navigation arrows */}
-              {currentIndex > 0 && (
-                <button
-                  onClick={goToPrev}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-colors"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-              )}
-              {currentIndex < posts.length - 1 && (
-                <button
-                  onClick={goToNext}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-colors"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-              )}
             </div>
 
             {/* Post info */}
@@ -202,6 +202,24 @@ export function PostViewer({ profile, onClose }: PostViewerProps) {
           </motion.div>
         </AnimatePresence>
 
+        {/* Navigation arrows — OUTSIDE the drag area, always on top */}
+        {currentIndex > 0 && (
+          <button
+            onClick={goToPrev}
+            className="absolute left-3 top-1/2 -translate-y-1/2 z-30 p-3 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors shadow-lg cursor-pointer"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+        )}
+        {currentIndex < posts.length - 1 && (
+          <button
+            onClick={goToNext}
+            className="absolute right-3 top-1/2 -translate-y-1/2 z-30 p-3 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors shadow-lg cursor-pointer"
+          >
+            <ChevronRight className="w-6 h-6" />
+          </button>
+        )}
+
         {/* Dots indicator */}
         <div className="absolute bottom-[120px] left-0 right-0 flex justify-center gap-1.5 z-10 pointer-events-none">
           {posts.map((_, i) => (
@@ -220,7 +238,8 @@ export function PostViewer({ profile, onClose }: PostViewerProps) {
       {/* Swipe hint */}
       <div className="text-center py-2 bg-surface border-t border-border">
         <p className="text-xs text-muted">
-          Deslize para os lados para navegar entre posts
+          <span className="hidden sm:inline">Use as setas ← → ou clique nos botoes para navegar</span>
+          <span className="sm:hidden">Deslize para os lados para navegar entre posts</span>
         </p>
       </div>
     </motion.div>
