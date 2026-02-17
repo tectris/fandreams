@@ -640,19 +640,99 @@ export async function handleOpenPixWebhook(body: any) {
     return { processed: true, event: parsed.event, status: 'ignored' }
   }
 
-  // correlationID is the payment ID
+  // correlationID is the payment ID for charges we created
   const paymentId = parsed.correlationID
-  return processPaymentConfirmation(
-    paymentId,
-    'completed',
-    parsed.transactionID,
-    {
-      openpixEvent: parsed.event,
-      openpixAmount: parsed.value,
-      openpixPaidAt: parsed.paidAt,
-      openpixPayerName: parsed.payerName,
-    },
-  )
+
+  // Check if this is a known payment (one we created)
+  const [existingPayment] = await db.select({ id: payments.id }).from(payments).where(eq(payments.id, paymentId)).limit(1)
+
+  if (existingPayment) {
+    // Known charge (first subscription payment, fancoin purchase, PPV, promo, etc.)
+    return processPaymentConfirmation(
+      paymentId,
+      'completed',
+      parsed.transactionID,
+      {
+        openpixEvent: parsed.event,
+        openpixAmount: parsed.value,
+        openpixPaidAt: parsed.paidAt,
+        openpixPayerName: parsed.payerName,
+      },
+    )
+  }
+
+  // Unknown correlationID — this is likely a recurring subscription charge created by OpenPix
+  return handleOpenPixSubscriptionCharge(parsed)
+}
+
+// ── Handle recurring subscription charges created by OpenPix ──
+
+async function handleOpenPixSubscriptionCharge(parsed: {
+  correlationID: string
+  transactionID: string
+  value: number
+  paidAt?: string
+  payerName?: string
+  customerCorrelationID?: string
+}) {
+  const { subscriptions } = await import('@fandreams/database')
+  const { handleOpenPixSubscriptionRenewal } = await import('./subscription.service')
+
+  let subscriptionId: string | null = null
+
+  // Strategy 1: Match by customer correlationID (set as sub_${subscriptionId} during creation)
+  if (parsed.customerCorrelationID?.startsWith('sub_')) {
+    subscriptionId = parsed.customerCorrelationID.replace('sub_', '')
+  }
+
+  // Strategy 2: Query OpenPix for the charge details to get the customer correlationID
+  if (!subscriptionId) {
+    try {
+      const chargeDetails = await openpixService.getChargeDetails(parsed.correlationID)
+      if (chargeDetails.customerCorrelationID?.startsWith('sub_')) {
+        subscriptionId = chargeDetails.customerCorrelationID.replace('sub_', '')
+      }
+    } catch (e) {
+      console.warn('Failed to get OpenPix charge details for subscription matching:', e)
+    }
+  }
+
+  // Strategy 3: Match by value against active OpenPix subscriptions
+  if (!subscriptionId) {
+    const { eq, and } = await import('drizzle-orm')
+    const amountBrl = parsed.value / 100 // Convert centavos to BRL
+    const activeSubs = await db
+      .select({ id: subscriptions.id, pricePaid: subscriptions.pricePaid })
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.paymentProvider, 'openpix'),
+          eq(subscriptions.status, 'active'),
+          eq(subscriptions.autoRenew, true),
+        ),
+      )
+
+    // Find subscriptions matching the charge amount
+    const matches = activeSubs.filter((s) => {
+      const subPrice = Number(s.pricePaid || 0)
+      return Math.abs(subPrice - amountBrl) < 0.01
+    })
+
+    if (matches.length === 1) {
+      subscriptionId = matches[0]!.id
+    } else if (matches.length > 1) {
+      console.warn(`OpenPix subscription charge: ${matches.length} subscriptions match value ${amountBrl}. Cannot determine which one.`)
+    }
+  }
+
+  if (!subscriptionId) {
+    console.warn('OpenPix subscription charge: could not match to any subscription. correlationID:', parsed.correlationID)
+    return { processed: false, reason: 'subscription_not_matched' }
+  }
+
+  const amountBrl = parsed.value / 100
+  const result = await handleOpenPixSubscriptionRenewal(subscriptionId, amountBrl, parsed.transactionID)
+  return result
 }
 
 export async function handlePaypalWebhook(body: any) {
@@ -830,6 +910,81 @@ async function processPaymentConfirmation(
             periodEnd: periodEnd.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }),
             isPromo: true,
             durationLabel: dLabel,
+          }).catch((e) => console.error('Failed to send subscription activated email:', e))
+        }
+      }
+    }
+
+    // Monthly subscription via OpenPix: activate on first payment
+    if (payment.type === 'subscription' && !meta?.isPromo && meta?.subscriptionId && payment.paymentProvider === 'openpix') {
+      const { subscriptions, creatorProfiles } = await import('@fandreams/database')
+      const now = new Date()
+      const periodEnd = new Date(now)
+      periodEnd.setMonth(periodEnd.getMonth() + 1)
+
+      await db
+        .update(subscriptions)
+        .set({
+          status: 'active',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          autoRenew: true,
+          updatedAt: now,
+        })
+        .where(eq(subscriptions.id, meta.subscriptionId))
+
+      const creatorAmount = Number(payment.creatorAmount || 0)
+      if (payment.recipientId) {
+        await db
+          .update(creatorProfiles)
+          .set({ totalSubscribers: sql`${creatorProfiles.totalSubscribers} + 1` })
+          .where(eq(creatorProfiles.userId, payment.recipientId))
+
+        if (creatorAmount > 0) {
+          const { totalCommissionBrl } = await affiliateService.distributeCommissions(
+            payment.id,
+            payment.userId,
+            payment.recipientId,
+            creatorAmount,
+          )
+          const creatorNet = creatorAmount - totalCommissionBrl
+          if (creatorNet > 0) {
+            await fancoinService.creditEarnings(
+              payment.recipientId,
+              creatorNet,
+              'subscription_earned',
+              'Assinatura mensal recebida via PIX',
+              payment.id,
+            )
+          }
+        }
+
+        const bonusService = await import('./bonus.service')
+        bonusService.checkBonusEligibility(payment.recipientId).catch(() => {})
+      }
+
+      console.log(`Monthly OpenPix subscription ${meta.subscriptionId} activated`)
+
+      // Send subscription activated email (non-blocking)
+      const { users } = await import('@fandreams/database')
+      const [fan] = await db
+        .select({ email: users.email })
+        .from(users)
+        .where(eq(users.id, payment.userId))
+        .limit(1)
+      if (fan && payment.recipientId) {
+        const [creator] = await db
+          .select({ displayName: users.displayName, username: users.username })
+          .from(users)
+          .where(eq(users.id, payment.recipientId))
+          .limit(1)
+        if (creator) {
+          sendSubscriptionActivatedEmail(fan.email, {
+            creatorName: creator.displayName || creator.username,
+            price: Number(payment.amount).toFixed(2),
+            periodEnd: periodEnd.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }),
+            isPromo: false,
+            durationLabel: 'mensal',
           }).catch((e) => console.error('Failed to send subscription activated email:', e))
         }
       }
