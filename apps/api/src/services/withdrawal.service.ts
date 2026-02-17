@@ -33,7 +33,7 @@ export async function setSetting(key: string, value: any, updatedBy: string) {
 // ── Platform Fee ──
 
 export async function getPlatformFeeRate(): Promise<number> {
-  const percent = await getSetting<number>('platform_fee_percent', 8)
+  const percent = await getSetting<number>('platform_fee_percent', 15)
   return percent / 100
 }
 
@@ -495,7 +495,7 @@ export async function getPaymentSettings() {
     cooldown_hours: PAYOUT_CONFIG.cooldownHours,
     min_payout: PAYOUT_CONFIG.minPayout,
     fancoin_to_brl: PAYOUT_CONFIG.fancoinToBrl,
-    platform_fee_percent: 8,
+    platform_fee_percent: 15,
   }
 
   try {

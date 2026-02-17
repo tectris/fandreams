@@ -29,7 +29,7 @@ const DEFAULT_SETTINGS = {
   cooldown_hours: 24,
   min_payout: 50,
   fancoin_to_brl: 0.01,
-  platform_fee_percent: 8,
+  platform_fee_percent: 15,
   creator_bonus_enabled: false,
   creator_bonus_coins: 1000,
   creator_bonus_required_subs: 1,

@@ -11,16 +11,17 @@ export interface MockPost {
   commentsCount: number
   createdAt: string
   visibility: 'public' | 'subscribers'
+  ppvPrice?: string
 }
 
 export interface MockProfile {
   id: string
   username: string
   displayName: string
-  avatarUrl: string | null
-  coverUrl: string | null
+  avatarUrl: string
+  coverUrl: string
   bio: string
-  role: 'creator'
+  role: 'creator' | 'admin'
   category: string
   tags: string[]
   isVerified: boolean
@@ -44,8 +45,8 @@ export const mockProfiles: MockProfile[] = [
     id: 'mock-1',
     username: 'luna.arte',
     displayName: 'Luna Martins',
-    avatarUrl: null,
-    coverUrl: null,
+    avatarUrl: 'https://picsum.photos/seed/luna-avatar/200/200',
+    coverUrl: 'https://picsum.photos/seed/luna-cover/1200/400',
     bio: 'Artista digital e ilustradora. Criando mundos fantasticos com cores vibrantes. Compartilho tutoriais, processos criativos e arte exclusiva para meus fas.',
     role: 'creator',
     category: 'Arte Digital',
@@ -107,6 +108,7 @@ export const mockProfiles: MockProfile[] = [
         commentsCount: 67,
         createdAt: '2026-02-10T18:00:00Z',
         visibility: 'subscribers',
+        ppvPrice: '9.90',
       },
       {
         id: 'post-1d',
@@ -123,6 +125,22 @@ export const mockProfiles: MockProfile[] = [
         createdAt: '2026-02-08T12:00:00Z',
         visibility: 'public',
       },
+      {
+        id: 'post-1e',
+        contentText: 'Bastidores: meu setup de ilustracao, tablet, monitores e as ferramentas que uso todo dia.',
+        media: [
+          {
+            id: 'media-1e-1',
+            mediaType: 'image',
+            mediaUrl: 'https://picsum.photos/seed/luna5/800/1200',
+          },
+        ],
+        likesCount: 245,
+        commentsCount: 38,
+        createdAt: '2026-02-05T16:00:00Z',
+        visibility: 'subscribers',
+        ppvPrice: '4.90',
+      },
     ],
     createdAt: '2024-06-15T00:00:00Z',
   },
@@ -130,8 +148,8 @@ export const mockProfiles: MockProfile[] = [
     id: 'mock-2',
     username: 'dj.thunder',
     displayName: 'DJ Thunder',
-    avatarUrl: null,
-    coverUrl: null,
+    avatarUrl: 'https://picsum.photos/seed/thunder-avatar/200/200',
+    coverUrl: 'https://picsum.photos/seed/thunder-cover/1200/400',
     bio: 'Produtor musical e DJ. Sets exclusivos, remixes e bastidores da producao. De festivais a home studio, compartilho tudo com voces!',
     role: 'creator',
     category: 'Musica',
@@ -178,6 +196,7 @@ export const mockProfiles: MockProfile[] = [
         commentsCount: 89,
         createdAt: '2026-02-14T16:30:00Z',
         visibility: 'subscribers',
+        ppvPrice: '7.90',
       },
       {
         id: 'post-2c',
@@ -194,6 +213,22 @@ export const mockProfiles: MockProfile[] = [
         createdAt: '2026-02-12T11:00:00Z',
         visibility: 'public',
       },
+      {
+        id: 'post-2d',
+        contentText: 'Masterclass: como mixar tracks ao vivo sem perder o BPM. Tecnicas avancadas que uso nos festivais.',
+        media: [
+          {
+            id: 'media-2d-1',
+            mediaType: 'image',
+            mediaUrl: 'https://picsum.photos/seed/thunder4/800/1200',
+          },
+        ],
+        likesCount: 934,
+        commentsCount: 112,
+        createdAt: '2026-02-09T20:00:00Z',
+        visibility: 'subscribers',
+        ppvPrice: '14.90',
+      },
     ],
     createdAt: '2024-03-20T00:00:00Z',
   },
@@ -201,8 +236,8 @@ export const mockProfiles: MockProfile[] = [
     id: 'mock-3',
     username: 'chef.maya',
     displayName: 'Maya Cozinha',
-    avatarUrl: null,
-    coverUrl: null,
+    avatarUrl: 'https://picsum.photos/seed/maya-avatar/200/200',
+    coverUrl: 'https://picsum.photos/seed/maya-cover/1200/400',
     bio: 'Chef confeiteira e criadora de receitas. Transformo ingredientes simples em obras de arte comestiveis. Receitas exclusivas toda semana!',
     role: 'creator',
     category: 'Gastronomia',
@@ -264,6 +299,7 @@ export const mockProfiles: MockProfile[] = [
         commentsCount: 23,
         createdAt: '2026-02-11T17:30:00Z',
         visibility: 'subscribers',
+        ppvPrice: '5.90',
       },
       {
         id: 'post-3d',
@@ -297,5 +333,92 @@ export const mockProfiles: MockProfile[] = [
       },
     ],
     createdAt: '2025-01-10T00:00:00Z',
+  },
+  {
+    id: 'mock-4',
+    username: 'admin.fandreams',
+    displayName: 'FanDreams Admin',
+    avatarUrl: 'https://picsum.photos/seed/admin-avatar/200/200',
+    coverUrl: 'https://picsum.photos/seed/admin-cover/1200/400',
+    bio: 'Conta oficial do FanDreams. Novidades da plataforma, dicas para criadores e atualizacoes sobre novas funcionalidades.',
+    role: 'admin',
+    category: 'Plataforma',
+    tags: ['oficial', 'noticias', 'dicas', 'plataforma'],
+    isVerified: true,
+    subscriptionPrice: '0.00',
+    totalSubscribers: 15420,
+    followerCount: 48900,
+    profileViews: 312000,
+    creatorScore: 100,
+    gamification: {
+      level: 50,
+      xp: 99999,
+      currentStreak: 365,
+      fanTier: 'diamond',
+    },
+    posts: [
+      {
+        id: 'post-4a',
+        contentText: 'Nova funcionalidade: Descobrir Perfis no estilo Tinder! Deslize para cima e para baixo para conhecer novos criadores.',
+        media: [
+          {
+            id: 'media-4a-1',
+            mediaType: 'image',
+            mediaUrl: 'https://picsum.photos/seed/admin1/800/1200',
+          },
+        ],
+        likesCount: 2340,
+        commentsCount: 456,
+        createdAt: '2026-02-17T12:00:00Z',
+        visibility: 'public',
+      },
+      {
+        id: 'post-4b',
+        contentText: 'Dica para criadores: Use tags relevantes no seu perfil para aparecer mais nas buscas. Criadores com tags completas recebem 3x mais visualizacoes!',
+        media: [
+          {
+            id: 'media-4b-1',
+            mediaType: 'image',
+            mediaUrl: 'https://picsum.photos/seed/admin2/800/1200',
+          },
+        ],
+        likesCount: 1567,
+        commentsCount: 234,
+        createdAt: '2026-02-15T10:00:00Z',
+        visibility: 'public',
+      },
+      {
+        id: 'post-4c',
+        contentText: 'Atualizacao de seguranca: agora todos os saques via PIX passam por verificacao antifraude em 24-48h para proteger criadores e fas.',
+        media: [
+          {
+            id: 'media-4c-1',
+            mediaType: 'image',
+            mediaUrl: 'https://picsum.photos/seed/admin3/800/1200',
+          },
+        ],
+        likesCount: 892,
+        commentsCount: 167,
+        createdAt: '2026-02-12T15:00:00Z',
+        visibility: 'public',
+      },
+      {
+        id: 'post-4d',
+        contentText: 'Conteudo exclusivo para assinantes: Roadmap completo do FanDreams para 2026. Veja o que vem por ai!',
+        media: [
+          {
+            id: 'media-4d-1',
+            mediaType: 'image',
+            mediaUrl: 'https://picsum.photos/seed/admin4/800/1200',
+          },
+        ],
+        likesCount: 3100,
+        commentsCount: 589,
+        createdAt: '2026-02-10T09:00:00Z',
+        visibility: 'subscribers',
+        ppvPrice: '0.00',
+      },
+    ],
+    createdAt: '2024-01-01T00:00:00Z',
   },
 ]

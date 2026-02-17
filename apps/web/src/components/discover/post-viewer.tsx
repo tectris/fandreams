@@ -5,7 +5,7 @@ import { motion, AnimatePresence, type PanInfo } from 'framer-motion'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { formatNumber, timeAgo } from '@/lib/utils'
+import { formatCurrency, formatNumber, timeAgo } from '@/lib/utils'
 import type { MockProfile, MockPost } from '@/lib/mock-profiles'
 import {
   Heart,
@@ -124,14 +124,33 @@ export function PostViewer({ profile, onClose }: PostViewerProps) {
             {/* Post image */}
             <div className="flex-1 relative bg-surface-dark flex items-center justify-center">
               {currentPost.visibility === 'subscribers' ? (
-                <div className="flex flex-col items-center gap-3 text-muted">
-                  <div className="w-20 h-20 rounded-full bg-surface-light flex items-center justify-center">
-                    <Lock className="w-8 h-8" />
+                <div className="relative w-full h-full">
+                  {/* Blurred preview behind the lock */}
+                  {currentPost.media[0] && (
+                    <img
+                      src={currentPost.media[0].mediaUrl}
+                      alt=""
+                      className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-40"
+                      draggable={false}
+                    />
+                  )}
+                  {/* Lock overlay */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/30 z-10">
+                    <div className="w-20 h-20 rounded-full bg-surface/80 backdrop-blur-sm flex items-center justify-center border border-border">
+                      <Lock className="w-8 h-8 text-primary" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground">Conteudo exclusivo</p>
+                    {currentPost.ppvPrice && Number(currentPost.ppvPrice) > 0 ? (
+                      <Button size="sm" variant="primary">
+                        Desbloquear por {formatCurrency(currentPost.ppvPrice)}
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="primary">
+                        Assinar para desbloquear
+                      </Button>
+                    )}
+                    <p className="text-xs text-muted">ou assine por {formatCurrency(profile.subscriptionPrice)}/mes</p>
                   </div>
-                  <p className="text-sm font-medium">Conteudo exclusivo para assinantes</p>
-                  <Button size="sm" variant="primary">
-                    Assinar para desbloquear
-                  </Button>
                 </div>
               ) : currentPost.media[0] ? (
                 <img

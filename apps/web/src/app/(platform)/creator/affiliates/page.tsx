@@ -164,7 +164,7 @@ export default function CreatorAffiliatesPage() {
                     <TrendingUp className="w-5 h-5 text-primary" /> Comissao do Afiliado
                   </h2>
                   <p className="text-xs text-muted mt-1">
-                    Percentual que o afiliado recebe por cada novo assinante trazido. A comissao e descontada da sua parte (apos a taxa da plataforma de 8%). Maximo 50%.
+                    Percentual que o afiliado recebe por cada novo assinante trazido. A comissao e descontada da sua parte (apos a taxa da plataforma de 15%). Maximo 50%.
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -192,11 +192,11 @@ export default function CreatorAffiliatesPage() {
                     {/* Simulation */}
                     <div className="p-3 bg-surface-light rounded-md text-xs text-muted space-y-1">
                       <p className="font-medium text-foreground">Exemplo: Assinatura de R$30,00</p>
-                      <p>Taxa plataforma (8%): <span className="text-foreground">R${(30 * 0.08).toFixed(2)}</span></p>
-                      <p>Sua parte bruta: <span className="text-foreground">R${(30 * 0.92).toFixed(2)}</span></p>
-                      <p>Comissao afiliado ({commissionPercent}%): <span className="text-warning">-R${((30 * 0.92) * (commissionPercent / 100)).toFixed(2)}</span></p>
+                      <p>Taxa plataforma (15%): <span className="text-foreground">R${(30 * 0.15).toFixed(2)}</span></p>
+                      <p>Sua parte bruta: <span className="text-foreground">R${(30 * 0.85).toFixed(2)}</span></p>
+                      <p>Comissao afiliado ({commissionPercent}%): <span className="text-warning">-R${((30 * 0.85) * (commissionPercent / 100)).toFixed(2)}</span></p>
                       <p className="font-medium text-success">
-                        Voce recebe: R${((30 * 0.92) * (1 - commissionPercent / 100)).toFixed(2)}
+                        Voce recebe: R${((30 * 0.85) * (1 - commissionPercent / 100)).toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -234,7 +234,7 @@ export default function CreatorAffiliatesPage() {
                     </div>
                     <div className="flex items-start gap-3">
                       <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-xs font-bold text-primary">4</div>
-                      <p>A plataforma sempre retem 8%. A comissao do afiliado e descontada da sua parte.</p>
+                      <p>A plataforma sempre retem 15%. A comissao do afiliado e descontada da sua parte.</p>
                     </div>
                   </div>
                 </CardContent>

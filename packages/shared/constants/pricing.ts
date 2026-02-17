@@ -1,17 +1,17 @@
 export const PLATFORM_FEES = {
-  subscription: 0.08,
-  tip: 0.08,
-  ppv: 0.08,
-  fancoin_purchase: 0.08,
-  marketplace: 0.08,
-  top_creator_subscription: 0.08,
-  introductory: 0.08,
+  subscription: 0.15,
+  tip: 0.15,
+  ppv: 0.15,
+  fancoin_purchase: 0.15,
+  marketplace: 0.15,
+  top_creator_subscription: 0.15,
+  introductory: 0.15,
 } as const
 
 export const PAYOUT_CONFIG = {
   minPayout: 50.0,
   payoutDays: [1, 15],
-  pixProcessingTime: 'instant',
+  pixProcessingTime: '24-48h',
   bankTransferProcessingTime: '1-3 business days',
   cryptoProcessingTime: '10-30 minutes',
   manualApprovalThreshold: 500.0,
@@ -28,7 +28,7 @@ export const PAYMENT_PROVIDERS = {
 } as const
 
 export const WITHDRAWAL_METHODS = {
-  pix: { label: 'PIX', minAmount: 10.0, processingTime: 'Instantaneo' },
+  pix: { label: 'PIX', minAmount: 10.0, processingTime: '24-48 horas' },
   bank_transfer: { label: 'Transferencia Bancaria', minAmount: 50.0, processingTime: '1-3 dias uteis' },
   crypto: { label: 'Crypto (USDT)', minAmount: 20.0, processingTime: '10-30 minutos' },
 } as const
