@@ -1,11 +1,32 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Flame, ArrowRight, CreditCard, Bitcoin, QrCode, Shield, ChevronRight, Image, Video, Compass, TrendingDown } from 'lucide-react'
+import { motion, useInView, useScroll, useTransform } from 'framer-motion'
+import {
+  Flame,
+  ArrowRight,
+  CreditCard,
+  Bitcoin,
+  QrCode,
+  Shield,
+  ChevronRight,
+  Image,
+  Video,
+  Compass,
+  TrendingDown,
+  Zap,
+  Trophy,
+  Users,
+  Lock,
+  Sparkles,
+  Play,
+} from 'lucide-react'
 import { CookieConsent } from '@/components/cookie-consent'
 import { ContactModal } from '@/components/contact-modal'
 import { PageContentModal } from '@/components/page-content-modal'
+
+// ── Data ──
 
 const MOCK_CREATORS = [
   { username: 'isabellamorais', displayName: 'Isabella M.', photos: 142, videos: 38, avatarSeed: 'isabella' },
@@ -24,14 +45,17 @@ const MOCK_TESTIMONIALS = [
   {
     quote: 'Migrei de outra plataforma e em 3 meses meu faturamento triplicou. A taxa de 15% e muito menor que a concorrencia.',
     author: 'Criadora com 12k assinantes',
+    avatarSeed: 'testimonial-1',
   },
   {
     quote: 'Saque via PIX seguro com verificacao antifraude em 24-48h. Sem esperar 5 dias uteis, sem surpresa. Isso muda tudo.',
     author: 'Criadora com 8k assinantes',
+    avatarSeed: 'testimonial-2',
   },
   {
     quote: 'A gamificacao faz meus fas voltarem todo dia. Nenhuma outra plataforma tem isso.',
     author: 'Criador com 5k assinantes',
+    avatarSeed: 'testimonial-3',
   },
 ]
 
@@ -43,14 +67,146 @@ const FEE_TIERS = [
   { subscribers: '5.001+', fee: '7%', creatorGets: '93%', highlight: false },
 ]
 
+const FEATURES = [
+  { icon: Zap, title: 'FanCoins', description: 'Moeda virtual para tips, desbloqueios e campanhas', color: 'text-warning' },
+  { icon: Trophy, title: 'Gamificacao', description: 'Niveis, streaks e recompensas que fidelizam fas', color: 'text-primary' },
+  { icon: Lock, title: 'Conteudo exclusivo', description: 'PPV, assinaturas e tiers de acesso', color: 'text-secondary' },
+  { icon: Users, title: 'Comunidade', description: 'Interacao direta entre criadores e fas', color: 'text-success' },
+]
+
+// ── Animated components ──
+
+function AnimatedSection({ children, className = '', delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
+  const ref = useRef(null)
+  const isInView = useInView(ref, { once: true, margin: '-80px' })
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 40 }}
+      animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
+      transition={{ duration: 0.7, delay, ease: [0.25, 0.4, 0.25, 1] }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+function AnimatedCounter({ value, suffix = '', prefix = '' }: { value: string; suffix?: string; prefix?: string }) {
+  const ref = useRef(null)
+  const isInView = useInView(ref, { once: true })
+
+  return (
+    <motion.span
+      ref={ref}
+      initial={{ opacity: 0, scale: 0.5 }}
+      animate={isInView ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.5 }}
+      transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+    >
+      {prefix}{value}{suffix}
+    </motion.span>
+  )
+}
+
+function FloatingParticles() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div
+          key={i}
+          className="absolute w-1 h-1 rounded-full animate-float-particle"
+          style={{
+            left: `${8 + (i * 7.5)}%`,
+            background: i % 3 === 0 ? 'var(--color-primary)' : i % 3 === 1 ? 'var(--color-secondary)' : 'var(--color-warning)',
+            opacity: 0.4,
+            '--duration': `${10 + (i * 2)}s`,
+            '--delay': `${i * 1.2}s`,
+          } as React.CSSProperties}
+        />
+      ))}
+    </div>
+  )
+}
+
+function HeroVideoBackground({ videoUrl }: { videoUrl?: string | null }) {
+  if (videoUrl) {
+    return (
+      <div className="absolute inset-0 overflow-hidden">
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="w-full h-full object-cover opacity-20"
+        >
+          <source src={videoUrl} type="video/mp4" />
+        </video>
+        <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/80 to-background" />
+      </div>
+    )
+  }
+
+  // Mock animated gradient as default hero background
+  return (
+    <div className="absolute inset-0 overflow-hidden">
+      <div
+        className="absolute inset-0 animate-hero-gradient opacity-30"
+        style={{
+          background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 25%, var(--color-primary-dark) 50%, var(--color-warning) 75%, var(--color-primary) 100%)',
+        }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/70 to-background" />
+      <FloatingParticles />
+    </div>
+  )
+}
+
+// ── Main Page ──
+
 export default function LandingPage() {
   const [contactOpen, setContactOpen] = useState(false)
   const [pageModal, setPageModal] = useState<{ key: string; title: string } | null>(null)
+  const [showBanner, setShowBanner] = useState(false)
+  const heroRef = useRef<HTMLElement>(null)
+
+  const { scrollYProgress } = useScroll()
+  const headerBg = useTransform(scrollYProgress, [0, 0.05], [0, 1])
+
+  // Show sticky banner after scrolling past hero
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowBanner(window.scrollY > 600)
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   return (
     <div className="min-h-screen bg-background">
+      {/* ─── Sticky Promo Banner ─── */}
+      {showBanner && (
+        <div className="fixed top-0 left-0 right-0 z-[60] animate-slide-down">
+          <div className="bg-gradient-to-r from-primary via-secondary to-primary text-white text-center py-2 px-4">
+            <p className="text-xs sm:text-sm font-medium">
+              <Sparkles className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />
+              Taxas a partir de 7% — a menor do mercado.{' '}
+              <Link href="/register" className="underline font-bold hover:no-underline">
+                Crie sua conta gratis
+              </Link>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ─── Header ─── */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md">
+      <motion.header
+        className="sticky top-0 z-50 backdrop-blur-md border-b border-transparent"
+        style={{
+          backgroundColor: `rgba(15, 15, 15, ${headerBg})`,
+          borderColor: `rgba(45, 45, 68, ${headerBg})`,
+        }}
+      >
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <Flame className="w-6 h-6 text-primary" />
@@ -74,63 +230,155 @@ export default function LandingPage() {
             </Link>
           </nav>
         </div>
-      </header>
+      </motion.header>
 
-      {/* ─── Hero ─── */}
-      <section className="pt-24 sm:pt-32 pb-20 sm:pb-28">
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-[1.1] tracking-tight text-foreground">
-            Seu conteudo.
-            <br />
-            Suas regras.
-          </h1>
-          <p className="mt-6 text-base sm:text-lg text-muted max-w-xl mx-auto leading-relaxed">
-            Monetize o que voce cria com as menores taxas do Brasil, saque seguro via PIX e uma comunidade que valoriza quem cria.
-          </p>
-          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+      {/* ─── Hero Section ─── */}
+      <section ref={heroRef} className="relative pt-16 sm:pt-24 pb-24 sm:pb-32 overflow-hidden">
+        <HeroVideoBackground />
+
+        <div className="relative z-10 max-w-4xl mx-auto px-6 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: [0.25, 0.4, 0.25, 1] }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+              className="inline-flex items-center gap-2 bg-surface/60 backdrop-blur-sm border border-border/50 rounded-full px-4 py-1.5 mb-8"
+            >
+              <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
+              <span className="text-xs text-muted">Plataforma brasileira para criadores</span>
+            </motion.div>
+
+            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold leading-[1.05] tracking-tight text-foreground">
+              Seu conteudo.
+              <br />
+              <span className="bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text text-transparent">
+                Suas regras.
+              </span>
+            </h1>
+
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4, duration: 0.8 }}
+              className="mt-6 text-base sm:text-lg lg:text-xl text-muted max-w-2xl mx-auto leading-relaxed"
+            >
+              Monetize o que voce cria com as menores taxas do Brasil, saque seguro via PIX e uma comunidade que valoriza quem cria.
+            </motion.p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6, duration: 0.6 }}
+            className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4"
+          >
             <Link
               href="/register"
-              className="inline-flex items-center gap-2 bg-primary hover:bg-primary-light text-white font-semibold px-8 py-3.5 rounded-full text-base transition-colors"
+              className="inline-flex items-center gap-2 bg-primary hover:bg-primary-light text-white font-semibold px-8 py-4 rounded-full text-base transition-all animate-pulse-glow"
             >
-              Comecar agora
+              Comecar agora — e gratis
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
               href="/explore"
-              className="inline-flex items-center gap-2 border border-border text-foreground hover:bg-surface-light font-medium px-6 py-3 rounded-full text-sm transition-colors"
+              className="inline-flex items-center gap-2 border border-border/60 text-foreground hover:bg-surface-light/50 backdrop-blur-sm font-medium px-6 py-3.5 rounded-full text-sm transition-colors"
             >
               <Compass className="w-4 h-4" />
               Explorar criadores
             </Link>
-          </div>
+          </motion.div>
+
+          {/* Social proof mini-stats under hero */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1, duration: 0.8 }}
+            className="mt-12 flex items-center justify-center gap-6 text-sm text-muted"
+          >
+            <span className="flex items-center gap-1.5">
+              <Users className="w-4 h-4 text-primary" />
+              <span>+2.500 criadores</span>
+            </span>
+            <span className="w-1 h-1 rounded-full bg-border" />
+            <span className="flex items-center gap-1.5">
+              <Shield className="w-4 h-4 text-success" />
+              <span>100% seguro</span>
+            </span>
+            <span className="w-1 h-1 rounded-full bg-border hidden sm:block" />
+            <span className="hidden sm:flex items-center gap-1.5">
+              <Zap className="w-4 h-4 text-warning" />
+              <span>PIX em 24-48h</span>
+            </span>
+          </motion.div>
         </div>
       </section>
 
-      {/* ─── Stats Strip ─── */}
-      <section className="border-y border-border/40">
-        <div className="max-w-3xl mx-auto px-6 py-10 flex flex-col sm:flex-row items-center justify-center gap-8 sm:gap-0 text-center">
-          <div className="sm:flex-1">
-            <p className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">85%</p>
+      {/* ─── Animated Stats Strip ─── */}
+      <section className="relative border-y border-border/40">
+        <div className="absolute inset-0 animate-shimmer" />
+        <div className="relative max-w-4xl mx-auto px-6 py-12 flex flex-col sm:flex-row items-center justify-center gap-10 sm:gap-0 text-center">
+          <AnimatedSection className="sm:flex-1">
+            <p className="text-4xl sm:text-5xl font-bold text-foreground tracking-tight">
+              <AnimatedCounter value="85" suffix="%" />
+            </p>
             <p className="text-xs sm:text-sm text-muted mt-1">para o criador</p>
-          </div>
-          <div className="hidden sm:block w-px h-10 bg-border/40" />
-          <div className="sm:flex-1">
-            <p className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">Seguro</p>
-            <p className="text-xs sm:text-sm text-muted mt-1">saque via PIX</p>
-          </div>
-          <div className="hidden sm:block w-px h-10 bg-border/40" />
-          <div className="sm:flex-1">
-            <p className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">PIX</p>
-            <p className="text-xs sm:text-sm text-muted mt-1">cartao e crypto</p>
+          </AnimatedSection>
+          <div className="hidden sm:block w-px h-12 bg-border/40" />
+          <AnimatedSection className="sm:flex-1" delay={0.15}>
+            <p className="text-4xl sm:text-5xl font-bold text-foreground tracking-tight">
+              <AnimatedCounter value="24-48" suffix="h" />
+            </p>
+            <p className="text-xs sm:text-sm text-muted mt-1">saque seguro via PIX</p>
+          </AnimatedSection>
+          <div className="hidden sm:block w-px h-12 bg-border/40" />
+          <AnimatedSection className="sm:flex-1" delay={0.3}>
+            <p className="text-4xl sm:text-5xl font-bold text-foreground tracking-tight">
+              <AnimatedCounter value="3" />
+            </p>
+            <p className="text-xs sm:text-sm text-muted mt-1">formas de pagamento</p>
+          </AnimatedSection>
+        </div>
+      </section>
+
+      {/* ─── Features Grid ─── */}
+      <section className="py-20 sm:py-28">
+        <div className="max-w-5xl mx-auto px-6">
+          <AnimatedSection className="text-center mb-14">
+            <p className="text-xs font-medium text-primary uppercase tracking-wider mb-3">Tudo em um so lugar</p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-foreground">
+              Ferramentas para crescer
+            </h2>
+          </AnimatedSection>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {FEATURES.map((feature, i) => (
+              <AnimatedSection key={feature.title} delay={i * 0.1}>
+                <motion.div
+                  whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                  className="p-6 rounded-xl bg-surface/50 border border-border/50 hover:border-primary/30 transition-colors h-full"
+                >
+                  <feature.icon className={`w-8 h-8 ${feature.color} mb-4`} />
+                  <h3 className="font-bold text-foreground mb-2">{feature.title}</h3>
+                  <p className="text-sm text-muted leading-relaxed">{feature.description}</p>
+                </motion.div>
+              </AnimatedSection>
+            ))}
           </div>
         </div>
       </section>
 
       {/* ─── Featured Creators Carousel ─── */}
-      <section className="py-20 sm:py-24 overflow-hidden">
-        <div className="max-w-6xl mx-auto px-6 mb-10">
-          <p className="text-sm text-muted">Quem cria na FanDreams</p>
-        </div>
+      <section className="py-16 sm:py-20 overflow-hidden border-y border-border/40">
+        <AnimatedSection>
+          <div className="max-w-6xl mx-auto px-6 mb-10">
+            <p className="text-xs font-medium text-primary uppercase tracking-wider mb-2">Comunidade</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Quem cria na FanDreams</h2>
+          </div>
+        </AnimatedSection>
         {/* Marquee track — duplicated for seamless loop */}
         <div className="relative">
           <div className="flex gap-6 animate-marquee">
@@ -162,10 +410,10 @@ export default function LandingPage() {
       {/* ─── Differentials (Narrative Sections) ─── */}
       <section id="para-criadores">
         {/* Differential 1: Fee comparison + Graduated table */}
-        <div className="border-t border-border/40 py-20 sm:py-28">
+        <div className="py-20 sm:py-28">
           <div className="max-w-4xl mx-auto px-6">
             <div className="grid sm:grid-cols-2 gap-12 items-center">
-              <div>
+              <AnimatedSection>
                 <p className="text-xs font-medium text-primary uppercase tracking-wider mb-4">Vantagem real</p>
                 <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight">
                   Menor taxa<br />do mercado
@@ -173,69 +421,93 @@ export default function LandingPage() {
                 <p className="mt-4 text-muted leading-relaxed">
                   Comece com 85% de tudo que ganha. Quanto mais assinantes, menor a taxa. Sem letras miudas, sem taxas escondidas.
                 </p>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex items-center justify-between text-sm mb-1.5">
-                    <span className="font-medium text-foreground">FanDreams</span>
-                    <span className="text-primary font-bold">a partir de 7%</span>
+              </AnimatedSection>
+              <AnimatedSection delay={0.2}>
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between text-sm mb-1.5">
+                      <span className="font-medium text-foreground">FanDreams</span>
+                      <span className="text-primary font-bold">a partir de 7%</span>
+                    </div>
+                    <div className="w-full bg-surface rounded-full h-3 overflow-hidden">
+                      <motion.div
+                        className="bg-gradient-to-r from-primary to-secondary h-3 rounded-full"
+                        initial={{ width: 0 }}
+                        whileInView={{ width: '15%' }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 1, delay: 0.3 }}
+                      />
+                    </div>
                   </div>
-                  <div className="w-full bg-surface rounded-full h-2.5">
-                    <div className="bg-primary h-2.5 rounded-full" style={{ width: '15%' }} />
+                  <div>
+                    <div className="flex items-center justify-between text-sm mb-1.5">
+                      <span className="font-medium text-muted">Mercado</span>
+                      <span className="text-muted">20%</span>
+                    </div>
+                    <div className="w-full bg-surface rounded-full h-3 overflow-hidden">
+                      <motion.div
+                        className="bg-surface-light h-3 rounded-full"
+                        initial={{ width: 0 }}
+                        whileInView={{ width: '20%' }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 1, delay: 0.5 }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between text-sm mb-1.5">
+                      <span className="font-medium text-muted">Concorrente internacional</span>
+                      <span className="text-muted">25-30%</span>
+                    </div>
+                    <div className="w-full bg-surface rounded-full h-3 overflow-hidden">
+                      <motion.div
+                        className="bg-surface-light h-3 rounded-full"
+                        initial={{ width: 0 }}
+                        whileInView={{ width: '27%' }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 1, delay: 0.7 }}
+                      />
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <div className="flex items-center justify-between text-sm mb-1.5">
-                    <span className="font-medium text-muted">Mercado</span>
-                    <span className="text-muted">20%</span>
-                  </div>
-                  <div className="w-full bg-surface rounded-full h-2.5">
-                    <div className="bg-surface-light h-2.5 rounded-full" style={{ width: '20%' }} />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between text-sm mb-1.5">
-                    <span className="font-medium text-muted">Concorrente internacional</span>
-                    <span className="text-muted">25-30%</span>
-                  </div>
-                  <div className="w-full bg-surface rounded-full h-2.5">
-                    <div className="bg-surface-light h-2.5 rounded-full" style={{ width: '27%' }} />
-                  </div>
-                </div>
-              </div>
+              </AnimatedSection>
             </div>
 
             {/* Graduated Fee Table */}
-            <div className="mt-16">
+            <AnimatedSection className="mt-16" delay={0.2}>
               <div className="flex items-center gap-2 mb-6">
                 <TrendingDown className="w-5 h-5 text-success" />
                 <h3 className="text-lg font-bold text-foreground">Taxa regressiva: mais assinantes, menor taxa</h3>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-xl border border-border/50">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left py-3 px-4 text-muted font-medium">Assinantes</th>
-                      <th className="text-center py-3 px-4 text-muted font-medium">Taxa plataforma</th>
-                      <th className="text-center py-3 px-4 text-muted font-medium">Criador recebe</th>
+                    <tr className="border-b border-border bg-surface/50">
+                      <th className="text-left py-3.5 px-5 text-muted font-medium">Assinantes</th>
+                      <th className="text-center py-3.5 px-5 text-muted font-medium">Taxa plataforma</th>
+                      <th className="text-center py-3.5 px-5 text-muted font-medium">Criador recebe</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {FEE_TIERS.map((tier) => (
-                      <tr
+                    {FEE_TIERS.map((tier, i) => (
+                      <motion.tr
                         key={tier.subscribers}
-                        className={`border-b border-border/50 ${tier.highlight ? 'bg-primary/5' : ''}`}
+                        initial={{ opacity: 0, x: -20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ delay: i * 0.08 }}
+                        className={`border-b border-border/30 ${tier.highlight ? 'bg-primary/5' : ''}`}
                       >
-                        <td className="py-3.5 px-4 font-medium text-foreground">{tier.subscribers}</td>
-                        <td className="py-3.5 px-4 text-center">
+                        <td className="py-3.5 px-5 font-medium text-foreground">{tier.subscribers}</td>
+                        <td className="py-3.5 px-5 text-center">
                           <span className={`font-bold ${tier.highlight ? 'text-primary' : 'text-foreground'}`}>
                             {tier.fee}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 text-center">
+                        <td className="py-3.5 px-5 text-center">
                           <span className="font-bold text-success">{tier.creatorGets}</span>
                         </td>
-                      </tr>
+                      </motion.tr>
                     ))}
                   </tbody>
                 </table>
@@ -243,7 +515,7 @@ export default function LandingPage() {
               <p className="mt-4 text-xs text-muted">
                 A taxa e calculada automaticamente com base no numero total de assinantes ativos. Conforme voce cresce, a plataforma premia sua fidelidade.
               </p>
-            </div>
+            </AnimatedSection>
           </div>
         </div>
 
@@ -251,19 +523,27 @@ export default function LandingPage() {
         <div className="border-t border-border/40 py-20 sm:py-28">
           <div className="max-w-4xl mx-auto px-6">
             <div className="grid sm:grid-cols-2 gap-12 items-center">
-              <div className="order-2 sm:order-1 flex justify-center">
-                <div className="relative">
-                  <div className="w-28 h-28 rounded-full border-2 border-warning/30 flex items-center justify-center">
-                    <div className="w-20 h-20 rounded-full bg-warning/10 flex items-center justify-center">
-                      <span className="text-3xl font-bold text-warning">FC</span>
+              <AnimatedSection className="order-2 sm:order-1 flex justify-center">
+                <motion.div
+                  whileHover={{ rotate: [0, -5, 5, 0], transition: { duration: 0.5 } }}
+                  className="relative"
+                >
+                  <div className="w-32 h-32 rounded-full border-2 border-warning/30 flex items-center justify-center">
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
+                      className="absolute inset-0 rounded-full border border-dashed border-warning/20"
+                    />
+                    <div className="w-24 h-24 rounded-full bg-warning/10 flex items-center justify-center shadow-lg shadow-warning/5">
+                      <span className="text-4xl font-bold text-warning">FC</span>
                     </div>
                   </div>
-                  <div className="absolute -top-2 -right-2 text-xs font-bold text-foreground bg-surface-light px-2 py-0.5 rounded-full border border-border">
+                  <div className="absolute -top-2 -right-2 text-xs font-bold text-foreground bg-surface-light px-2.5 py-1 rounded-full border border-border shadow-md">
                     1 FC = R$0,01
                   </div>
-                </div>
-              </div>
-              <div className="order-1 sm:order-2">
+                </motion.div>
+              </AnimatedSection>
+              <AnimatedSection className="order-1 sm:order-2" delay={0.15}>
                 <p className="text-xs font-medium text-warning uppercase tracking-wider mb-4">Moeda da plataforma</p>
                 <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight">
                   FanCoins
@@ -274,7 +554,7 @@ export default function LandingPage() {
                 <p className="mt-3 text-muted leading-relaxed">
                   Criadores sacam quando quiserem — saque via PIX processado em 24-48h com verificacao antifraude.
                 </p>
-              </div>
+              </AnimatedSection>
             </div>
           </div>
         </div>
@@ -283,7 +563,7 @@ export default function LandingPage() {
         <div className="border-t border-border/40 py-20 sm:py-28">
           <div className="max-w-4xl mx-auto px-6">
             <div className="grid sm:grid-cols-2 gap-12 items-center">
-              <div>
+              <AnimatedSection>
                 <p className="text-xs font-medium text-success uppercase tracking-wider mb-4">Pagamento</p>
                 <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight">
                   Pagamento seguro
@@ -291,30 +571,32 @@ export default function LandingPage() {
                 <p className="mt-4 text-muted leading-relaxed">
                   Saque via PIX com verificacao antifraude em 24-48h. USDT para quem prefere crypto. Sem surpresa no extrato.
                 </p>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center gap-4 p-4 bg-surface rounded-sm">
-                  <QrCode className="w-6 h-6 text-success shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">PIX</p>
-                    <p className="text-xs text-muted">Saque seguro, processado em 24-48h</p>
-                  </div>
+              </AnimatedSection>
+              <AnimatedSection delay={0.15}>
+                <div className="space-y-3">
+                  {[
+                    { icon: QrCode, color: 'text-success', name: 'PIX', desc: 'Saque seguro, processado em 24-48h' },
+                    { icon: CreditCard, color: 'text-primary', name: 'Cartao de Credito', desc: 'Visa, Mastercard, Elo' },
+                    { icon: Bitcoin, color: 'text-warning', name: 'USDT', desc: 'Stablecoin, sem volatilidade' },
+                  ].map((method, i) => (
+                    <motion.div
+                      key={method.name}
+                      initial={{ opacity: 0, x: 20 }}
+                      whileInView={{ opacity: 1, x: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: 0.2 + i * 0.1 }}
+                      whileHover={{ x: 4, transition: { duration: 0.2 } }}
+                      className="flex items-center gap-4 p-4 bg-surface/50 rounded-xl border border-border/50 hover:border-primary/30 transition-colors"
+                    >
+                      <method.icon className={`w-6 h-6 ${method.color} shrink-0`} />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{method.name}</p>
+                        <p className="text-xs text-muted">{method.desc}</p>
+                      </div>
+                    </motion.div>
+                  ))}
                 </div>
-                <div className="flex items-center gap-4 p-4 bg-surface rounded-sm">
-                  <CreditCard className="w-6 h-6 text-primary shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Cartao de Credito</p>
-                    <p className="text-xs text-muted">Visa, Mastercard, Elo</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 p-4 bg-surface rounded-sm">
-                  <Bitcoin className="w-6 h-6 text-warning shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">USDT</p>
-                    <p className="text-xs text-muted">Stablecoin, sem volatilidade</p>
-                  </div>
-                </div>
-              </div>
+              </AnimatedSection>
             </div>
           </div>
         </div>
@@ -323,37 +605,65 @@ export default function LandingPage() {
       {/* ─── Testimonials ─── */}
       <section className="border-t border-border/40 py-20 sm:py-24">
         <div className="max-w-4xl mx-auto px-6">
-          <p className="text-sm text-muted mb-10">O que dizem sobre a plataforma</p>
+          <AnimatedSection>
+            <p className="text-xs font-medium text-secondary uppercase tracking-wider mb-2">Depoimentos</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-10">O que dizem sobre a plataforma</h2>
+          </AnimatedSection>
           <div className="grid sm:grid-cols-3 gap-6">
             {MOCK_TESTIMONIALS.map((t, i) => (
-              <div key={i} className="space-y-4">
-                <p className="text-sm text-foreground leading-relaxed">&ldquo;{t.quote}&rdquo;</p>
-                <p className="text-xs text-muted">&mdash; {t.author}</p>
-              </div>
+              <AnimatedSection key={i} delay={i * 0.12}>
+                <motion.div
+                  whileHover={{ y: -2, transition: { duration: 0.2 } }}
+                  className="p-6 rounded-xl bg-surface/30 border border-border/40 hover:border-primary/20 transition-colors h-full flex flex-col"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <img
+                      src={`https://picsum.photos/seed/${t.avatarSeed}/40/40`}
+                      alt=""
+                      className="w-10 h-10 rounded-full object-cover ring-2 ring-border"
+                    />
+                    <p className="text-xs text-muted font-medium">{t.author}</p>
+                  </div>
+                  <p className="text-sm text-foreground/90 leading-relaxed flex-1">&ldquo;{t.quote}&rdquo;</p>
+                </motion.div>
+              </AnimatedSection>
             ))}
           </div>
         </div>
       </section>
 
       {/* ─── Final CTA ─── */}
-      <section className="border-t border-border/40 py-24 sm:py-32">
-        <div className="max-w-2xl mx-auto px-6 text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold text-foreground">
-            Comece hoje. E gratis.
+      <section className="border-t border-border/40 py-24 sm:py-32 relative overflow-hidden">
+        {/* Subtle gradient background */}
+        <div className="absolute inset-0 opacity-10">
+          <div
+            className="absolute inset-0 animate-hero-gradient"
+            style={{
+              background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 50%, var(--color-primary) 100%)',
+            }}
+          />
+        </div>
+        <AnimatedSection className="relative z-10 max-w-2xl mx-auto px-6 text-center">
+          <h2 className="text-3xl sm:text-4xl font-bold text-foreground">
+            Comece hoje.{' '}
+            <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+              E gratis.
+            </span>
           </h2>
-          <p className="mt-3 text-muted">
+          <p className="mt-4 text-muted text-lg">
             Crie sua conta em 30 segundos e comece a monetizar.
           </p>
           <div className="mt-8">
             <Link
               href="/register"
-              className="inline-flex items-center gap-2 bg-primary hover:bg-primary-light text-white font-semibold px-8 py-3.5 rounded-full text-base transition-colors"
+              className="inline-flex items-center gap-2 bg-primary hover:bg-primary-light text-white font-semibold px-10 py-4 rounded-full text-base transition-all animate-pulse-glow"
             >
               Criar minha conta
               <ChevronRight className="w-4 h-4" />
             </Link>
           </div>
-        </div>
+          <p className="mt-4 text-xs text-muted">Sem cartao de credito. Sem compromisso.</p>
+        </AnimatedSection>
       </section>
 
       {/* ─── Footer ─── */}
