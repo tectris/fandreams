@@ -16,6 +16,7 @@ import {
   Megaphone,
   Lock,
   TrendingUp,
+  Flame,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store'
@@ -23,6 +24,7 @@ import { useAuthStore } from '@/lib/store'
 const fanLinks = [
   { href: '/feed', icon: Home, label: 'Feed' },
   { href: '/explore', icon: Compass, label: 'Explorar' },
+  { href: '/discover', icon: Flame, label: 'Descobrir' },
   { href: '/messages', icon: MessageCircle, label: 'Mensagens' },
   { href: '/pitch', icon: Megaphone, label: 'Pitch' },
   { href: '/guilds', icon: Users, label: 'Guildas' },
@@ -41,6 +43,7 @@ const creatorLinks = [
   { href: '/creator/affiliates', icon: Share2, label: 'Afiliados' },
   { href: '/feed', icon: Home, label: 'Feed' },
   { href: '/explore', icon: Compass, label: 'Explorar' },
+  { href: '/discover', icon: Flame, label: 'Descobrir' },
   { href: '/messages', icon: MessageCircle, label: 'Mensagens' },
   { href: '/settings', icon: Settings, label: 'Configuracoes' },
 ]
@@ -55,6 +58,7 @@ const adminLinks = [
   { href: '/creator/affiliates', icon: Share2, label: 'Afiliados' },
   { href: '/feed', icon: Home, label: 'Feed' },
   { href: '/explore', icon: Compass, label: 'Explorar' },
+  { href: '/discover', icon: Flame, label: 'Descobrir' },
   { href: '/messages', icon: MessageCircle, label: 'Mensagens' },
   { href: '/settings', icon: Settings, label: 'Configuracoes' },
 ]

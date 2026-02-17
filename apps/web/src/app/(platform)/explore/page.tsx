@@ -3,8 +3,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { CreatorCard } from '@/components/creator/creator-card'
-import { Search, Compass, TrendingUp, Star } from 'lucide-react'
+import { Search, Compass, TrendingUp, Star, Flame } from 'lucide-react'
 import { useState } from 'react'
+import Link from 'next/link'
 
 export default function ExplorePage() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -60,6 +61,21 @@ export default function ExplorePage() {
         <Compass className="w-6 h-6 text-primary" />
         <h1 className="text-xl font-bold">Explorar</h1>
       </div>
+
+      {/* Discover swipe CTA */}
+      <Link
+        href="/discover"
+        className="flex items-center gap-3 mb-6 p-4 rounded-md bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10 border border-primary/20 hover:border-primary/40 transition-colors group"
+      >
+        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center group-hover:bg-primary/30 transition-colors">
+          <Flame className="w-5 h-5 text-primary" />
+        </div>
+        <div className="flex-1">
+          <p className="font-semibold text-sm">Descobrir perfis</p>
+          <p className="text-xs text-muted">Deslize entre perfis no estilo Tinder</p>
+        </div>
+        <span className="text-primary text-sm font-medium">Explorar →</span>
+      </Link>
 
       {/* Search */}
       <div className="relative mb-8">
