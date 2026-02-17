@@ -21,6 +21,8 @@ import {
   Lock,
   Sparkles,
   Play,
+  Megaphone,
+  Swords,
 } from 'lucide-react'
 import { CookieConsent } from '@/components/cookie-consent'
 import { ContactModal } from '@/components/contact-modal'
@@ -71,6 +73,8 @@ const FEATURES = [
   { icon: Zap, title: 'FanCoins', description: 'Moeda virtual para tips, desbloqueios e campanhas', color: 'text-warning' },
   { icon: Trophy, title: 'Gamificacao', description: 'Niveis, streaks e recompensas que fidelizam fas', color: 'text-primary' },
   { icon: Lock, title: 'Conteudo exclusivo', description: 'PPV, assinaturas e tiers de acesso', color: 'text-secondary' },
+  { icon: Swords, title: 'Guildas', description: 'Criadores se unem em guildas com tesouraria compartilhada e assinaturas combo', color: 'text-diamond' },
+  { icon: Megaphone, title: 'Pitch', description: 'Financiamento coletivo para projetos criativos apoiados pela comunidade', color: 'text-accent' },
   { icon: Users, title: 'Comunidade', description: 'Interacao direta entre criadores e fas', color: 'text-success' },
 ]
 
@@ -129,6 +133,79 @@ function FloatingParticles() {
   )
 }
 
+function MockVideoContent() {
+  // Simulates a dynamic video background with floating creator cards and interactions
+  const mockCards = [
+    { seed: 'hero-1', name: 'Isabella M.', x: '10%', delay: 0, duration: 18 },
+    { seed: 'hero-2', name: 'Rafa S.', x: '30%', delay: 3, duration: 22 },
+    { seed: 'hero-3', name: 'Bruna C.', x: '55%', delay: 6, duration: 16 },
+    { seed: 'hero-4', name: 'Lucas A.', x: '75%', delay: 1.5, duration: 20 },
+    { seed: 'hero-5', name: 'Amanda F.', x: '90%', delay: 8, duration: 24 },
+  ]
+
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {/* Animated gradient base */}
+      <div
+        className="absolute inset-0 animate-hero-gradient opacity-25"
+        style={{
+          background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 25%, var(--color-primary-dark) 50%, var(--color-warning) 75%, var(--color-primary) 100%)',
+        }}
+      />
+      {/* Floating creator mini-cards */}
+      {mockCards.map((card) => (
+        <motion.div
+          key={card.seed}
+          className="absolute w-16 sm:w-20 opacity-[0.12]"
+          style={{ left: card.x }}
+          animate={{
+            y: ['110vh', '-20vh'],
+            rotate: [0, card.delay % 2 === 0 ? 8 : -8, 0],
+            scale: [0.8, 1, 0.8],
+          }}
+          transition={{
+            y: { duration: card.duration, repeat: Infinity, ease: 'linear', delay: card.delay },
+            rotate: { duration: card.duration / 2, repeat: Infinity, ease: 'easeInOut', delay: card.delay },
+            scale: { duration: card.duration / 3, repeat: Infinity, ease: 'easeInOut', delay: card.delay },
+          }}
+        >
+          <div className="rounded-xl bg-surface border border-border/30 overflow-hidden shadow-lg">
+            <img
+              src={`https://picsum.photos/seed/${card.seed}/80/80`}
+              alt=""
+              className="w-full aspect-square object-cover"
+            />
+            <div className="p-1.5">
+              <div className="h-1.5 w-10 bg-foreground/20 rounded-full" />
+              <div className="h-1 w-6 bg-primary/30 rounded-full mt-1" />
+            </div>
+          </div>
+        </motion.div>
+      ))}
+      {/* Floating interaction bubbles (tips, likes, etc) */}
+      {[
+        { emoji: 'FC', x: '20%', delay: 2, color: 'var(--color-warning)' },
+        { emoji: '♥', x: '45%', delay: 5, color: 'var(--color-secondary)' },
+        { emoji: 'FC', x: '70%', delay: 9, color: 'var(--color-warning)' },
+        { emoji: '♥', x: '85%', delay: 12, color: 'var(--color-secondary)' },
+      ].map((bubble, i) => (
+        <motion.div
+          key={`bubble-${i}`}
+          className="absolute text-xs font-bold rounded-full w-8 h-8 flex items-center justify-center opacity-[0.15]"
+          style={{ left: bubble.x, color: bubble.color, border: `1px solid ${bubble.color}` }}
+          animate={{ y: ['100vh', '-10vh'] }}
+          transition={{ duration: 14, repeat: Infinity, ease: 'linear', delay: bubble.delay }}
+        >
+          {bubble.emoji}
+        </motion.div>
+      ))}
+      <FloatingParticles />
+      {/* Overlay gradient */}
+      <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-background/60 to-background" />
+    </div>
+  )
+}
+
 function HeroVideoBackground({ videoUrl }: { videoUrl?: string | null }) {
   if (videoUrl) {
     return (
@@ -147,19 +224,7 @@ function HeroVideoBackground({ videoUrl }: { videoUrl?: string | null }) {
     )
   }
 
-  // Mock animated gradient as default hero background
-  return (
-    <div className="absolute inset-0 overflow-hidden">
-      <div
-        className="absolute inset-0 animate-hero-gradient opacity-30"
-        style={{
-          background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 25%, var(--color-primary-dark) 50%, var(--color-warning) 75%, var(--color-primary) 100%)',
-        }}
-      />
-      <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/70 to-background" />
-      <FloatingParticles />
-    </div>
-  )
+  return <MockVideoContent />
 }
 
 // ── Main Page ──
@@ -354,7 +419,7 @@ export default function LandingPage() {
             </h2>
           </AnimatedSection>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {FEATURES.map((feature, i) => (
               <AnimatedSection key={feature.title} delay={i * 0.1}>
                 <motion.div
