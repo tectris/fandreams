@@ -54,11 +54,33 @@ type OpenPixCharge = {
   expiresDate: string
   expiresIn: number
   createdAt: string
+  customer?: {
+    name?: string
+    email?: string
+    correlationID?: string
+    taxID?: { taxID?: string }
+  }
 }
 
 type OpenPixChargeResponse = {
   charge: OpenPixCharge
   brCode: string
+}
+
+type OpenPixSubscription = {
+  globalID: string
+  value: number
+  dayGenerateCharge: number
+  customer: {
+    name: string
+    email: string
+    correlationID: string
+    taxID: { taxID: string }
+  }
+}
+
+type OpenPixSubscriptionResponse = {
+  subscription: OpenPixSubscription
 }
 
 type OpenPixWebhookPayload = {
@@ -70,6 +92,12 @@ type OpenPixWebhookPayload = {
     transactionID: string
     createdAt: string
     updatedAt: string
+    customer?: {
+      name?: string
+      email?: string
+      correlationID?: string
+      taxID?: { taxID?: string }
+    }
   }
   pix?: {
     customer?: {
@@ -122,7 +150,7 @@ export async function createPixCharge(params: {
   }
 }
 
-// ── Get charge status ──
+// ── Get charge details ──
 
 export async function getChargeStatus(correlationID: string): Promise<{
   status: string
@@ -132,6 +160,79 @@ export async function getChargeStatus(correlationID: string): Promise<{
   return {
     status: response.charge.status,
     value: response.charge.value,
+  }
+}
+
+export async function getChargeDetails(correlationID: string): Promise<{
+  status: string
+  value: number
+  customerCorrelationID?: string
+}> {
+  const response = await openpixFetch<{ charge: OpenPixCharge }>(`/api/v1/charge/${correlationID}`)
+  return {
+    status: response.charge.status,
+    value: response.charge.value,
+    customerCorrelationID: response.charge.customer?.correlationID,
+  }
+}
+
+// ── Subscription (Recurring PIX) ──
+
+export async function createSubscription(params: {
+  value: number
+  customer: {
+    name: string
+    email: string
+    taxID: string
+    phone?: string
+    correlationID: string
+  }
+  dayGenerateCharge?: number
+}): Promise<{
+  globalID: string
+  value: number
+  dayGenerateCharge: number
+}> {
+  const response = await openpixFetch<OpenPixSubscriptionResponse>('/api/v1/subscriptions', {
+    method: 'POST',
+    body: JSON.stringify({
+      value: Math.round(params.value * 100), // Convert to centavos
+      customer: {
+        name: params.customer.name,
+        email: params.customer.email,
+        taxID: params.customer.taxID,
+        phone: params.customer.phone,
+        correlationID: params.customer.correlationID,
+      },
+      dayGenerateCharge: params.dayGenerateCharge ?? new Date().getDate(),
+    }),
+  })
+
+  return {
+    globalID: response.subscription.globalID,
+    value: response.subscription.value,
+    dayGenerateCharge: response.subscription.dayGenerateCharge,
+  }
+}
+
+export async function getSubscription(globalID: string): Promise<OpenPixSubscription | null> {
+  try {
+    const response = await openpixFetch<OpenPixSubscriptionResponse>(
+      `/api/v1/subscriptions/${globalID}`,
+    )
+    return response.subscription
+  } catch {
+    return null
+  }
+}
+
+export async function cancelSubscription(globalID: string): Promise<void> {
+  try {
+    await openpixFetch(`/api/v1/subscriptions/${globalID}`, {
+      method: 'DELETE',
+    })
+  } catch (e) {
+    console.error('Failed to cancel OpenPix subscription:', e)
   }
 }
 
@@ -159,6 +260,7 @@ export function parseWebhookPayload(body: any): {
   value: number
   paidAt?: string
   payerName?: string
+  customerCorrelationID?: string
 } | null {
   const payload = body as OpenPixWebhookPayload
 
@@ -173,6 +275,7 @@ export function parseWebhookPayload(body: any): {
     value: payload.charge.value,
     paidAt: payload.pix?.time,
     payerName: payload.pix?.payer?.name || payload.pix?.customer?.name,
+    customerCorrelationID: payload.charge.customer?.correlationID,
   }
 }
 

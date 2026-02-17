@@ -206,7 +206,12 @@ export async function createSubscriptionCheckout(
     }
   }
 
-  // ── Standard monthly subscription: MP preapproval ──
+  // ── Standard monthly subscription ──
+
+  // Route PIX to OpenPix subscription when configured
+  const useOpenPixSubscription = paymentMethod === 'pix' && openpixService.isOpenPixConfigured()
+  const monthlyProvider = useOpenPixSubscription ? 'openpix' : 'mercadopago'
+
   const [sub] = await db
     .insert(subscriptions)
     .values({
@@ -215,7 +220,7 @@ export async function createSubscriptionCheckout(
       tierId,
       status: 'pending',
       pricePaid: price,
-      paymentProvider: 'mercadopago',
+      paymentProvider: monthlyProvider,
       currentPeriodStart: now,
       currentPeriodEnd: now, // will be set properly on activation
       autoRenew: true,
@@ -226,7 +231,7 @@ export async function createSubscriptionCheckout(
         status: 'pending',
         tierId,
         pricePaid: price,
-        paymentProvider: 'mercadopago',
+        paymentProvider: monthlyProvider,
         cancelledAt: null,
         autoRenew: true,
         updatedAt: now,
@@ -239,6 +244,72 @@ export async function createSubscriptionCheckout(
   const platformFee = amount * feeRate
   const creatorAmount = amount - platformFee
 
+  // ── PIX monthly via OpenPix subscription ──
+  if (useOpenPixSubscription) {
+    const [payment] = await db.insert(payments).values({
+      userId: fanId,
+      recipientId: creatorId,
+      type: 'subscription',
+      amount: price,
+      platformFee: String(platformFee),
+      creatorAmount: String(creatorAmount),
+      paymentProvider: 'openpix',
+      status: 'pending',
+      metadata: { subscriptionId: sub.id, tierId, tierName, paymentMethod },
+    }).returning()
+
+    // Create OpenPix subscription for recurring monthly billing
+    const customerCorrelationID = `sub_${sub.id}`
+    try {
+      const opSub = await openpixService.createSubscription({
+        value: amount,
+        customer: {
+          name: creator?.displayName || creator?.username || 'Fan',
+          email: fan.email,
+          taxID: '00000000000', // Placeholder — OpenPix requires taxID for customer
+          correlationID: customerCorrelationID,
+        },
+      })
+
+      // Store OpenPix subscription globalID
+      await db
+        .update(subscriptions)
+        .set({ providerSubId: opSub.globalID })
+        .where(eq(subscriptions.id, sub.id))
+    } catch (e) {
+      console.error('Failed to create OpenPix subscription (continuing with first charge):', e)
+    }
+
+    // Create first charge for immediate payment (QR code)
+    const opResult = await openpixService.createPixCharge({
+      amount,
+      description: tierName
+        ? `Assinatura ${tierName} - ${creatorName} - FanDreams`
+        : `Assinatura mensal - ${creatorName} - FanDreams`,
+      externalReference: payment.id,
+    })
+
+    await db
+      .update(payments)
+      .set({
+        providerTxId: opResult.correlationID,
+        metadata: { ...(payment.metadata as any), openpixCorrelationID: opResult.correlationID, customerCorrelationID },
+      })
+      .where(eq(payments.id, payment.id))
+
+    return {
+      subscription: sub,
+      pixData: {
+        qrCodeBase64: opResult.qrCodeImageUrl,
+        qrCode: opResult.brCode,
+        expiresAt: opResult.expiresAt,
+      },
+      paymentId: payment.id,
+      sandbox: openpixService.isOpenPixSandbox(),
+    }
+  }
+
+  // ── Credit card / fallback monthly via MercadoPago preapproval ──
   await db.insert(payments).values({
     userId: fanId,
     recipientId: creatorId,
@@ -548,6 +619,86 @@ export async function recordSubscriptionPayment(
   return { processed: true, status: mpPaymentStatus }
 }
 
+// ── Handle OpenPix subscription renewal (recurring charge paid) ──
+
+export async function handleOpenPixSubscriptionRenewal(
+  subscriptionId: string,
+  amount: number,
+  transactionID: string,
+) {
+  const [sub] = await db
+    .select()
+    .from(subscriptions)
+    .where(eq(subscriptions.id, subscriptionId))
+    .limit(1)
+
+  if (!sub) {
+    console.warn('OpenPix subscription renewal: subscription not found', subscriptionId)
+    return { processed: false }
+  }
+
+  if (!sub.autoRenew) {
+    console.log('OpenPix subscription renewal: autoRenew is false, ignoring', subscriptionId)
+    return { processed: true, status: 'auto_renew_disabled' }
+  }
+
+  // Extend subscription period by 1 month
+  const now = new Date()
+  const periodEnd = new Date(now)
+  periodEnd.setMonth(periodEnd.getMonth() + 1)
+
+  await db
+    .update(subscriptions)
+    .set({
+      status: 'active',
+      currentPeriodStart: now,
+      currentPeriodEnd: periodEnd,
+      updatedAt: now,
+    })
+    .where(eq(subscriptions.id, sub.id))
+
+  // Record payment
+  const renewalFeeRate = await getPlatformFeeRate()
+  const platformFee = amount * renewalFeeRate
+  const creatorAmount = amount - platformFee
+
+  await db.insert(payments).values({
+    userId: sub.fanId,
+    recipientId: sub.creatorId,
+    type: 'subscription',
+    amount: String(amount),
+    platformFee: String(platformFee),
+    creatorAmount: String(creatorAmount),
+    paymentProvider: 'openpix',
+    providerTxId: transactionID,
+    status: 'completed',
+    metadata: { subscriptionId: sub.id, recurring: true },
+  })
+
+  // Credit creator earnings as FanCoins (with affiliate commission deduction)
+  if (creatorAmount > 0) {
+    const { totalCommissionBrl } = await affiliateService.distributeCommissions(
+      sub.id,
+      sub.fanId,
+      sub.creatorId,
+      creatorAmount,
+    )
+    const creatorNet = creatorAmount - totalCommissionBrl
+    if (creatorNet > 0) {
+      await fancoinService.creditEarnings(
+        sub.creatorId,
+        creatorNet,
+        'subscription_earned',
+        'Assinatura mensal recebida via PIX',
+        sub.id,
+      )
+    }
+  }
+
+  console.log(`OpenPix subscription renewal recorded for ${sub.id}, creator credited ${creatorAmount} BRL as FanCoins`)
+  return { processed: true, status: 'renewal_recorded', subscriptionId: sub.id }
+}
+
 // ── Cancel subscription (keeps access until currentPeriodEnd) ──
 
 export async function cancelSubscription(subscriptionId: string, fanId: string) {
@@ -567,13 +718,23 @@ export async function cancelSubscription(subscriptionId: string, fanId: string) 
     throw new AppError('ALREADY_CANCELLED', 'Assinatura ja foi cancelada. Acesso ativo ate o fim do periodo.', 409)
   }
 
-  // Cancel recurring billing on MP (stops future charges)
-  if (sub.providerSubId && sub.paymentProvider === 'mercadopago') {
-    try {
-      await paymentService.cancelMpSubscription(sub.providerSubId)
-    } catch (e) {
-      console.error('Failed to cancel MP subscription:', e)
-      // Continue with local cancellation even if MP fails
+  // Cancel recurring billing on payment provider (stops future charges)
+  if (sub.providerSubId) {
+    if (sub.paymentProvider === 'mercadopago') {
+      try {
+        await paymentService.cancelMpSubscription(sub.providerSubId)
+      } catch (e) {
+        console.error('Failed to cancel MP subscription:', e)
+        // Continue with local cancellation even if MP fails
+      }
+    }
+    if (sub.paymentProvider === 'openpix') {
+      try {
+        await openpixService.cancelSubscription(sub.providerSubId)
+      } catch (e) {
+        console.error('Failed to cancel OpenPix subscription:', e)
+        // Continue with local cancellation even if OpenPix fails
+      }
     }
   }
 

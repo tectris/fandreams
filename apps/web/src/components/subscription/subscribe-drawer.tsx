@@ -69,7 +69,7 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
   const refCode = useMemo(() => searchParams.get('ref') || undefined, [searchParams])
   const [state, setState] = useState<DrawerState>('choose')
   const [error, setError] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('credit_card')
+  const [paymentMethod, setPaymentMethod] = useState<'pix' | 'credit_card'>('pix')
   const [selectedPromo, setSelectedPromo] = useState<Promo | null>(null)
   const [pixData, setPixData] = useState<PixData | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -315,20 +315,6 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
               <h4 className="font-semibold text-sm mb-3">Forma de pagamento</h4>
               <div className="space-y-2 mb-5">
                 <button
-                  onClick={() => setPaymentMethod('credit_card')}
-                  className={`w-full flex items-center gap-3 p-4 rounded-sm border transition-colors ${
-                    paymentMethod === 'credit_card'
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/50'
-                  }`}
-                >
-                  <CreditCard className={`w-5 h-5 ${paymentMethod === 'credit_card' ? 'text-primary' : 'text-muted'}`} />
-                  <div className="text-left">
-                    <p className="font-medium text-sm">Cartao de Credito</p>
-                    <p className="text-xs text-muted">Parcele em ate 12x</p>
-                  </div>
-                </button>
-                <button
                   onClick={() => setPaymentMethod('pix')}
                   className={`w-full flex items-center gap-3 p-4 rounded-sm border transition-colors ${
                     paymentMethod === 'pix'
@@ -339,7 +325,23 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
                   <QrCode className={`w-5 h-5 ${paymentMethod === 'pix' ? 'text-primary' : 'text-muted'}`} />
                   <div className="text-left">
                     <p className="font-medium text-sm">PIX</p>
-                    <p className="text-xs text-muted">Aprovacao instantanea</p>
+                    <p className="text-xs text-muted">
+                      {selectedPromo ? 'Aprovacao instantanea' : 'Assinatura recorrente via PIX'}
+                    </p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setPaymentMethod('credit_card')}
+                  className={`w-full flex items-center gap-3 p-4 rounded-sm border transition-colors ${
+                    paymentMethod === 'credit_card'
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-primary/50'
+                  }`}
+                >
+                  <CreditCard className={`w-5 h-5 ${paymentMethod === 'credit_card' ? 'text-primary' : 'text-muted'}`} />
+                  <div className="text-left">
+                    <p className="font-medium text-sm">Cartao de Credito</p>
+                    <p className="text-xs text-muted">Via Mercado Pago</p>
                   </div>
                 </button>
               </div>
@@ -350,7 +352,9 @@ export function SubscribeDrawer({ open, onClose, creator, tier }: SubscribeDrawe
               <p className="text-xs text-muted text-center mt-3">
                 {selectedPromo
                   ? `Pagamento unico de ${formatCurrency(activePrice)} por ${getDurationLabel(selectedPromo.durationDays)} de acesso.`
-                  : 'Voce sera redirecionado ao Mercado Pago para autorizar a assinatura recorrente. Cancele quando quiser.'}
+                  : paymentMethod === 'pix'
+                    ? 'Pague via PIX e sua assinatura sera renovada mensalmente. Voce recebera uma cobranca a cada mes. Cancele quando quiser.'
+                    : 'Voce sera redirecionado ao Mercado Pago para autorizar a assinatura recorrente. Cancele quando quiser.'}
               </p>
             </>
           )}

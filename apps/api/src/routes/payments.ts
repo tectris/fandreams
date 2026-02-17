@@ -213,8 +213,8 @@ paymentsRoute.post('/webhook/openpix', async (c) => {
     const body = JSON.parse(rawBody)
 
     // Test event from OpenPix during webhook setup
-    if (body.event === 'OPENPIX:WEBHOOK_VERIFICATION' || !body.charge) {
-      console.log('OpenPix Webhook: test event received:', body.event)
+    if (body.event === 'OPENPIX:WEBHOOK_VERIFICATION' || body.event === 'OPENPIX:CHARGE_CREATED' || !body.charge) {
+      console.log('OpenPix Webhook: event received:', body.event)
       return c.json({ received: true }, 200)
     }
 
