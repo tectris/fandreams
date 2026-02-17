@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://www.fandreams.app'),
   title: { default: 'FanDreams — Seu conteudo. Suas regras.', template: '%s | FanDreams' },
   description:
-    'Monetize seu conteudo com a menor taxa do mercado. 92% para o criador, saque instantaneo via PIX e Crypto.',
+    'Monetize seu conteudo com a menor taxa do mercado. 85% para o criador, saque seguro via PIX e Crypto.',
   keywords: ['criadores', 'monetizacao', 'conteudo', 'assinatura', 'fancoins', 'pix'],
   openGraph: {
     siteName: 'FanDreams',

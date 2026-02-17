@@ -2,31 +2,31 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Flame, ArrowRight, CreditCard, Bitcoin, QrCode, Shield, ChevronRight, Image, Video } from 'lucide-react'
+import { Flame, ArrowRight, CreditCard, Bitcoin, QrCode, Shield, ChevronRight, Image, Video, Compass, TrendingDown } from 'lucide-react'
 import { CookieConsent } from '@/components/cookie-consent'
 import { ContactModal } from '@/components/contact-modal'
 import { PageContentModal } from '@/components/page-content-modal'
 
 const MOCK_CREATORS = [
-  { username: 'isabellamorais', displayName: 'Isabella M.', photos: 142, videos: 38 },
-  { username: 'rafasilva', displayName: 'Rafa Silva', photos: 87, videos: 24 },
-  { username: 'brunacosta', displayName: 'Bruna C.', photos: 215, videos: 61 },
-  { username: 'lucas.art', displayName: 'Lucas Art', photos: 63, videos: 19 },
-  { username: 'amandafr', displayName: 'Amanda F.', photos: 194, videos: 52 },
-  { username: 'thaisgomes', displayName: 'Thais G.', photos: 108, videos: 33 },
-  { username: 'carolprado', displayName: 'Carol P.', photos: 176, videos: 45 },
-  { username: 'daniribeiro', displayName: 'Dani R.', photos: 231, videos: 72 },
-  { username: 'fernandajs', displayName: 'Fernanda J.', photos: 95, videos: 28 },
-  { username: 'julianamoura', displayName: 'Juliana M.', photos: 157, videos: 41 },
+  { username: 'isabellamorais', displayName: 'Isabella M.', photos: 142, videos: 38, avatarSeed: 'isabella' },
+  { username: 'rafasilva', displayName: 'Rafa Silva', photos: 87, videos: 24, avatarSeed: 'rafa' },
+  { username: 'brunacosta', displayName: 'Bruna C.', photos: 215, videos: 61, avatarSeed: 'bruna' },
+  { username: 'lucas.art', displayName: 'Lucas Art', photos: 63, videos: 19, avatarSeed: 'lucas-art' },
+  { username: 'amandafr', displayName: 'Amanda F.', photos: 194, videos: 52, avatarSeed: 'amanda' },
+  { username: 'thaisgomes', displayName: 'Thais G.', photos: 108, videos: 33, avatarSeed: 'thais' },
+  { username: 'carolprado', displayName: 'Carol P.', photos: 176, videos: 45, avatarSeed: 'carol' },
+  { username: 'daniribeiro', displayName: 'Dani R.', photos: 231, videos: 72, avatarSeed: 'dani' },
+  { username: 'fernandajs', displayName: 'Fernanda J.', photos: 95, videos: 28, avatarSeed: 'fernanda' },
+  { username: 'julianamoura', displayName: 'Juliana M.', photos: 157, videos: 41, avatarSeed: 'juliana' },
 ]
 
 const MOCK_TESTIMONIALS = [
   {
-    quote: 'Migrei de outra plataforma e em 3 meses meu faturamento triplicou. A taxa de 8% faz diferenca real no fim do mes.',
+    quote: 'Migrei de outra plataforma e em 3 meses meu faturamento triplicou. A taxa de 15% e muito menor que a concorrencia.',
     author: 'Criadora com 12k assinantes',
   },
   {
-    quote: 'Saque via PIX seguro e rapido. Sem esperar 5 dias uteis, sem surpresa. Isso muda tudo.',
+    quote: 'Saque via PIX seguro com verificacao antifraude em 24-48h. Sem esperar 5 dias uteis, sem surpresa. Isso muda tudo.',
     author: 'Criadora com 8k assinantes',
   },
   {
@@ -35,20 +35,13 @@ const MOCK_TESTIMONIALS = [
   },
 ]
 
-function InitialsAvatar({ name }: { name: string }) {
-  const initials = name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2)
-
-  return (
-    <div className="w-14 h-14 rounded-full bg-surface-light flex items-center justify-center shrink-0">
-      <span className="text-sm font-semibold text-muted">{initials}</span>
-    </div>
-  )
-}
+const FEE_TIERS = [
+  { subscribers: '0 - 100', fee: '15%', creatorGets: '85%', highlight: false },
+  { subscribers: '101 - 500', fee: '13%', creatorGets: '87%', highlight: false },
+  { subscribers: '501 - 2.000', fee: '11%', creatorGets: '89%', highlight: true },
+  { subscribers: '2.001 - 5.000', fee: '9%', creatorGets: '91%', highlight: false },
+  { subscribers: '5.001+', fee: '7%', creatorGets: '93%', highlight: false },
+]
 
 export default function LandingPage() {
   const [contactOpen, setContactOpen] = useState(false)
@@ -67,6 +60,9 @@ export default function LandingPage() {
             <a href="#para-criadores" className="hidden sm:block text-sm text-muted hover:text-foreground transition-colors">
               Para criadores
             </a>
+            <Link href="/explore" className="hidden sm:block text-sm text-muted hover:text-foreground transition-colors">
+              Explorar
+            </Link>
             <Link href="/login" className="text-sm text-muted hover:text-foreground transition-colors">
               Entrar
             </Link>
@@ -91,13 +87,20 @@ export default function LandingPage() {
           <p className="mt-6 text-base sm:text-lg text-muted max-w-xl mx-auto leading-relaxed">
             Monetize o que voce cria com as menores taxas do Brasil, saque seguro via PIX e uma comunidade que valoriza quem cria.
           </p>
-          <div className="mt-10">
+          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               href="/register"
               className="inline-flex items-center gap-2 bg-primary hover:bg-primary-light text-white font-semibold px-8 py-3.5 rounded-full text-base transition-colors"
             >
               Comecar agora
               <ArrowRight className="w-4 h-4" />
+            </Link>
+            <Link
+              href="/explore"
+              className="inline-flex items-center gap-2 border border-border text-foreground hover:bg-surface-light font-medium px-6 py-3 rounded-full text-sm transition-colors"
+            >
+              <Compass className="w-4 h-4" />
+              Explorar criadores
             </Link>
           </div>
         </div>
@@ -107,7 +110,7 @@ export default function LandingPage() {
       <section className="border-y border-border/40">
         <div className="max-w-3xl mx-auto px-6 py-10 flex flex-col sm:flex-row items-center justify-center gap-8 sm:gap-0 text-center">
           <div className="sm:flex-1">
-            <p className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">92%</p>
+            <p className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">85%</p>
             <p className="text-xs sm:text-sm text-muted mt-1">para o criador</p>
           </div>
           <div className="hidden sm:block w-px h-10 bg-border/40" />
@@ -136,7 +139,11 @@ export default function LandingPage() {
                 key={`${creator.username}-${i}`}
                 className="flex items-center gap-3 shrink-0 group cursor-pointer"
               >
-                <InitialsAvatar name={creator.displayName} />
+                <img
+                  src={`https://picsum.photos/seed/${creator.avatarSeed}/56/56`}
+                  alt={creator.displayName}
+                  className="w-14 h-14 rounded-full object-cover shrink-0 ring-2 ring-border group-hover:ring-primary transition-colors"
+                />
                 <div className="pr-4">
                   <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
                     @{creator.username}
@@ -154,7 +161,7 @@ export default function LandingPage() {
 
       {/* ─── Differentials (Narrative Sections) ─── */}
       <section id="para-criadores">
-        {/* Differential 1: Fee */}
+        {/* Differential 1: Fee comparison + Graduated table */}
         <div className="border-t border-border/40 py-20 sm:py-28">
           <div className="max-w-4xl mx-auto px-6">
             <div className="grid sm:grid-cols-2 gap-12 items-center">
@@ -164,18 +171,17 @@ export default function LandingPage() {
                   Menor taxa<br />do mercado
                 </h2>
                 <p className="mt-4 text-muted leading-relaxed">
-                  Voce fica com 92% de tudo que ganha. Sem letras miudas, sem taxas escondidas.
-                  A maioria das plataformas cobra 20% ou mais.
+                  Comece com 85% de tudo que ganha. Quanto mais assinantes, menor a taxa. Sem letras miudas, sem taxas escondidas.
                 </p>
               </div>
               <div className="space-y-4">
                 <div>
                   <div className="flex items-center justify-between text-sm mb-1.5">
                     <span className="font-medium text-foreground">FanDreams</span>
-                    <span className="text-primary font-bold">8%</span>
+                    <span className="text-primary font-bold">a partir de 7%</span>
                   </div>
                   <div className="w-full bg-surface rounded-full h-2.5">
-                    <div className="bg-primary h-2.5 rounded-full" style={{ width: '8%' }} />
+                    <div className="bg-primary h-2.5 rounded-full" style={{ width: '15%' }} />
                   </div>
                 </div>
                 <div>
@@ -197,6 +203,46 @@ export default function LandingPage() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Graduated Fee Table */}
+            <div className="mt-16">
+              <div className="flex items-center gap-2 mb-6">
+                <TrendingDown className="w-5 h-5 text-success" />
+                <h3 className="text-lg font-bold text-foreground">Taxa regressiva: mais assinantes, menor taxa</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-3 px-4 text-muted font-medium">Assinantes</th>
+                      <th className="text-center py-3 px-4 text-muted font-medium">Taxa plataforma</th>
+                      <th className="text-center py-3 px-4 text-muted font-medium">Criador recebe</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {FEE_TIERS.map((tier) => (
+                      <tr
+                        key={tier.subscribers}
+                        className={`border-b border-border/50 ${tier.highlight ? 'bg-primary/5' : ''}`}
+                      >
+                        <td className="py-3.5 px-4 font-medium text-foreground">{tier.subscribers}</td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className={`font-bold ${tier.highlight ? 'text-primary' : 'text-foreground'}`}>
+                            {tier.fee}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <span className="font-bold text-success">{tier.creatorGets}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-4 text-xs text-muted">
+                A taxa e calculada automaticamente com base no numero total de assinantes ativos. Conforme voce cresce, a plataforma premia sua fidelidade.
+              </p>
             </div>
           </div>
         </div>
@@ -226,7 +272,7 @@ export default function LandingPage() {
                   A moeda virtual do FanDreams. Fas compram com PIX ou cartao, usam para apoiar criadores com tips, desbloquear conteudo exclusivo e participar de campanhas.
                 </p>
                 <p className="mt-3 text-muted leading-relaxed">
-                  Criadores sacam quando quiserem — cai na conta na hora via PIX.
+                  Criadores sacam quando quiserem — saque via PIX processado em 24-48h com verificacao antifraude.
                 </p>
               </div>
             </div>
@@ -243,7 +289,7 @@ export default function LandingPage() {
                   Pagamento seguro
                 </h2>
                 <p className="mt-4 text-muted leading-relaxed">
-                  Saque via PIX de forma segura. USDT para quem prefere crypto. Sem esperar dias uteis, sem surpresa no extrato.
+                  Saque via PIX com verificacao antifraude em 24-48h. USDT para quem prefere crypto. Sem surpresa no extrato.
                 </p>
               </div>
               <div className="space-y-3">
@@ -251,7 +297,7 @@ export default function LandingPage() {
                   <QrCode className="w-6 h-6 text-success shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-foreground">PIX</p>
-                    <p className="text-xs text-muted">Saque seguro, 24/7</p>
+                    <p className="text-xs text-muted">Saque seguro, processado em 24-48h</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4 p-4 bg-surface rounded-sm">
@@ -281,8 +327,8 @@ export default function LandingPage() {
           <div className="grid sm:grid-cols-3 gap-6">
             {MOCK_TESTIMONIALS.map((t, i) => (
               <div key={i} className="space-y-4">
-                <p className="text-sm text-foreground leading-relaxed">"{t.quote}"</p>
-                <p className="text-xs text-muted">— {t.author}</p>
+                <p className="text-sm text-foreground leading-relaxed">&ldquo;{t.quote}&rdquo;</p>
+                <p className="text-xs text-muted">&mdash; {t.author}</p>
               </div>
             ))}
           </div>

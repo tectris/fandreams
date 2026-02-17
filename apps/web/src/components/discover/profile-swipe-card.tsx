@@ -13,6 +13,7 @@ import {
   Flame,
   ChevronUp,
   Image as ImageIcon,
+  ShieldCheck,
 } from 'lucide-react'
 
 interface ProfileSwipeCardProps {
@@ -71,10 +72,17 @@ export function ProfileSwipeCard({ profile, onViewPosts }: ProfileSwipeCardProps
               )}
             </div>
 
-            {/* Category badge */}
-            <Badge variant="primary" className="text-sm px-4 py-1">
-              {profile.category}
-            </Badge>
+            {/* Category + Role badge */}
+            <div className="flex items-center gap-2">
+              <Badge variant="primary" className="text-sm px-4 py-1">
+                {profile.category}
+              </Badge>
+              {profile.role === 'admin' && (
+                <Badge variant="error" className="text-sm px-4 py-1">
+                  <ShieldCheck className="w-3 h-3" /> Admin
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
 

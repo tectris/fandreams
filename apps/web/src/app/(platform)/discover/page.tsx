@@ -5,7 +5,8 @@ import { motion, AnimatePresence, type PanInfo } from 'framer-motion'
 import { ProfileSwipeCard } from '@/components/discover/profile-swipe-card'
 import { PostViewer } from '@/components/discover/post-viewer'
 import { mockProfiles } from '@/lib/mock-profiles'
-import { ChevronUp, ChevronDown } from 'lucide-react'
+import { ChevronUp, ChevronDown, ArrowLeft } from 'lucide-react'
+import Link from 'next/link'
 
 const SWIPE_THRESHOLD = 60
 
@@ -117,6 +118,17 @@ export default function DiscoverSwipePage() {
       ref={containerRef}
       className="fixed inset-0 z-30 bg-background overflow-hidden"
     >
+      {/* Back button */}
+      {!viewingPosts && (
+        <Link
+          href="/explore"
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-2 rounded-full bg-surface/70 backdrop-blur-sm border border-border text-sm font-medium text-foreground hover:bg-surface transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Voltar
+        </Link>
+      )}
+
       {/* Main profile swipe area */}
       <div className="relative w-full h-full">
         <AnimatePresence initial={false} custom={direction} mode="popLayout">
