@@ -236,17 +236,19 @@ export async function setPageContent(key: string, title: string, content: string
 
 export async function getSeoSettings() {
   const logoUrl = await getSetting<string | null>('platform_logo_url', null)
+  const heroVideoUrl = await getSetting<string | null>('platform_hero_video_url', null)
   const keywords = await getSetting<string>('seo_keywords', '')
   const pixelCode = await getSetting<string>('seo_pixel_code', '')
   const googleAdsCode = await getSetting<string>('seo_google_ads_code', '')
   const headScripts = await getSetting<string>('seo_head_scripts', '')
 
-  return { logoUrl, keywords, pixelCode, googleAdsCode, headScripts }
+  return { logoUrl, heroVideoUrl, keywords, pixelCode, googleAdsCode, headScripts }
 }
 
 export async function updateSeoSettings(
   updates: {
     logoUrl?: string
+    heroVideoUrl?: string | null
     keywords?: string
     pixelCode?: string
     googleAdsCode?: string
@@ -255,6 +257,7 @@ export async function updateSeoSettings(
   adminId: string,
 ) {
   if (updates.logoUrl !== undefined) await setSetting('platform_logo_url', updates.logoUrl, adminId)
+  if (updates.heroVideoUrl !== undefined) await setSetting('platform_hero_video_url', updates.heroVideoUrl, adminId)
   if (updates.keywords !== undefined) await setSetting('seo_keywords', updates.keywords, adminId)
   if (updates.pixelCode !== undefined) await setSetting('seo_pixel_code', updates.pixelCode, adminId)
   if (updates.googleAdsCode !== undefined) await setSetting('seo_google_ads_code', updates.googleAdsCode, adminId)
