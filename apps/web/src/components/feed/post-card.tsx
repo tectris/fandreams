@@ -41,6 +41,11 @@ interface PostCardProps {
     ppvPrice?: string | null
     isPinned?: boolean
     isVisible?: boolean
+    categoryName?: string | null
+    categorySlug?: string | null
+    categoryIsAdult?: boolean | null
+    subcategory?: string | null
+    tags?: string[] | null
     likeCount: number
     commentCount: number
     shareCount?: number
@@ -508,6 +513,26 @@ export function PostCard({
             )}
           </div>
         )
+      )}
+
+      {/* Category & Tags */}
+      {(post.categoryName || (post.tags && post.tags.length > 0)) && (
+        <div className="px-4 pb-3 flex flex-wrap items-center gap-1.5">
+          {post.categoryName && (
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-[11px] font-medium ${post.categoryIsAdult ? 'bg-error/10 text-error' : 'bg-surface-light text-muted'}`}>
+              {post.categoryName}
+              {post.subcategory && <span className="ml-1 opacity-70">/ {post.subcategory}</span>}
+            </span>
+          )}
+          {post.tags && post.tags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center px-1.5 py-0.5 rounded-sm bg-primary/5 text-primary/70 text-[11px]"
+            >
+              #{tag}
+            </span>
+          ))}
+        </div>
       )}
 
       {/* Media */}

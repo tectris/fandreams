@@ -2,6 +2,7 @@ import { neon } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-http'
 import * as users from './schema/users'
 import * as creators from './schema/creators'
+import * as categories from './schema/categories'
 import * as posts from './schema/posts'
 import * as subscriptions from './schema/subscriptions'
 import * as payments from './schema/payments'
@@ -21,6 +22,7 @@ import * as platform from './schema/platform'
 export const schema = {
   ...users,
   ...creators,
+  ...categories,
   ...posts,
   ...subscriptions,
   ...payments,
@@ -47,6 +49,7 @@ export type Database = ReturnType<typeof createDb>
 
 export * from './schema/users'
 export * from './schema/creators'
+export * from './schema/categories'
 export * from './schema/posts'
 export * from './schema/subscriptions'
 export * from './schema/payments'
