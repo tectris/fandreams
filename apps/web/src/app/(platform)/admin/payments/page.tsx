@@ -17,7 +17,8 @@ import {
 import { toast } from 'sonner'
 
 const KNOWN_GATEWAYS = [
-  { id: 'mercadopago', label: 'MercadoPago', description: 'PIX e Cartao de Credito', envVars: 'MERCADOPAGO_ACCESS_TOKEN, MERCADOPAGO_SANDBOX' },
+  { id: 'openpix', label: 'Woovi (OpenPix)', description: 'PIX a vista e Assinaturas recorrentes via PIX', envVars: 'OPENPIX_APP_ID, OPENPIX_WEBHOOK_SECRET, OPENPIX_SANDBOX' },
+  { id: 'mercadopago', label: 'MercadoPago', description: 'Cartao de Credito e Assinaturas via cartao', envVars: 'MERCADOPAGO_ACCESS_TOKEN, MERCADOPAGO_SANDBOX' },
   { id: 'nowpayments', label: 'NOWPayments', description: 'Bitcoin, USDT, ETH e outras criptos', envVars: 'NOWPAYMENTS_API_KEY, NOWPAYMENTS_IPN_SECRET, NOWPAYMENTS_SANDBOX' },
   { id: 'paypal', label: 'PayPal', description: 'Pagamentos via PayPal', envVars: 'PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_SANDBOX' },
 ]
