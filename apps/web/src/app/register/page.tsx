@@ -12,11 +12,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Flame } from 'lucide-react'
 import { toast } from 'sonner'
+import { PageContentModal } from '@/components/page-content-modal'
 
 export default function RegisterPage() {
   const router = useRouter()
   const setUser = useAuthStore((s) => s.setUser)
   const [loading, setLoading] = useState(false)
+  const [pageModal, setPageModal] = useState<{ key: string; title: string } | null>(null)
 
   const {
     register: reg,
@@ -109,15 +111,30 @@ export default function RegisterPage() {
 
         <p className="text-center text-xs text-muted mt-4">
           Ao criar sua conta, voce concorda com nossos{' '}
-          <Link href="#" className="underline">
+          <button
+            type="button"
+            onClick={() => setPageModal({ key: 'terms_and_conditions', title: 'Termos de Uso' })}
+            className="underline hover:text-foreground transition-colors"
+          >
             Termos de uso
-          </Link>{' '}
+          </button>{' '}
           e{' '}
-          <Link href="#" className="underline">
+          <button
+            type="button"
+            onClick={() => setPageModal({ key: 'privacy_policy', title: 'Politica de Privacidade' })}
+            className="underline hover:text-foreground transition-colors"
+          >
             Politica de privacidade
-          </Link>
+          </button>
         </p>
       </div>
+
+      <PageContentModal
+        open={!!pageModal}
+        onClose={() => setPageModal(null)}
+        pageKey={pageModal?.key || ''}
+        fallbackTitle={pageModal?.title || ''}
+      />
     </div>
   )
 }

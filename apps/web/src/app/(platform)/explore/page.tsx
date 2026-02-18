@@ -100,7 +100,7 @@ export default function ExplorePage() {
         </div>
         <div className="flex-1">
           <p className="font-semibold text-sm">Descobrir perfis</p>
-          <p className="text-xs text-muted">Deslize entre perfis no estilo Tinder</p>
+          <p className="text-xs text-muted">Deslize entre perfis com efeito Swipe</p>
         </div>
         <span className="text-primary text-sm font-medium">Explorar →</span>
       </Link>

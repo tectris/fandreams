@@ -359,7 +359,7 @@ export const mockProfiles: MockProfile[] = [
     posts: [
       {
         id: 'post-4a',
-        contentText: 'Nova funcionalidade: Descobrir Perfis no estilo Tinder! Deslize para cima e para baixo para conhecer novos criadores.',
+        contentText: 'Nova funcionalidade: Descobrir Perfis com efeito Swipe! Deslize para cima e para baixo para conhecer novos criadores.',
         media: [
           {
             id: 'media-4a-1',
