@@ -10,9 +10,10 @@ import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
-import { ImagePlus, Video, Send, Eye, Lock, DollarSign, X, Loader2, Shield, ArrowRight, Star, Tag, FolderOpen } from 'lucide-react'
+import { ImagePlus, Video, Send, Eye, Lock, DollarSign, X, Loader2, Shield, ArrowRight, Star, Tag, FolderOpen, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/store'
+import { ImageEditor } from '@/components/image-editor'
 import Link from 'next/link'
 
 type UploadedMedia = {
@@ -118,6 +119,8 @@ export default function CreateContentPage() {
   const [uploading, setUploading] = useState(false)
   const [mediaFiles, setMediaFiles] = useState<UploadedMedia[]>([])
   const [coverIndex, setCoverIndex] = useState(0)
+  const [editingImage, setEditingImage] = useState<File | null>(null)
+  const [pendingImages, setPendingImages] = useState<File[]>([])
   const imageInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
 
@@ -166,8 +169,32 @@ export default function CreateContentPage() {
   }
 
   async function handleMultiImageUpload(files: FileList) {
-    for (const file of Array.from(files)) {
-      await handleFileUpload(file)
+    const imageFiles = Array.from(files).filter((f) => f.type.startsWith('image/'))
+    if (imageFiles.length === 0) return
+    // Queue all images; open editor for the first one
+    setPendingImages(imageFiles.slice(1))
+    setEditingImage(imageFiles[0])
+  }
+
+  function handleEditorSave(editedFile: File) {
+    // Upload the edited image
+    handleFileUpload(editedFile)
+    setEditingImage(null)
+    // Open editor for next pending image if any
+    if (pendingImages.length > 0) {
+      const [next, ...rest] = pendingImages
+      setPendingImages(rest)
+      setTimeout(() => setEditingImage(next), 100)
+    }
+  }
+
+  function handleEditorCancel() {
+    setEditingImage(null)
+    // Skip to next pending image or close
+    if (pendingImages.length > 0) {
+      const [next, ...rest] = pendingImages
+      setPendingImages(rest)
+      setTimeout(() => setEditingImage(next), 100)
     }
   }
 
@@ -435,6 +462,17 @@ export default function CreateContentPage() {
           </form>
         </CardContent>
       </Card>
+
+      {/* Image Editor Overlay */}
+      {editingImage && (
+        <ImageEditor
+          file={editingImage}
+          userTier={(user as any)?.fanTier || 'bronze'}
+          creatorUsername={user?.username}
+          onSave={handleEditorSave}
+          onCancel={handleEditorCancel}
+        />
+      )}
     </div>
   )
 }

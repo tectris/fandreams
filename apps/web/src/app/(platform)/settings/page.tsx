@@ -15,6 +15,7 @@ import { StreakCounter } from '@/components/gamification/streak-counter'
 import { LevelBadge } from '@/components/gamification/level-badge'
 import { Settings, User, LogOut, KeyRound, Shield, CheckCircle2, Clock, XCircle, ArrowRight, Camera, ImagePlus } from 'lucide-react'
 import { toast } from 'sonner'
+import { ImageEditor } from '@/components/image-editor'
 import Link from 'next/link'
 
 export default function SettingsPage() {
@@ -22,6 +23,8 @@ export default function SettingsPage() {
   const queryClient = useQueryClient()
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
+  const [editingAvatarFile, setEditingAvatarFile] = useState<File | null>(null)
+  const [editingCoverFile, setEditingCoverFile] = useState<File | null>(null)
 
   const { data: profile } = useQuery({
     queryKey: ['my-profile'],
@@ -98,7 +101,8 @@ export default function SettingsPage() {
       toast.error('Imagem deve ter no maximo 5MB')
       return
     }
-    avatarMutation.mutate(file)
+    setEditingAvatarFile(file)
+    e.target.value = ''
   }
 
   function handleCoverChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -112,7 +116,8 @@ export default function SettingsPage() {
       toast.error('Imagem deve ter no maximo 10MB')
       return
     }
-    coverMutation.mutate(file)
+    setEditingCoverFile(file)
+    e.target.value = ''
   }
 
   function handlePasswordChange(e: React.FormEvent) {
@@ -370,6 +375,34 @@ export default function SettingsPage() {
         <LogOut className="w-4 h-4 mr-2" />
         Sair da conta
       </Button>
+
+      {/* Image Editor: Avatar */}
+      {editingAvatarFile && (
+        <ImageEditor
+          file={editingAvatarFile}
+          userTier={(profile?.gamification as any)?.fanTier || 'bronze'}
+          creatorUsername={profile?.username}
+          onSave={(editedFile) => {
+            setEditingAvatarFile(null)
+            avatarMutation.mutate(editedFile)
+          }}
+          onCancel={() => setEditingAvatarFile(null)}
+        />
+      )}
+
+      {/* Image Editor: Cover */}
+      {editingCoverFile && (
+        <ImageEditor
+          file={editingCoverFile}
+          userTier={(profile?.gamification as any)?.fanTier || 'bronze'}
+          creatorUsername={profile?.username}
+          onSave={(editedFile) => {
+            setEditingCoverFile(null)
+            coverMutation.mutate(editedFile)
+          }}
+          onCancel={() => setEditingCoverFile(null)}
+        />
+      )}
     </div>
   )
 }
