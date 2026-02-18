@@ -19,6 +19,7 @@ import { Users, Calendar, Crown, Star, Camera, ImagePlus, UserPlus, UserCheck, S
 import { toast } from 'sonner'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { ImageEditor } from '@/components/image-editor'
 
 export default function CreatorProfilePage() {
   const { username } = useParams<{ username: string }>()
@@ -38,6 +39,8 @@ export default function CreatorProfilePage() {
   const [affiliateCopied, setAffiliateCopied] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
+  const [editingAvatarFile, setEditingAvatarFile] = useState<File | null>(null)
+  const [editingCoverFile, setEditingCoverFile] = useState<File | null>(null)
   const searchParams = useSearchParams()
   const subscriptionStatus = searchParams.get('subscription')
   const refCode = searchParams.get('ref')
@@ -268,7 +271,8 @@ export default function CreatorProfilePage() {
       toast.error('Imagem deve ter no maximo 5MB')
       return
     }
-    avatarMutation.mutate(file)
+    setEditingAvatarFile(file)
+    e.target.value = ''
   }
 
   function handleCoverChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -282,7 +286,8 @@ export default function CreatorProfilePage() {
       toast.error('Imagem deve ter no maximo 10MB')
       return
     }
-    coverMutation.mutate(file)
+    setEditingCoverFile(file)
+    e.target.value = ''
   }
 
   function handleFollow() {
@@ -858,6 +863,34 @@ export default function CreatorProfilePage() {
             creatorDisplayName: ppvPost.creatorDisplayName,
             contentText: ppvPost.contentText,
           }}
+        />
+      )}
+
+      {/* Image Editor: Avatar */}
+      {editingAvatarFile && (
+        <ImageEditor
+          file={editingAvatarFile}
+          userTier={(profile.gamification as any)?.fanTier || 'bronze'}
+          creatorUsername={profile.username}
+          onSave={(editedFile) => {
+            setEditingAvatarFile(null)
+            avatarMutation.mutate(editedFile)
+          }}
+          onCancel={() => setEditingAvatarFile(null)}
+        />
+      )}
+
+      {/* Image Editor: Cover */}
+      {editingCoverFile && (
+        <ImageEditor
+          file={editingCoverFile}
+          userTier={(profile.gamification as any)?.fanTier || 'bronze'}
+          creatorUsername={profile.username}
+          onSave={(editedFile) => {
+            setEditingCoverFile(null)
+            coverMutation.mutate(editedFile)
+          }}
+          onCancel={() => setEditingCoverFile(null)}
         />
       )}
 
