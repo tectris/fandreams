@@ -1,16 +1,16 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { useQueryClient } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { createPostSchema, type CreatePostInput } from '@fandreams/shared'
+import { createPostSchema, type CreatePostInput, MAX_TAGS_PER_POST } from '@fandreams/shared'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
-import { ImagePlus, Video, Send, Eye, Lock, DollarSign, X, Loader2, Shield, ArrowRight, Star } from 'lucide-react'
+import { ImagePlus, Video, Send, Eye, Lock, DollarSign, X, Loader2, Shield, ArrowRight, Star, Tag, FolderOpen } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/lib/store'
 import Link from 'next/link'
@@ -19,6 +19,94 @@ type UploadedMedia = {
   key: string
   mediaType: string
   previewUrl: string
+}
+
+type Category = {
+  id: string
+  name: string
+  slug: string
+  isAdult: boolean
+  sortOrder: number
+}
+
+function TagInput({
+  value = [],
+  onChange,
+  max = MAX_TAGS_PER_POST,
+}: {
+  value?: string[]
+  onChange: (tags: string[]) => void
+  max?: number
+}) {
+  const [input, setInput] = useState('')
+
+  const addTag = useCallback(() => {
+    const tag = input.trim().toLowerCase()
+    if (!tag || tag.length < 2 || tag.length > 25) return
+    if (value.includes(tag)) {
+      toast.error('Tag ja adicionada')
+      return
+    }
+    if (value.length >= max) {
+      toast.error(`Maximo de ${max} tags`)
+      return
+    }
+    onChange([...value, tag])
+    setInput('')
+  }, [input, value, onChange, max])
+
+  function removeTag(index: number) {
+    onChange(value.filter((_, i) => i !== index))
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault()
+      addTag()
+    }
+    if (e.key === 'Backspace' && !input && value.length > 0) {
+      removeTag(value.length - 1)
+    }
+  }
+
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-2">
+        <Tag className="w-4 h-4 inline mr-1" />
+        Tags
+        <span className="text-muted font-normal ml-1">({value.length}/{max})</span>
+      </label>
+      <div className="flex flex-wrap gap-1.5 p-2.5 rounded-sm bg-surface-light border border-border min-h-[42px] focus-within:ring-2 focus-within:ring-primary">
+        {value.map((tag, i) => (
+          <span
+            key={tag}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm bg-primary/10 text-primary text-xs font-medium"
+          >
+            #{tag}
+            <button
+              type="button"
+              onClick={() => removeTag(i)}
+              className="hover:text-error transition-colors"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </span>
+        ))}
+        {value.length < max && (
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value.replace(/[,]/g, ''))}
+            onKeyDown={handleKeyDown}
+            onBlur={addTag}
+            placeholder={value.length === 0 ? 'Digite e pressione Enter...' : ''}
+            className="flex-1 min-w-[120px] bg-transparent text-sm text-foreground placeholder:text-muted focus:outline-none"
+          />
+        )}
+      </div>
+      <p className="text-xs text-muted mt-1">Pressione Enter ou virgula para adicionar</p>
+    </div>
+  )
 }
 
 export default function CreateContentPage() {
@@ -33,14 +121,26 @@ export default function CreateContentPage() {
   const imageInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
 
+  const { data: categoriesData } = useQuery({
+    queryKey: ['content-categories'],
+    queryFn: async () => {
+      const res = await api.get<{ categories: Category[] }>('/categories')
+      return res.data.categories
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const categories = categoriesData || []
+
   const {
     register,
     handleSubmit,
     watch,
+    control,
     formState: { errors },
   } = useForm<CreatePostInput>({
     resolver: zodResolver(createPostSchema),
-    defaultValues: { visibility: 'public', postType: 'regular' },
+    defaultValues: { visibility: 'public', postType: 'regular', tags: [] },
   })
 
   const visibility = watch('visibility')
@@ -95,6 +195,9 @@ export default function CreateContentPage() {
       }
       const payload: CreatePostInput = {
         ...data,
+        tags: data.tags && data.tags.length > 0 ? data.tags : undefined,
+        categoryId: data.categoryId || undefined,
+        subcategory: data.subcategory?.trim() || undefined,
         media:
           ordered.length > 0
             ? ordered.map((m) => ({ key: api.getMediaUrl(m.key), mediaType: m.mediaType }))
@@ -239,6 +342,48 @@ export default function CreateContentPage() {
                 )}
               </div>
             )}
+
+            {/* Category & Subcategory */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  <FolderOpen className="w-4 h-4 inline mr-1" />
+                  Categoria
+                </label>
+                <select
+                  {...register('categoryId')}
+                  className="w-full px-3 py-2.5 rounded-sm bg-surface-light border border-border text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
+                >
+                  <option value="">Selecione (opcional)</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Subcategoria</label>
+                <input
+                  {...register('subcategory')}
+                  placeholder="Ex: Yoga matinal, Cosplay..."
+                  maxLength={30}
+                  className="w-full px-3 py-2.5 rounded-sm bg-surface-light border border-border text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            </div>
+
+            {/* Tags */}
+            <Controller
+              name="tags"
+              control={control}
+              render={({ field }) => (
+                <TagInput
+                  value={field.value || []}
+                  onChange={field.onChange}
+                />
+              )}
+            />
 
             {/* Visibility */}
             <div>

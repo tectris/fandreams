@@ -12,6 +12,7 @@ import { auditLog } from './middleware/auditLog'
 import auth from './routes/auth'
 import usersRoute from './routes/users'
 import creators from './routes/creators'
+import categoriesRoute from './routes/categories'
 import postsRoute from './routes/posts'
 import subscriptionsRoute from './routes/subscriptions'
 import fancoins from './routes/fancoins'
@@ -120,6 +121,7 @@ app.use('/platform/otp/*', auditLog)
 app.route('/auth', auth)
 app.route('/users', usersRoute)
 app.route('/creators', creators)
+app.route('/categories', categoriesRoute)
 app.route('/posts', postsRoute)
 app.route('/subscriptions', subscriptionsRoute)
 app.route('/fancoins', fancoins)
