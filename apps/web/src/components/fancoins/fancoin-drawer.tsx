@@ -125,6 +125,20 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
     enabled: open && tab === 'send' && sendQuery.length >= 2 && !selectedUser,
   })
 
+  const debouncedSendAmount = useMemo(() => {
+    const n = Number(sendAmount)
+    return n > 0 && Number.isInteger(n) ? n : 0
+  }, [sendAmount])
+
+  const { data: transferPreviewData, isFetching: isLoadingPreview } = useQuery({
+    queryKey: ['transfer-preview', debouncedSendAmount],
+    queryFn: () => api.get<any>(`/fancoins/transfer-preview?amount=${debouncedSendAmount}`),
+    enabled: open && tab === 'send' && debouncedSendAmount > 0 && !!selectedUser,
+  })
+  const transferPreview = transferPreviewData?.data
+
+  const [feeAccepted, setFeeAccepted] = useState(false)
+
   const transferMutation = useMutation({
     mutationFn: async (params: { toUsername: string; amount: number; message?: string }) => {
       const res = await api.post<any>('/fancoins/transfer', params)
@@ -236,6 +250,7 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
       setSendMessage('')
       setSelectedUser(null)
       setSendState('search')
+      setFeeAccepted(false)
       if (pollRef.current) {
         clearInterval(pollRef.current)
         pollRef.current = null
@@ -300,6 +315,7 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
     setSendMessage('')
     setSelectedUser(null)
     setSendState('search')
+    setFeeAccepted(false)
   }
 
   const wallet = walletData?.data
@@ -744,16 +760,46 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
                           type="number"
                           placeholder="Ex: 500"
                           value={sendAmount}
-                          onChange={(e) => setSendAmount(e.target.value)}
+                          onChange={(e) => { setSendAmount(e.target.value); setFeeAccepted(false) }}
                           min={1}
                           step="1"
                         />
-                        {sendAmount && Number(sendAmount) > 0 && (
-                          <p className="text-xs text-muted mt-1">
-                            ≈ {formatCurrency(Number(sendAmount) * fancoinToBrl)}
-                          </p>
-                        )}
                       </div>
+
+                      {/* Fee preview */}
+                      {transferPreview && debouncedSendAmount > 0 && (
+                        <div className="p-3 bg-surface-light border border-border/50 rounded-sm space-y-1.5 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-muted">Voce envia</span>
+                            <span className="font-medium">{transferPreview.amount.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted">Taxa P2P ({transferPreview.platformFeePercent}%)</span>
+                            <span className="text-error">-{transferPreview.platformFee.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted">Fundo eco ({transferPreview.ecosystemFundPercent}%)</span>
+                            <span className="text-error">-{transferPreview.ecosystemFund.toLocaleString()}</span>
+                          </div>
+                          <div className="border-t border-border/50 pt-1.5 flex justify-between">
+                            <span className="font-medium text-foreground">Recebe</span>
+                            <span className="font-bold text-success">{transferPreview.receiverGets.toLocaleString()} FanCoins</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted">≈</span>
+                            <span className="text-muted">{formatCurrency(transferPreview.receiverGetsBrl)}</span>
+                          </div>
+                          {transferPreview.tierMultiplier > 1 && (
+                            <p className="text-primary">Tier bonus: {transferPreview.tierMultiplier}x</p>
+                          )}
+                        </div>
+                      )}
+
+                      {isLoadingPreview && debouncedSendAmount > 0 && (
+                        <div className="flex items-center gap-2 text-xs text-muted py-1">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Calculando taxas...
+                        </div>
+                      )}
 
                       <div>
                         <label className="text-xs font-medium text-muted mb-1 block">Mensagem (opcional)</label>
@@ -768,18 +814,29 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
                         <p className="text-xs text-muted mt-0.5 text-right">{sendMessage.length}/200</p>
                       </div>
 
+                      {/* Fee acceptance */}
+                      {transferPreview && debouncedSendAmount > 0 && (
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={feeAccepted}
+                            onChange={(e) => setFeeAccepted(e.target.checked)}
+                            className="w-4 h-4 mt-0.5 rounded border-border text-primary"
+                          />
+                          <span className="text-xs text-muted">
+                            Concordo com a taxa de {transferPreview.totalFeesPercent}%. Destinatario recebe <span className="font-medium text-success">{transferPreview.receiverGets.toLocaleString()}</span> FanCoins.
+                          </span>
+                        </label>
+                      )}
+
                       <Button
                         className="w-full"
-                        disabled={!sendAmount || Number(sendAmount) <= 0}
+                        disabled={!sendAmount || Number(sendAmount) <= 0 || !feeAccepted}
                         onClick={handleSendTransfer}
                       >
                         <Send className="w-4 h-4 mr-2" />
-                        Enviar {sendAmount ? Number(sendAmount).toLocaleString() : ''} FanCoins
+                        Confirmar envio
                       </Button>
-
-                      <p className="text-xs text-muted text-center">
-                        Uma pequena taxa de plataforma sera aplicada.
-                      </p>
                     </>
                   )}
                 </>

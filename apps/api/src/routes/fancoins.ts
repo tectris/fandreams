@@ -127,6 +127,24 @@ fancoins.get('/search-user', authMiddleware, async (c) => {
   return success(c, results)
 })
 
+// P2P transfer fee preview
+fancoins.get('/transfer-preview', authMiddleware, async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const amount = Number(c.req.query('amount'))
+
+    if (!amount || !Number.isInteger(amount) || amount <= 0) {
+      return error(c, 400, 'INVALID', 'Informe um valor inteiro positivo')
+    }
+
+    const preview = await fancoinService.previewTransfer(userId, amount)
+    return success(c, preview)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
 // P2P transfer between wallets
 const transferSchema = z.object({
   toUsername: z.string().min(1).max(50),
