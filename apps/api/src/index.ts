@@ -119,6 +119,7 @@ app.use('/pitch/*', auditLog)
 app.use('/commitments/*', auditLog)
 app.use('/platform/admin/*', auditLog)
 app.use('/platform/otp/*', auditLog)
+app.use('/platform/documents/accept', auditLog)
 
 app.route('/auth', auth)
 app.route('/users', usersRoute)

@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { authMiddleware, adminMiddleware } from '../middleware/auth'
 import { sensitiveRateLimit } from '../middleware/rateLimit'
 import * as platformService from '../services/platform.service'
+import * as docAcceptanceService from '../services/document-acceptance.service'
 import { success, error } from '../utils/response'
 import { AppError } from '../services/auth.service'
 
@@ -131,6 +132,122 @@ platform.post('/otp/verify', authMiddleware, async (c) => {
 
     await platformService.verifyOtpCode(userId, code, purpose)
     return success(c, { verified: true })
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+// ── Document Acceptance Routes (authenticated) ──
+
+// Get list of all legal documents with user's acceptance status
+platform.get('/documents', authMiddleware, async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const documents = await docAcceptanceService.getUserAcceptances(userId)
+    return success(c, { documents })
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+// Get list of all legal documents metadata (no auth needed - for KYC pre-acceptance)
+platform.get('/documents/list', async (c) => {
+  try {
+    return success(c, { documents: docAcceptanceService.LEGAL_DOCUMENTS })
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+// Accept documents (batch)
+platform.post('/documents/accept', authMiddleware, async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const { documentKeys } = await c.req.json()
+
+    if (!documentKeys || !Array.isArray(documentKeys) || documentKeys.length === 0) {
+      return error(c, 400, 'MISSING_FIELDS', 'documentKeys e obrigatorio')
+    }
+
+    const ip = c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown'
+    const userAgent = c.req.header('user-agent') || ''
+
+    const results = await docAcceptanceService.acceptDocuments(userId, documentKeys, ip, userAgent)
+    return success(c, { accepted: results.length, documents: results })
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+// Check if user has accepted all required documents
+platform.get('/documents/check-required', authMiddleware, async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const allAccepted = await docAcceptanceService.hasAcceptedAllRequired(userId)
+    const requiredKeys = docAcceptanceService.getRequiredDocumentKeys()
+    return success(c, { allAccepted, requiredCount: requiredKeys.length })
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+// Get document content with acceptance metadata for PDF generation
+platform.get('/documents/:key/pdf-data', authMiddleware, async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const key = c.req.param('key')
+
+    // Get document content
+    const content = await platformService.getPageContent(key)
+    if (!content) {
+      return error(c, 404, 'NOT_FOUND', 'Documento nao encontrado')
+    }
+
+    // Get user's acceptance for this document
+    const acceptances = await docAcceptanceService.getUserAcceptances(userId)
+    const acceptance = acceptances.find((a) => a.key === key)
+
+    // Get user email for PDF
+    const { db } = await import('../config/database')
+    const { users } = await import('@fandreams/database')
+    const { eq } = await import('drizzle-orm')
+    const [user] = await db
+      .select({ email: users.email, displayName: users.displayName, username: users.username })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+
+    const verificationHash = acceptance?.acceptedAt
+      ? docAcceptanceService.generateVerificationHash(
+          userId,
+          key,
+          acceptance.acceptedAt,
+          'audit',
+        )
+      : null
+
+    return success(c, {
+      title: content.title,
+      content: content.content,
+      updatedAt: content.updatedAt,
+      acceptance: acceptance?.accepted
+        ? {
+            acceptedAt: acceptance.acceptedAt,
+            documentVersion: acceptance.documentVersion,
+            verificationHash,
+          }
+        : null,
+      user: {
+        email: user?.email,
+        displayName: user?.displayName,
+        username: user?.username,
+      },
+    })
   } catch (e) {
     if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
     throw e

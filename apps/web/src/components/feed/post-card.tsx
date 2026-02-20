@@ -340,7 +340,7 @@ export function PostCard({
   }
 
   return (
-    <Card className={`mb-6 ${isHidden ? 'opacity-50 grayscale' : ''}`}>
+    <Card className={`mb-6 overflow-visible ${isHidden ? 'opacity-50 grayscale' : ''}`}>
       {/* Hidden indicator */}
       {isHidden && isOwner && (
         <div className="px-4 pt-3 flex items-center gap-2 text-muted">
