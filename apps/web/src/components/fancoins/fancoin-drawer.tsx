@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
@@ -10,7 +10,9 @@ import { Badge } from '@/components/ui/badge'
 import {
   X, Coins, ShoppingCart, ArrowRightLeft, ArrowDownToLine,
   QrCode, CreditCard, Loader2, CheckCircle2, ExternalLink, Copy, ArrowLeftRight,
+  ChevronDown,
 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import Link from 'next/link'
@@ -45,6 +47,23 @@ type PixData = {
   expiresAt: string
 }
 
+function groupTransactionsByMonth(transactions: Transaction[]) {
+  const groups: Record<string, Transaction[]> = {}
+  for (const tx of transactions) {
+    const date = new Date(tx.createdAt)
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    if (!groups[key]) groups[key] = []
+    groups[key].push(tx)
+  }
+  return Object.entries(groups)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([key, txs]) => {
+      const [year, month] = key.split('-')
+      const label = new Date(Number(year), Number(month) - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+      return { key, label: label.charAt(0).toUpperCase() + label.slice(1), transactions: txs }
+    })
+}
+
 interface FancoinDrawerProps {
   open: boolean
   onClose: () => void
@@ -61,6 +80,8 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
   const [pixData, setPixData] = useState<PixData | null>(null)
   const popupRef = useRef<Window | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
 
   const isCreator = user?.role === 'creator' || user?.role === 'admin'
 
@@ -212,6 +233,24 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
   const wallet = walletData?.data
   const transactions = transactionsData?.data ?? []
   const packages = packagesData?.data ?? []
+
+  const groupedTransactions = useMemo(() => {
+    const groups = groupTransactionsByMonth(transactions)
+    // Auto-expand the most recent month
+    if (groups.length > 0 && expandedMonths.size === 0) {
+      setExpandedMonths(new Set([groups[0].key]))
+    }
+    return groups
+  }, [transactions])
+
+  function toggleMonth(key: string) {
+    setExpandedMonths((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
   const fancoinToBrl = wallet?.fancoinToBrl || 0.01
   const balanceBrl = Number(wallet?.balance || 0) * fancoinToBrl
 
@@ -528,30 +567,67 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
 
           {tab === 'history' && (
             <div className="space-y-2">
-              {transactions.length > 0 ? (
-                transactions.map((tx) => (
-                  <div
-                    key={tx.id}
-                    className="flex items-center justify-between py-3 border-b border-border/50"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">
-                        <TransactionDescription text={tx.description || tx.type} />
-                      </p>
-                      <p className="text-xs text-muted">
-                        {new Date(tx.createdAt).toLocaleDateString('pt-BR')}
-                      </p>
+              {groupedTransactions.length > 0 ? (
+                groupedTransactions.map((group) => {
+                  const isOpen = expandedMonths.has(group.key)
+                  const total = group.transactions.reduce((sum, tx) => sum + Number(tx.amount), 0)
+                  return (
+                    <div key={group.key} className="border border-border/50 rounded-sm overflow-hidden">
+                      <button
+                        onClick={() => toggleMonth(group.key)}
+                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-surface-light transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ChevronDown
+                            className={`w-4 h-4 text-muted transition-transform ${isOpen ? '' : '-rotate-90'}`}
+                          />
+                          <span className="text-sm font-medium">{group.label}</span>
+                          <span className="text-xs text-muted">({group.transactions.length})</span>
+                        </div>
+                        <span className={`text-xs font-bold ${total >= 0 ? 'text-success' : 'text-error'}`}>
+                          {total >= 0 ? '+' : ''}{total.toLocaleString()}
+                        </span>
+                      </button>
+                      <AnimatePresence initial={false}>
+                        {isOpen && (
+                          <motion.div
+                            initial={{ height: 0 }}
+                            animate={{ height: 'auto' }}
+                            exit={{ height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="border-t border-border/50">
+                              {group.transactions.map((tx) => (
+                                <div
+                                  key={tx.id}
+                                  className="flex items-center justify-between px-3 py-2.5 border-b border-border/30 last:border-0"
+                                >
+                                  <div>
+                                    <p className="text-sm font-medium">
+                                      <TransactionDescription text={tx.description || tx.type} />
+                                    </p>
+                                    <p className="text-xs text-muted">
+                                      {new Date(tx.createdAt).toLocaleDateString('pt-BR')}
+                                    </p>
+                                  </div>
+                                  <span
+                                    className={`text-sm font-bold ${
+                                      Number(tx.amount) >= 0 ? 'text-success' : 'text-error'
+                                    }`}
+                                  >
+                                    {Number(tx.amount) >= 0 ? '+' : ''}
+                                    {Number(tx.amount).toLocaleString()}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
-                    <span
-                      className={`text-sm font-bold ${
-                        Number(tx.amount) >= 0 ? 'text-success' : 'text-error'
-                      }`}
-                    >
-                      {Number(tx.amount) >= 0 ? '+' : ''}
-                      {Number(tx.amount).toLocaleString()}
-                    </span>
-                  </div>
-                ))
+                  )
+                })
               ) : (
                 <p className="text-sm text-muted text-center py-8">Nenhuma transacao ainda</p>
               )}

@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
@@ -14,12 +14,30 @@ import { formatCurrency } from '@/lib/utils'
 import {
   Coins, TrendingUp, TrendingDown, ShoppingBag, Gift, CreditCard,
   QrCode, CheckCircle2, XCircle, Clock, Loader2, Bitcoin, Wallet,
-  ArrowDownToLine, Shield, AlertTriangle, ArrowLeftRight,
+  ArrowDownToLine, Shield, AlertTriangle, ArrowLeftRight, ChevronDown,
 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
 type Provider = { id: string; label: string; methods: string[]; sandbox: boolean }
+
+function groupTransactionsByMonth(transactions: any[]) {
+  const groups: Record<string, any[]> = {}
+  for (const tx of transactions) {
+    const date = new Date(tx.createdAt)
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    if (!groups[key]) groups[key] = []
+    groups[key].push(tx)
+  }
+  return Object.entries(groups)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([key, txs]) => {
+      const [year, month] = key.split('-')
+      const label = new Date(Number(year), Number(month) - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+      return { key, label: label.charAt(0).toUpperCase() + label.slice(1), transactions: txs }
+    })
+}
 
 function WalletContent() {
   const queryClient = useQueryClient()
@@ -38,6 +56,7 @@ function WalletContent() {
   const [otpCode, setOtpCode] = useState('')
   const [otpSending, setOtpSending] = useState(false)
   const [otpVerifying, setOtpVerifying] = useState(false)
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (paymentStatus === 'success') {
@@ -205,6 +224,24 @@ function WalletContent() {
   const isPurchasing = checkoutMutation.isPending || directPurchaseMutation.isPending || customCheckoutMutation.isPending
   const isCreator = user?.role === 'creator' || user?.role === 'admin'
   const fancoinToBrl = earnings?.fancoinToBrl || 0.01
+
+  const groupedTransactions = useMemo(() => {
+    if (!transactions) return []
+    const groups = groupTransactionsByMonth(transactions)
+    if (groups.length > 0 && expandedMonths.size === 0) {
+      setExpandedMonths(new Set([groups[0].key]))
+    }
+    return groups
+  }, [transactions])
+
+  function toggleMonth(key: string) {
+    setExpandedMonths((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6">
@@ -566,23 +603,60 @@ function WalletContent() {
             </h2>
           </CardHeader>
           <CardContent>
-            {transactions && transactions.length > 0 ? (
-              <div className="space-y-2">
-                {transactions.map((tx: any) => (
-                  <div key={tx.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                    <div>
-                      <span className="text-sm font-medium">
-                        <TransactionDescription text={tx.description || tx.type} />
-                      </span>
-                      <p className="text-xs text-muted">
-                        {new Date(tx.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                      </p>
+            {groupedTransactions.length > 0 ? (
+              <div className="space-y-3">
+                {groupedTransactions.map((group) => {
+                  const isOpen = expandedMonths.has(group.key)
+                  const total = group.transactions.reduce((sum: number, tx: any) => sum + Number(tx.amount), 0)
+                  return (
+                    <div key={group.key} className="border border-border rounded-md overflow-hidden">
+                      <button
+                        onClick={() => toggleMonth(group.key)}
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-light transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ChevronDown
+                            className={`w-4 h-4 text-muted transition-transform ${isOpen ? '' : '-rotate-90'}`}
+                          />
+                          <span className="text-sm font-medium">{group.label}</span>
+                          <span className="text-xs text-muted">({group.transactions.length})</span>
+                        </div>
+                        <span className={`text-xs font-bold ${total >= 0 ? 'text-success' : 'text-error'}`}>
+                          {total >= 0 ? '+' : ''}{total.toLocaleString()}
+                        </span>
+                      </button>
+                      <AnimatePresence initial={false}>
+                        {isOpen && (
+                          <motion.div
+                            initial={{ height: 0 }}
+                            animate={{ height: 'auto' }}
+                            exit={{ height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="border-t border-border">
+                              {group.transactions.map((tx: any) => (
+                                <div key={tx.id} className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 last:border-0">
+                                  <div>
+                                    <span className="text-sm font-medium">
+                                      <TransactionDescription text={tx.description || tx.type} />
+                                    </span>
+                                    <p className="text-xs text-muted">
+                                      {new Date(tx.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                  </div>
+                                  <span className={`font-bold text-sm ${tx.amount > 0 ? 'text-success' : 'text-error'}`}>
+                                    {tx.amount > 0 ? '+' : ''}{tx.amount.toLocaleString()}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
-                    <span className={`font-bold text-sm ${tx.amount > 0 ? 'text-success' : 'text-error'}`}>
-                      {tx.amount > 0 ? '+' : ''}{tx.amount.toLocaleString()}
-                    </span>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             ) : (
               <p className="text-muted text-sm text-center py-6">Nenhuma transacao ainda</p>
