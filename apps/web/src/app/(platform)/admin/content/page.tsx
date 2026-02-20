@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import {
   FileText, Save, Eye, Cookie, MessageSquare, ArrowLeft, ShieldCheck, Scale,
   Users, ScrollText, Shield, BookOpen, AlertTriangle, Heart, BarChart3,
-  Calculator, Accessibility, ChevronDown, ChevronRight
+  Calculator, Accessibility, ChevronDown, ChevronRight, X, CheckCircle2
 } from 'lucide-react'
 import { HtmlEditor } from '@/components/html-editor'
 import { toast } from 'sonner'
@@ -230,9 +230,14 @@ export default function AdminContentPage() {
       queryClient.invalidateQueries({ queryKey: ['admin', 'page', variables.key] })
       const page = ALL_PAGES.find(p => p.key === variables.key)
       toast.success(`${page?.label || 'Pagina'} salva com sucesso!`)
+      setActiveTab('')
     },
     onError: (e: any) => toast.error(e.message),
   })
+
+  function closeEditor() {
+    setActiveTab('')
+  }
 
   const markReadMutation = useMutation({
     mutationFn: (id: string) => api.patch(`/platform/admin/contact-messages/${id}/read`),
@@ -254,9 +259,18 @@ export default function AdminContentPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <h2 className="font-bold">{page.label}</h2>
-            <Link href={page.route} target="_blank">
-              <Button variant="ghost" size="sm"><Eye className="w-4 h-4 mr-1" /> Visualizar</Button>
-            </Link>
+            <div className="flex items-center gap-1">
+              <Link href={page.route} target="_blank">
+                <Button variant="ghost" size="sm"><Eye className="w-4 h-4 mr-1" /> Visualizar</Button>
+              </Link>
+              <button
+                onClick={closeEditor}
+                className="p-1.5 rounded-md hover:bg-surface-light text-muted hover:text-foreground transition-colors"
+                title="Fechar editor"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -270,16 +284,21 @@ export default function AdminContentPage() {
             onChange={(v) => setContentFor(page.key, v)}
             placeholder={page.placeholder}
           />
-          <Button
-            onClick={() => saveMutation.mutate({
-              key: page.key,
-              title: getTitle(page.key, page.defaultTitle),
-              content: getContent(page.key),
-            })}
-            loading={saveMutation.isPending && saveMutation.variables?.key === page.key}
-          >
-            <Save className="w-4 h-4 mr-1" /> Salvar
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={() => saveMutation.mutate({
+                key: page.key,
+                title: getTitle(page.key, page.defaultTitle),
+                content: getContent(page.key),
+              })}
+              loading={saveMutation.isPending && saveMutation.variables?.key === page.key}
+            >
+              <Save className="w-4 h-4 mr-1" /> Salvar
+            </Button>
+            <Button variant="ghost" onClick={closeEditor}>
+              Cancelar
+            </Button>
+          </div>
         </CardContent>
       </Card>
     )
@@ -385,6 +404,16 @@ export default function AdminContentPage() {
         <div className="flex-1 min-w-0">
           {/* Page editor for any legal/contract/safety/resource page */}
           {activePage && renderPageEditor(activePage)}
+
+          {/* Empty state when no page is selected */}
+          {!activePage && activeTab !== 'cookies_stats' && activeTab !== 'messages' && (
+            <Card>
+              <CardContent className="py-16 text-center">
+                <FileText className="w-10 h-10 text-muted mx-auto mb-3" />
+                <p className="text-muted">Selecione uma pagina ao lado para editar</p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Cookie Consent Stats */}
           {activeTab === 'cookies_stats' && (
