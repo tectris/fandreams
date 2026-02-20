@@ -20,6 +20,13 @@ export const purchaseFancoinsSchema = z.object({
   paymentMethod: z.enum(['pix', 'credit_card']).default('pix'),
 })
 
+export const customPurchaseSchema = z.object({
+  /** Amount in BRL the user wants to spend */
+  amountBrl: z.number().min(1).max(10000),
+  paymentMethod: z.enum(['pix', 'credit_card', 'crypto', 'paypal']).default('pix'),
+  provider: z.string().default('mercadopago'),
+})
+
 export const createTierSchema = z.object({
   name: z.string().min(1).max(100),
   price: z.number().min(5).max(5000),
@@ -50,6 +57,7 @@ export const updatePromoSchema = z.object({
 export type CreateSubscriptionInput = z.infer<typeof createSubscriptionSchema>
 export type TipInput = z.infer<typeof tipSchema>
 export type PurchaseFancoinsInput = z.infer<typeof purchaseFancoinsSchema>
+export type CustomPurchaseInput = z.infer<typeof customPurchaseSchema>
 export type CreateTierInput = z.infer<typeof createTierSchema>
 export type UpdateSubscriptionPriceInput = z.infer<typeof updateSubscriptionPriceSchema>
 export type CreatePromoInput = z.infer<typeof createPromoSchema>

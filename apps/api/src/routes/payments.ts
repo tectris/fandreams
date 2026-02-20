@@ -38,6 +38,29 @@ paymentsRoute.post('/checkout/fancoins', authMiddleware, async (c) => {
   }
 })
 
+// Create a custom-amount FanCoin purchase checkout
+paymentsRoute.post('/checkout/fancoins/custom', authMiddleware, async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const { amountBrl, paymentMethod, provider } = await c.req.json()
+
+    if (!amountBrl || amountBrl <= 0) {
+      return error(c, 400, 'MISSING_AMOUNT', 'Valor em reais obrigatorio')
+    }
+
+    const result = await paymentService.createCustomFancoinPayment(
+      userId,
+      Number(amountBrl),
+      paymentMethod || 'pix',
+      provider || 'mercadopago',
+    )
+    return success(c, result)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
 // Get payment status (for polling)
 paymentsRoute.get('/status/:id', authMiddleware, async (c) => {
   try {

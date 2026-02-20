@@ -114,6 +114,53 @@ export async function getTransactions(userId: string, limit = 50) {
   return txs
 }
 
+/**
+ * Credit FanCoins from a custom (non-package) purchase.
+ * Custom purchases use the base rate with no bonus.
+ */
+export async function purchaseCustomFancoins(userId: string, amountBrl: number) {
+  const { CUSTOM_PURCHASE_LIMITS } = await import('@fandreams/shared')
+  if (amountBrl < CUSTOM_PURCHASE_LIMITS.minBrl || amountBrl > CUSTOM_PURCHASE_LIMITS.maxBrl) {
+    throw new AppError('INVALID', `Valor deve ser entre R$${CUSTOM_PURCHASE_LIMITS.minBrl} e R$${CUSTOM_PURCHASE_LIMITS.maxBrl}`, 400)
+  }
+
+  const coins = Math.floor(amountBrl / CUSTOM_PURCHASE_LIMITS.brlPerCoin)
+  if (coins < CUSTOM_PURCHASE_LIMITS.minCoins) {
+    throw new AppError('INVALID', `Minimo de ${CUSTOM_PURCHASE_LIMITS.minCoins} FanCoins`, 400)
+  }
+
+  // Ensure wallet exists
+  await getWallet(userId)
+
+  // Atomic credit: all purchased coins are non-withdrawable (bonusBalance)
+  const [updated] = await db
+    .update(fancoinWallets)
+    .set({
+      balance: sql`${fancoinWallets.balance} + ${coins}`,
+      bonusBalance: sql`${fancoinWallets.bonusBalance} + ${coins}`,
+      totalEarned: sql`${fancoinWallets.totalEarned} + ${coins}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(fancoinWallets.userId, userId))
+    .returning({ balance: fancoinWallets.balance })
+
+  const newBalance = Number(updated?.balance ?? 0)
+  const label = `${coins.toLocaleString()} FanCoins (personalizado)`
+
+  const [tx] = await db
+    .insert(fancoinTransactions)
+    .values({
+      userId,
+      type: 'purchase',
+      amount: coins,
+      balanceAfter: newBalance,
+      description: `Compra personalizada de ${label}`,
+    })
+    .returning()
+
+  return { transaction: tx, newBalance, coins, amountBrl, label }
+}
+
 export async function purchaseFancoins(userId: string, packageId: string) {
   const pkg = FANCOIN_PACKAGES.find((p) => p.id === packageId)
   if (!pkg) throw new AppError('NOT_FOUND', 'Pacote nao encontrado', 404)
@@ -328,6 +375,53 @@ export async function creditPurchase(userId: string, totalCoins: number, label: 
     balanceAfter: newBalance,
     referenceId: paymentId,
     description: `Compra de ${label}`,
+  })
+
+  return { newBalance, credited: totalCoins }
+}
+
+/**
+ * Credit FanCoins after a confirmed custom-amount payment.
+ * Called by the payment webhook handler for custom purchases.
+ */
+export async function creditCustomPurchase(userId: string, totalCoins: number, amountBrl: number, paymentId: string) {
+  // Idempotency check
+  const [existing] = await db
+    .select({ id: fancoinTransactions.id })
+    .from(fancoinTransactions)
+    .where(
+      sql`${fancoinTransactions.referenceId} = ${paymentId} AND ${fancoinTransactions.type} = 'purchase'`,
+    )
+    .limit(1)
+
+  if (existing) {
+    const wallet = await getWallet(userId)
+    return { newBalance: Number(wallet.balance), credited: 0, duplicate: true }
+  }
+
+  await getWallet(userId)
+
+  const [updated] = await db
+    .update(fancoinWallets)
+    .set({
+      balance: sql`${fancoinWallets.balance} + ${totalCoins}`,
+      bonusBalance: sql`${fancoinWallets.bonusBalance} + ${totalCoins}`,
+      totalEarned: sql`${fancoinWallets.totalEarned} + ${totalCoins}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(fancoinWallets.userId, userId))
+    .returning({ balance: fancoinWallets.balance })
+
+  const newBalance = Number(updated?.balance ?? 0)
+  const label = `${totalCoins.toLocaleString()} FanCoins (R$${amountBrl.toFixed(2)})`
+
+  await db.insert(fancoinTransactions).values({
+    userId,
+    type: 'purchase',
+    amount: totalCoins,
+    balanceAfter: newBalance,
+    referenceId: paymentId,
+    description: `Compra personalizada de ${label}`,
   })
 
   return { newBalance, credited: totalCoins }
