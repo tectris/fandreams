@@ -3,7 +3,7 @@ import { fancoinWallets, fancoinTransactions, creatorProfiles, users, posts, pay
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import { FANCOIN_PACKAGES, ECOSYSTEM_FUND_RATE, FAN_TIER_MULTIPLIERS } from '@fandreams/shared'
-import { getPlatformFeeRate, brlToFancoins } from './withdrawal.service'
+import { getPlatformFeeRate, getP2pFeeRate, brlToFancoins, getFancoinToBrl } from './withdrawal.service'
 
 // ── Ecosystem Fund ──
 
@@ -327,8 +327,38 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
 }
 
 /**
+ * Preview a P2P transfer: returns the fee breakdown without executing.
+ */
+export async function previewTransfer(fromUserId: string, amount: number) {
+  if (amount <= 0) throw new AppError('INVALID', 'Valor invalido', 400)
+  if (!Number.isInteger(amount)) throw new AppError('INVALID', 'Valor deve ser inteiro', 400)
+
+  const tierMultiplier = await getTierMultiplier(fromUserId)
+  const feeRate = await getP2pFeeRate()
+  const adjustedFeeRate = feeRate / tierMultiplier
+  const platformCut = Math.floor(amount * adjustedFeeRate)
+  const afterFee = amount - platformCut
+  const ecosystemFund = Math.floor(afterFee * ECOSYSTEM_FUND_RATE)
+  const receiverAmount = afterFee - ecosystemFund
+  const fancoinToBrl = await getFancoinToBrl()
+
+  return {
+    amount,
+    platformFee: platformCut,
+    platformFeePercent: Math.round(adjustedFeeRate * 10000) / 100,
+    ecosystemFund,
+    ecosystemFundPercent: ECOSYSTEM_FUND_RATE * 100,
+    totalFees: platformCut + ecosystemFund,
+    totalFeesPercent: Math.round((platformCut + ecosystemFund) / amount * 10000) / 100,
+    receiverGets: receiverAmount,
+    receiverGetsBrl: Math.round(receiverAmount * fancoinToBrl * 100) / 100,
+    tierMultiplier,
+  }
+}
+
+/**
  * Transfer FanCoins between any two users (P2P wallet-to-wallet).
- * Same fee structure as tips: platform fee + ecosystem fund.
+ * Uses a separate P2P fee rate (default 2%) instead of the general platform fee.
  */
 export async function transferToUser(fromUserId: string, toUserId: string, amount: number, message?: string) {
   if (amount <= 0) throw new AppError('INVALID', 'Valor invalido', 400)
@@ -369,9 +399,9 @@ export async function transferToUser(fromUserId: string, toUserId: string, amoun
 
   const newSenderBalance = Number(debitResult.balance)
 
-  // Apply same fees as tips
+  // Apply P2P-specific fee (lower than general platform fee)
   const tierMultiplier = await getTierMultiplier(fromUserId)
-  const feeRate = await getPlatformFeeRate()
+  const feeRate = await getP2pFeeRate()
   const adjustedFeeRate = feeRate / tierMultiplier
   const platformCut = Math.floor(amount * adjustedFeeRate)
   const afterFee = amount - platformCut

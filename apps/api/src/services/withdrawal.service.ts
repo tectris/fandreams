@@ -37,6 +37,12 @@ export async function getPlatformFeeRate(): Promise<number> {
   return percent / 100
 }
 
+/** P2P transfer fee rate (default 2%). Separate from the general platform fee. */
+export async function getP2pFeeRate(): Promise<number> {
+  const percent = await getSetting<number>('p2p_fee_percent', 2)
+  return percent / 100
+}
+
 // ── FanCoin Rate ──
 
 /** Returns how much 1 FanCoin is worth in BRL. Default 0.01 (R$0.01). */
@@ -486,6 +492,7 @@ export async function getPaymentSettings() {
     'min_payout',
     'fancoin_to_brl',
     'platform_fee_percent',
+    'p2p_fee_percent',
   ]
 
   const settings: Record<string, any> = {
@@ -496,6 +503,7 @@ export async function getPaymentSettings() {
     min_payout: PAYOUT_CONFIG.minPayout,
     fancoin_to_brl: PAYOUT_CONFIG.fancoinToBrl,
     platform_fee_percent: 15,
+    p2p_fee_percent: 2,
   }
 
   try {
@@ -522,6 +530,7 @@ export async function updatePaymentSettings(updates: Record<string, any>, adminI
     'min_payout',
     'fancoin_to_brl',
     'platform_fee_percent',
+    'p2p_fee_percent',
   ]
 
   try {
