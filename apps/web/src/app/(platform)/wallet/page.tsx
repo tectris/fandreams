@@ -15,18 +15,27 @@ import {
   Coins, TrendingUp, TrendingDown, ShoppingBag, Gift, CreditCard,
   QrCode, CheckCircle2, XCircle, Clock, Loader2, Bitcoin, Wallet,
   ArrowDownToLine, Shield, AlertTriangle, ArrowLeftRight,
+  Send, Search, X, MessageSquare,
 } from 'lucide-react'
+import { Avatar } from '@/components/ui/avatar'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
 type Provider = { id: string; label: string; methods: string[]; sandbox: boolean }
+
+type SearchUser = {
+  id: string
+  username: string
+  displayName: string
+  avatarUrl: string | null
+}
 
 function WalletContent() {
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const paymentStatus = searchParams.get('payment')
   const user = useAuthStore((s) => s.user)
-  const [activeTab, setActiveTab] = useState<'buy' | 'withdraw' | 'history'>('buy')
+  const [activeTab, setActiveTab] = useState<'buy' | 'send' | 'withdraw' | 'history'>('buy')
   const [withdrawMethod, setWithdrawMethod] = useState<'pix' | 'crypto'>('pix')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [pixKey, setPixKey] = useState('')
@@ -38,6 +47,13 @@ function WalletContent() {
   const [otpCode, setOtpCode] = useState('')
   const [otpSending, setOtpSending] = useState(false)
   const [otpVerifying, setOtpVerifying] = useState(false)
+
+  // P2P Transfer state
+  const [sendQuery, setSendQuery] = useState('')
+  const [sendAmount, setSendAmount] = useState('')
+  const [sendMessage, setSendMessage] = useState('')
+  const [selectedUser, setSelectedUser] = useState<SearchUser | null>(null)
+  const [sendState, setSendState] = useState<'search' | 'confirm' | 'sending' | 'success'>('search')
 
   useEffect(() => {
     if (paymentStatus === 'success') {
@@ -64,6 +80,29 @@ function WalletContent() {
   const { data: providers } = useQuery({
     queryKey: ['payment-providers'],
     queryFn: async () => (await api.get<Provider[]>('/payments/providers')).data,
+  })
+
+  const { data: searchResults, isFetching: isSearching } = useQuery({
+    queryKey: ['fancoin-search-user', sendQuery],
+    queryFn: async () => (await api.get<SearchUser[]>(`/fancoins/search-user?q=${encodeURIComponent(sendQuery)}`)).data,
+    enabled: activeTab === 'send' && sendQuery.length >= 2 && !selectedUser,
+  })
+
+  const transferMutation = useMutation({
+    mutationFn: async (params: { toUsername: string; amount: number; message?: string }) => {
+      const res = await api.post<any>('/fancoins/transfer', params)
+      return res.data
+    },
+    onSuccess: (data) => {
+      setSendState('success')
+      queryClient.invalidateQueries({ queryKey: ['wallet'] })
+      queryClient.invalidateQueries({ queryKey: ['fancoin-transactions'] })
+      toast.success(`${data.sent?.toLocaleString() || sendAmount} FanCoins enviados!`)
+    },
+    onError: (e: any) => {
+      setSendState('confirm')
+      toast.error(e.message || 'Erro ao enviar FanCoins')
+    },
   })
 
   const { data: earnings } = useQuery({
@@ -202,6 +241,33 @@ function WalletContent() {
     }
   }
 
+  function handleSendTransfer() {
+    if (!selectedUser) return
+    const amount = Number(sendAmount)
+    if (!amount || amount <= 0) {
+      toast.error('Informe o valor em FanCoins')
+      return
+    }
+    if (amount > Number(wallet?.balance || 0)) {
+      toast.error('Saldo insuficiente')
+      return
+    }
+    setSendState('sending')
+    transferMutation.mutate({
+      toUsername: selectedUser.username,
+      amount,
+      message: sendMessage || undefined,
+    })
+  }
+
+  function resetSendState() {
+    setSendQuery('')
+    setSendAmount('')
+    setSendMessage('')
+    setSelectedUser(null)
+    setSendState('search')
+  }
+
   const isPurchasing = checkoutMutation.isPending || directPurchaseMutation.isPending || customCheckoutMutation.isPending
   const isCreator = user?.role === 'creator' || user?.role === 'admin'
   const fancoinToBrl = earnings?.fancoinToBrl || 0.01
@@ -256,6 +322,9 @@ function WalletContent() {
       <div className="flex gap-2 mb-6">
         <Button variant={activeTab === 'buy' ? 'primary' : 'ghost'} size="sm" onClick={() => setActiveTab('buy')}>
           <ShoppingBag className="w-4 h-4 mr-1" /> Comprar
+        </Button>
+        <Button variant={activeTab === 'send' ? 'primary' : 'ghost'} size="sm" onClick={() => setActiveTab('send')}>
+          <Send className="w-4 h-4 mr-1" /> Enviar
         </Button>
         {isCreator && (
           <Button variant={activeTab === 'withdraw' ? 'primary' : 'ghost'} size="sm" onClick={() => setActiveTab('withdraw')}>
@@ -424,6 +493,159 @@ function WalletContent() {
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* Send Tab */}
+      {activeTab === 'send' && (
+        <Card className="mb-8">
+          <CardHeader>
+            <h2 className="font-bold flex items-center gap-2">
+              <Send className="w-5 h-5 text-warning" />
+              Enviar FanCoins
+            </h2>
+            <p className="text-sm text-muted">Transfira FanCoins para outro usuario da plataforma</p>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {sendState === 'success' && (
+              <div className="text-center py-8 space-y-4">
+                <CheckCircle2 className="w-12 h-12 text-success mx-auto" />
+                <div>
+                  <p className="text-lg font-medium">FanCoins enviados com sucesso!</p>
+                  <p className="text-sm text-muted mt-1">
+                    {selectedUser && `Transferencia para @${selectedUser.username} concluida.`}
+                  </p>
+                </div>
+                <Button size="sm" onClick={resetSendState}>
+                  Enviar para outra pessoa
+                </Button>
+              </div>
+            )}
+
+            {sendState === 'sending' && (
+              <div className="text-center py-8">
+                <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+                <p className="text-sm text-muted mt-3">Enviando FanCoins...</p>
+              </div>
+            )}
+
+            {(sendState === 'search' || sendState === 'confirm') && (
+              <>
+                {/* Recipient */}
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-2 block">Destinatario</label>
+                  {selectedUser ? (
+                    <div className="flex items-center gap-3 p-4 rounded-md border border-primary/30 bg-primary/5">
+                      <Avatar src={selectedUser.avatarUrl} alt={selectedUser.displayName || selectedUser.username} size="md" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{selectedUser.displayName || selectedUser.username}</p>
+                        <p className="text-sm text-muted">@{selectedUser.username}</p>
+                      </div>
+                      <button
+                        onClick={() => { setSelectedUser(null); setSendQuery(''); setSendState('search') }}
+                        className="p-1.5 rounded-md hover:bg-surface-light"
+                      >
+                        <X className="w-4 h-4 text-muted" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+                        <input
+                          type="text"
+                          placeholder="Buscar por @usuario..."
+                          value={sendQuery}
+                          onChange={(e) => setSendQuery(e.target.value.replace(/^@/, ''))}
+                          className="w-full pl-10 pr-10 py-3 rounded-md border border-border bg-surface text-sm focus:outline-none focus:border-primary"
+                        />
+                        {isSearching && (
+                          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted" />
+                        )}
+                      </div>
+
+                      {/* Search results */}
+                      {searchResults && searchResults.length > 0 && !selectedUser && (
+                        <div className="mt-2 border border-border rounded-md overflow-hidden">
+                          {searchResults.map((u) => (
+                            <button
+                              key={u.id}
+                              onClick={() => {
+                                setSelectedUser(u)
+                                setSendQuery('')
+                              }}
+                              className="w-full flex items-center gap-3 p-3 hover:bg-surface-light transition-colors border-b border-border/50 last:border-b-0"
+                            >
+                              <Avatar src={u.avatarUrl} alt={u.displayName || u.username} size="sm" />
+                              <div className="text-left min-w-0">
+                                <p className="text-sm font-medium truncate">{u.displayName || u.username}</p>
+                                <p className="text-xs text-muted">@{u.username}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {sendQuery.length >= 2 && !isSearching && searchResults?.length === 0 && (
+                        <p className="text-sm text-muted mt-3 text-center py-3">Nenhum usuario encontrado</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Amount and message */}
+                {selectedUser && (
+                  <>
+                    <div>
+                      <Input
+                        label="Quantidade de FanCoins"
+                        type="number"
+                        placeholder="Ex: 500"
+                        value={sendAmount}
+                        onChange={(e) => setSendAmount(e.target.value)}
+                        min={1}
+                        step="1"
+                      />
+                      {sendAmount && Number(sendAmount) > 0 && (
+                        <p className="text-sm text-muted mt-1.5">
+                          Valor estimado: <span className="font-bold text-foreground">{formatCurrency(Number(sendAmount) * fancoinToBrl)}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium text-foreground mb-2 block">
+                        Mensagem <span className="text-muted font-normal">(opcional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Parabens pelo conteudo!"
+                        value={sendMessage}
+                        onChange={(e) => setSendMessage(e.target.value.slice(0, 200))}
+                        maxLength={200}
+                        className="w-full px-3 py-3 rounded-md border border-border bg-surface text-sm focus:outline-none focus:border-primary"
+                      />
+                      <p className="text-xs text-muted mt-1 text-right">{sendMessage.length}/200</p>
+                    </div>
+
+                    <Button
+                      className="w-full"
+                      disabled={!sendAmount || Number(sendAmount) <= 0}
+                      loading={transferMutation.isPending}
+                      onClick={handleSendTransfer}
+                    >
+                      <Send className="w-4 h-4 mr-2" />
+                      Enviar {sendAmount ? Number(sendAmount).toLocaleString() : ''} FanCoins
+                    </Button>
+
+                    <p className="text-xs text-muted text-center">
+                      Uma pequena taxa de plataforma sera aplicada sobre a transferencia.
+                    </p>
+                  </>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Withdraw Tab */}
