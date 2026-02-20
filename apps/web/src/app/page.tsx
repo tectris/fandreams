@@ -23,7 +23,10 @@ import {
   Play,
   Megaphone,
   Swords,
+  Sun,
+  Moon,
 } from 'lucide-react'
+import { useThemeStore } from '@/lib/store'
 import { CookieConsent } from '@/components/cookie-consent'
 import { ContactModal } from '@/components/contact-modal'
 import { PageContentModal } from '@/components/page-content-modal'
@@ -233,6 +236,7 @@ export default function LandingPage() {
   const [contactOpen, setContactOpen] = useState(false)
   const [pageModal, setPageModal] = useState<{ key: string; title: string } | null>(null)
   const [showBanner, setShowBanner] = useState(false)
+  const { theme, toggleTheme } = useThemeStore()
   const heroRef = useRef<HTMLElement>(null)
 
   const { scrollYProgress } = useScroll()
@@ -284,6 +288,13 @@ export default function LandingPage() {
             <Link href="/explore" className="hidden sm:block text-sm text-muted hover:text-foreground transition-colors">
               Explorar
             </Link>
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 rounded-full hover:bg-surface-light transition-colors text-muted hover:text-foreground"
+              title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
             <Link href="/login" className="text-sm text-muted hover:text-foreground transition-colors">
               Entrar
             </Link>
