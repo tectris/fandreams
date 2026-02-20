@@ -71,7 +71,7 @@ interface PostCardProps {
   isAuthenticated?: boolean
   onLike?: (postId: string) => void
   onBookmark?: (postId: string) => void
-  onEdit?: (postId: string, data: { contentText?: string; isPinned?: boolean }) => void
+  onEdit?: (postId: string, data: { contentText?: string; isPinned?: boolean; ppvPrice?: number }) => void
   onToggleVisibility?: (postId: string) => void
   onDelete?: (postId: string) => void
   onComment?: (postId: string, content: string) => void
@@ -114,6 +114,7 @@ export function PostCard({
   const [menuOpen, setMenuOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState(post.contentText || '')
+  const [editPrice, setEditPrice] = useState(post.ppvPrice || '')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showComments, setShowComments] = useState(false)
   const [commentText, setCommentText] = useState('')
@@ -159,7 +160,11 @@ export function PostCard({
   }
 
   function handleEdit() {
-    onEdit?.(post.id, { contentText: editText })
+    const data: { contentText?: string; ppvPrice?: number } = { contentText: editText }
+    if (post.visibility === 'ppv' && editPrice) {
+      data.ppvPrice = Number(editPrice)
+    }
+    onEdit?.(post.id, data)
     setEditing(false)
     setMenuOpen(false)
   }
@@ -483,6 +488,21 @@ export function PostCard({
             rows={3}
             className="w-full px-3 py-2 rounded-sm bg-surface-light border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none text-sm"
           />
+          {post.visibility === 'ppv' && (
+            <div className="mt-2">
+              <label className="block text-xs font-medium text-muted mb-1">Preco PPV (R$)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="1"
+                max="10000"
+                value={editPrice}
+                onChange={(e) => setEditPrice(e.target.value)}
+                placeholder="29.90"
+                className="w-full px-3 py-2 rounded-sm bg-surface-light border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          )}
           <div className="flex gap-2 mt-2">
             <Button size="sm" onClick={handleEdit}>
               <Check className="w-4 h-4 mr-1" />
@@ -494,6 +514,7 @@ export function PostCard({
               onClick={() => {
                 setEditing(false)
                 setEditText(post.contentText || '')
+                setEditPrice(post.ppvPrice || '')
               }}
             >
               <X className="w-4 h-4 mr-1" />
