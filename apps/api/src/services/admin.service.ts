@@ -70,10 +70,16 @@ export async function getUsers(page: number, limit: number, search: string) {
 export async function updateUser(
   userId: string,
   updates: { role?: string; isActive?: boolean },
+  adminUserId?: string,
 ) {
   const validRoles = ['fan', 'creator', 'admin']
   if (updates.role && !validRoles.includes(updates.role)) {
     throw new AppError('INVALID_ROLE', 'Role invalido', 400)
+  }
+
+  // Protect admin from demoting themselves
+  if (adminUserId && userId === adminUserId && updates.role && updates.role !== 'admin') {
+    throw new AppError('ADMIN_PROTECTED', 'Admin nao pode rebaixar o proprio papel. Peca a outro admin para fazer isso.', 403)
   }
 
   // Protect admin users from being deactivated
@@ -84,7 +90,7 @@ export async function updateUser(
       .where(eq(users.id, userId))
       .limit(1)
     if (target?.role === 'admin') {
-      throw new AppError('FORBIDDEN', 'Nao e possivel desativar um admin', 403)
+      throw new AppError('ADMIN_PROTECTED', 'Nao e possivel desativar um admin', 403)
     }
   }
 
@@ -192,6 +198,17 @@ export async function getKycDocument(documentId: string) {
 }
 
 export async function deactivateUser(userId: string) {
+  const [target] = await db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+
+  if (!target) throw new AppError('NOT_FOUND', 'Usuario nao encontrado', 404)
+  if (target.role === 'admin') {
+    throw new AppError('ADMIN_PROTECTED', 'Nao e possivel desativar um admin', 403)
+  }
+
   const [updated] = await db
     .update(users)
     .set({ isActive: false, updatedAt: new Date() })

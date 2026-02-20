@@ -62,12 +62,20 @@ export default function AdminUsersPage() {
     setPage(1)
   }
 
-  function changeRole(userId: string, role: string) {
-    updateUserMutation.mutate({ userId, updates: { role } })
+  function changeRole(targetUserId: string, role: string) {
+    if (targetUserId === user?.id && role !== 'admin') {
+      toast.error('Admin nao pode rebaixar o proprio papel')
+      return
+    }
+    updateUserMutation.mutate({ userId: targetUserId, updates: { role } })
   }
 
-  function toggleActive(userId: string, isActive: boolean) {
-    updateUserMutation.mutate({ userId, updates: { isActive: !isActive } })
+  function toggleActive(targetUserId: string, isActive: boolean) {
+    if (isActive && targetUserId === user?.id) {
+      toast.error('Admin nao pode desativar a propria conta')
+      return
+    }
+    updateUserMutation.mutate({ userId: targetUserId, updates: { isActive: !isActive } })
   }
 
   const users = data?.data ?? []

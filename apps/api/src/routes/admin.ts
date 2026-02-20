@@ -24,9 +24,10 @@ admin.get('/users', async (c) => {
 
 admin.patch('/users/:id', async (c) => {
   try {
-    const userId = c.req.param('id')
+    const targetUserId = c.req.param('id')
+    const { userId: adminUserId } = c.get('user')
     const body = await c.req.json()
-    const updated = await adminService.updateUser(userId, body)
+    const updated = await adminService.updateUser(targetUserId, body, adminUserId)
     return success(c, updated)
   } catch (e) {
     if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
