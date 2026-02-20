@@ -13,9 +13,10 @@ import { Input } from '@/components/ui/input'
 import { Avatar } from '@/components/ui/avatar'
 import { StreakCounter } from '@/components/gamification/streak-counter'
 import { LevelBadge } from '@/components/gamification/level-badge'
-import { Settings, User, LogOut, KeyRound, Shield, CheckCircle2, Clock, XCircle, ArrowRight, Camera, ImagePlus, AlertTriangle, Trash2, ShieldCheck, X } from 'lucide-react'
+import { Settings, User, LogOut, KeyRound, Shield, CheckCircle2, Clock, XCircle, ArrowRight, Camera, ImagePlus, AlertTriangle, Trash2, ShieldCheck, X, FileText } from 'lucide-react'
 import { toast } from 'sonner'
 import { ImageEditor } from '@/components/image-editor'
+import { DocumentsDrawer } from '@/components/documents-drawer'
 import Link from 'next/link'
 
 export default function SettingsPage() {
@@ -95,6 +96,7 @@ export default function SettingsPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [accountPassword, setAccountPassword] = useState('')
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [showDocumentsDrawer, setShowDocumentsDrawer] = useState(false)
 
   const deactivateMutation = useMutation({
     mutationFn: (password: string) => api.post('/users/me/deactivate', { password }),
@@ -403,34 +405,28 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Legal */}
+      {/* Legal Documents */}
       <Card className="mb-6">
         <CardHeader>
           <h2 className="font-bold flex items-center gap-2">
-            <Shield className="w-5 h-5 text-primary" />
-            Termos e Privacidade
+            <FileText className="w-5 h-5 text-primary" />
+            Documentos Legais
           </h2>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <Link href="/termos" className="flex items-center justify-between py-2 group">
-            <span className="text-sm text-foreground group-hover:text-primary transition-colors">Termos de Uso</span>
-            <ArrowRight className="w-4 h-4 text-muted group-hover:text-primary transition-colors" />
-          </Link>
-          <div className="border-t border-border" />
-          <Link href="/privacidade" className="flex items-center justify-between py-2 group">
-            <span className="text-sm text-foreground group-hover:text-primary transition-colors">Politica de Privacidade</span>
-            <ArrowRight className="w-4 h-4 text-muted group-hover:text-primary transition-colors" />
-          </Link>
-          <div className="border-t border-border" />
-          <Link href="/dmca" className="flex items-center justify-between py-2 group">
-            <span className="text-sm text-foreground group-hover:text-primary transition-colors">DMCA</span>
-            <ArrowRight className="w-4 h-4 text-muted group-hover:text-primary transition-colors" />
-          </Link>
-          <div className="border-t border-border" />
-          <Link href="/compliance" className="flex items-center justify-between py-2 group">
-            <span className="text-sm text-foreground group-hover:text-primary transition-colors">Compliance</span>
-            <ArrowRight className="w-4 h-4 text-muted group-hover:text-primary transition-colors" />
-          </Link>
+        <CardContent>
+          <p className="text-sm text-muted mb-4">
+            Acesse todos os termos, politicas e documentos legais da plataforma.
+            Visualize seus aceites e faca download em PDF.
+          </p>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => setShowDocumentsDrawer(true)}
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Meus Documentos Legais
+            <ArrowRight className="w-4 h-4 ml-auto" />
+          </Button>
         </CardContent>
       </Card>
 
@@ -683,6 +679,12 @@ export default function SettingsPage() {
           onCancel={() => setEditingCoverFile(null)}
         />
       )}
+
+      {/* Documents Drawer */}
+      <DocumentsDrawer
+        open={showDocumentsDrawer}
+        onClose={() => setShowDocumentsDrawer(false)}
+      />
     </div>
   )
 }

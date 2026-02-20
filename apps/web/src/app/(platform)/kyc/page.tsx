@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { api } from '@/lib/api'
+import { api, API_BASE_URL } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -18,12 +18,16 @@ import {
   X,
   Loader2,
   AlertCircle,
+  FileText,
+  Eye,
+  ExternalLink,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-type StepId = 'intro' | 'doc-front' | 'doc-back' | 'selfie' | 'review' | 'done'
+type StepId = 'terms' | 'intro' | 'doc-front' | 'doc-back' | 'selfie' | 'review' | 'done'
 
 const STEPS: { id: StepId; label: string }[] = [
+  { id: 'terms', label: 'Termos' },
   { id: 'intro', label: 'Inicio' },
   { id: 'doc-front', label: 'Frente' },
   { id: 'doc-back', label: 'Verso' },
@@ -31,17 +35,67 @@ const STEPS: { id: StepId; label: string }[] = [
   { id: 'review', label: 'Revisar' },
 ]
 
+type RequiredDocument = {
+  key: string
+  label: string
+  route: string
+  category: string
+  required: boolean
+}
+
 export default function KycPage() {
   const router = useRouter()
   const { user, setUser } = useAuthStore()
-  const [currentStep, setCurrentStep] = useState<StepId>('intro')
+  const [currentStep, setCurrentStep] = useState<StepId>('terms')
   const [docFront, setDocFront] = useState<{ file: File; preview: string } | null>(null)
   const [docBack, setDocBack] = useState<{ file: File; preview: string } | null>(null)
   const [selfie, setSelfie] = useState<{ file: File; preview: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [uploading, setUploading] = useState(false)
 
+  // Terms acceptance state
+  const [requiredDocs, setRequiredDocs] = useState<RequiredDocument[]>([])
+  const [acceptedDocs, setAcceptedDocs] = useState<Set<string>>(new Set())
+  const [loadingDocs, setLoadingDocs] = useState(true)
+  const [acceptingTerms, setAcceptingTerms] = useState(false)
+  const [viewingDoc, setViewingDoc] = useState<string | null>(null)
+  const [viewingDocContent, setViewingDocContent] = useState<{ title: string; content: string } | null>(null)
+  const [loadingDocContent, setLoadingDocContent] = useState(false)
+
   const stepIndex = STEPS.findIndex((s) => s.id === currentStep)
+
+  // Load required documents and check which ones the user already accepted
+  useEffect(() => {
+    async function loadDocuments() {
+      try {
+        const [docsRes, acceptancesRes] = await Promise.all([
+          api.get<{ documents: RequiredDocument[] }>('/platform/documents/list'),
+          api.get<{ documents: Array<{ key: string; accepted: boolean }> }>('/platform/documents'),
+        ])
+
+        const required = docsRes.data.documents.filter((d: RequiredDocument) => d.required)
+        setRequiredDocs(required)
+
+        // Pre-check already accepted documents
+        const alreadyAccepted = new Set<string>()
+        for (const doc of acceptancesRes.data.documents) {
+          if (doc.accepted) alreadyAccepted.add(doc.key)
+        }
+        setAcceptedDocs(alreadyAccepted)
+
+        // If all required docs are already accepted, skip to intro
+        const allAccepted = required.every((d: RequiredDocument) => alreadyAccepted.has(d.key))
+        if (allAccepted) {
+          setCurrentStep('intro')
+        }
+      } catch (e) {
+        console.error('Failed to load documents:', e)
+      } finally {
+        setLoadingDocs(false)
+      }
+    }
+    loadDocuments()
+  }, [])
 
   function handleSkip() {
     router.push('/feed')
@@ -55,6 +109,57 @@ export default function KycPage() {
   function goBack() {
     const idx = STEPS.findIndex((s) => s.id === currentStep)
     if (idx > 0) setCurrentStep(STEPS[idx - 1].id)
+  }
+
+  function toggleDocAcceptance(key: string) {
+    setAcceptedDocs((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
+  }
+
+  async function viewDocument(key: string) {
+    setViewingDoc(key)
+    setLoadingDocContent(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/v1/platform/page/${key}`)
+      const json = await res.json()
+      if (json.success && json.data) {
+        setViewingDocContent(json.data)
+      } else {
+        setViewingDocContent({ title: 'Documento', content: '<p>Conteudo sera publicado em breve.</p>' })
+      }
+    } catch {
+      setViewingDocContent({ title: 'Documento', content: '<p>Erro ao carregar documento.</p>' })
+    } finally {
+      setLoadingDocContent(false)
+    }
+  }
+
+  async function handleAcceptTerms() {
+    const allRequired = requiredDocs.every((d) => acceptedDocs.has(d.key))
+    if (!allRequired) {
+      toast.error('Voce precisa aceitar todos os documentos obrigatorios para continuar')
+      return
+    }
+
+    setAcceptingTerms(true)
+    try {
+      // Send acceptance to API with the list of accepted document keys
+      const keysToAccept = Array.from(acceptedDocs)
+      await api.post('/platform/documents/accept', { documentKeys: keysToAccept })
+      toast.success('Termos aceitos com sucesso!')
+      goNext()
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao aceitar termos')
+    } finally {
+      setAcceptingTerms(false)
+    }
   }
 
   async function handleFileSelect(
@@ -109,6 +214,8 @@ export default function KycPage() {
     }
   }
 
+  const allRequiredAccepted = requiredDocs.every((d) => acceptedDocs.has(d.key))
+
   return (
     <div className="max-w-lg mx-auto px-4 py-6">
       {/* Progress bar */}
@@ -130,7 +237,7 @@ export default function KycPage() {
                 </div>
                 {i < STEPS.length - 1 && (
                   <div
-                    className={`w-8 sm:w-12 h-0.5 mx-1 transition-colors duration-300 ${
+                    className={`w-6 sm:w-10 h-0.5 mx-0.5 transition-colors duration-300 ${
                       i < stepIndex ? 'bg-primary' : 'bg-surface-light'
                     }`}
                   />
@@ -141,6 +248,171 @@ export default function KycPage() {
           <p className="text-center text-xs text-muted">
             {STEPS[stepIndex]?.label}
           </p>
+        </div>
+      )}
+
+      {/* Step: Terms Acceptance */}
+      {currentStep === 'terms' && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <FileText className="w-8 h-8 text-primary" />
+              </div>
+              <h1 className="text-xl font-bold mb-2">Termos e Condicoes</h1>
+              <p className="text-muted text-sm leading-relaxed">
+                Antes de prosseguir com a verificacao, voce precisa ler e aceitar
+                os documentos legais obrigatorios da plataforma.
+              </p>
+            </div>
+
+            {loadingDocs ? (
+              <div className="space-y-3 mb-6">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="animate-pulse h-14 bg-surface-light rounded-md" />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2 mb-6">
+                {requiredDocs.map((doc) => {
+                  const isAccepted = acceptedDocs.has(doc.key)
+                  return (
+                    <div
+                      key={doc.key}
+                      className={`flex items-center gap-3 p-3 rounded-md border transition-colors ${
+                        isAccepted
+                          ? 'border-success/30 bg-success/5'
+                          : 'border-border bg-surface-light'
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <button
+                        onClick={() => toggleDocAcceptance(doc.key)}
+                        className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                          isAccepted
+                            ? 'bg-success border-success'
+                            : 'border-muted hover:border-primary'
+                        }`}
+                      >
+                        {isAccepted && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                      </button>
+
+                      {/* Label */}
+                      <span className="text-sm font-medium flex-1">{doc.label}</span>
+
+                      {/* View button */}
+                      <button
+                        onClick={() => viewDocument(doc.key)}
+                        className="flex items-center gap-1 px-2 py-1 rounded text-xs text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        Ler
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            <div className="p-3 rounded-md bg-surface-light border border-border mb-6">
+              <p className="text-xs text-muted leading-relaxed">
+                Ao aceitar, voce confirma que leu e concorda com todos os documentos
+                listados acima. Seu aceite sera registrado com data, hora e informacoes
+                de auditoria conforme a LGPD.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <Button
+                onClick={handleAcceptTerms}
+                className="w-full"
+                disabled={!allRequiredAccepted}
+                loading={acceptingTerms}
+              >
+                <CheckCircle2 className="w-4 h-4 mr-1" />
+                Aceitar e continuar
+              </Button>
+              <button
+                onClick={handleSkip}
+                className="text-sm text-muted hover:text-foreground transition-colors"
+              >
+                Pular por agora
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Document viewer modal */}
+      {viewingDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setViewingDoc(null); setViewingDocContent(null) }} />
+          <div className="relative bg-surface border border-border rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+              <h3 className="font-bold text-sm truncate">
+                {viewingDocContent?.title || 'Carregando...'}
+              </h3>
+              <div className="flex items-center gap-2">
+                {viewingDocContent && (
+                  <a
+                    href={requiredDocs.find((d) => d.key === viewingDoc)?.route}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 rounded-md hover:bg-surface-light text-muted hover:text-primary transition-colors"
+                    title="Abrir em nova aba"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
+                <button
+                  onClick={() => { setViewingDoc(null); setViewingDocContent(null) }}
+                  className="p-1.5 rounded-md hover:bg-surface-light text-muted hover:text-foreground transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal content */}
+            <div className="flex-1 overflow-y-auto px-6 py-6">
+              {loadingDocContent ? (
+                <div className="animate-pulse space-y-4">
+                  <div className="h-6 w-48 bg-surface-light rounded" />
+                  <div className="h-4 w-full bg-surface-light rounded" />
+                  <div className="h-4 w-3/4 bg-surface-light rounded" />
+                </div>
+              ) : viewingDocContent ? (
+                <div
+                  className="prose prose-invert prose-sm max-w-none text-muted [&_h2]:text-foreground [&_h2]:text-lg [&_h2]:font-bold [&_h2]:mt-8 [&_h2]:mb-3 [&_h3]:text-foreground [&_h3]:font-semibold [&_h3]:mt-6 [&_h3]:mb-2 [&_p]:leading-relaxed [&_p]:mb-4 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-4 [&_li]:mb-1 [&_a]:text-primary [&_a]:underline"
+                  dangerouslySetInnerHTML={{ __html: viewingDocContent.content }}
+                />
+              ) : null}
+            </div>
+
+            {/* Modal footer */}
+            <div className="px-6 py-4 border-t border-border shrink-0">
+              <Button
+                className="w-full"
+                onClick={() => {
+                  if (viewingDoc && !acceptedDocs.has(viewingDoc)) {
+                    toggleDocAcceptance(viewingDoc)
+                  }
+                  setViewingDoc(null)
+                  setViewingDocContent(null)
+                }}
+              >
+                {viewingDoc && acceptedDocs.has(viewingDoc) ? (
+                  'Fechar'
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 mr-1" />
+                    Li e aceito este documento
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

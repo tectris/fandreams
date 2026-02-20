@@ -18,6 +18,7 @@ import * as guilds from './schema/guilds'
 import * as pitch from './schema/pitch'
 import * as commitments from './schema/commitments'
 import * as platform from './schema/platform'
+import * as documentAcceptances from './schema/document-acceptances'
 
 export const schema = {
   ...users,
@@ -38,6 +39,7 @@ export const schema = {
   ...pitch,
   ...commitments,
   ...platform,
+  ...documentAcceptances,
 }
 
 export function createDb(databaseUrl: string) {
@@ -65,3 +67,4 @@ export * from './schema/guilds'
 export * from './schema/pitch'
 export * from './schema/commitments'
 export * from './schema/platform'
+export * from './schema/document-acceptances'
