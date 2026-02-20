@@ -112,6 +112,8 @@ app.use('/auth/*', auditLog)
 app.use('/admin/*', auditLog)
 app.use('/payments/*', auditLog)
 app.use('/users/me/password', auditLog)
+app.use('/users/me/deactivate', auditLog)
+app.use('/users/me/cancel-deletion', auditLog)
 app.use('/guilds/*', auditLog)
 app.use('/pitch/*', auditLog)
 app.use('/commitments/*', auditLog)
@@ -235,6 +237,17 @@ setInterval(async () => {
     console.error('Error processing bonus vesting:', e)
   }
 }, 60 * 60 * 1000)
+
+// Periodic task: process scheduled account deletions every 6 hours
+import { processScheduledDeletions } from './services/account.service'
+setInterval(async () => {
+  try {
+    const result = await processScheduledDeletions()
+    if (result.deleted > 0) console.log(`Processed ${result.deleted} scheduled account deletions`)
+  } catch (e) {
+    console.error('Error processing account deletions:', e)
+  }
+}, 6 * 60 * 60 * 1000)
 
 // Periodic task: recalculate creator scores daily (every 24h)
 import { recalculateAllScores } from './services/creator-score.service'

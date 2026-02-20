@@ -2,11 +2,13 @@ import { Hono } from 'hono'
 import { updateProfileSchema, updateSettingsSchema } from '@fandreams/shared'
 import { validateBody } from '../middleware/validation'
 import { authMiddleware } from '../middleware/auth'
+import { sensitiveRateLimit } from '../middleware/rateLimit'
 import { eq } from 'drizzle-orm'
 import { users } from '@fandreams/database'
 import * as userService from '../services/user.service'
 import * as followService from '../services/follow.service'
 import * as notificationService from '../services/notification.service'
+import * as accountService from '../services/account.service'
 import { success, error } from '../utils/response'
 import { AppError } from '../services/auth.service'
 import { db } from '../config/database'
@@ -73,6 +75,56 @@ usersRoute.patch('/me/settings', authMiddleware, validateBody(updateSettingsSche
   const body = c.req.valid('json')
   const updated = await userService.updateSettings(userId, body)
   return success(c, updated)
+})
+
+// ── Account Management ──
+
+usersRoute.post('/me/deactivate', authMiddleware, sensitiveRateLimit, async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const { password } = await c.req.json()
+    if (!password) return error(c, 400, 'MISSING_PASSWORD', 'Senha obrigatoria')
+    const result = await accountService.deactivateAccount(userId, password)
+    return success(c, result)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+usersRoute.post('/me/reactivate', authMiddleware, async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const result = await accountService.reactivateAccount(userId)
+    return success(c, result)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+usersRoute.post('/me/delete', authMiddleware, sensitiveRateLimit, async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const { password } = await c.req.json()
+    if (!password) return error(c, 400, 'MISSING_PASSWORD', 'Senha obrigatoria')
+    const result = await accountService.scheduleDeletion(userId, password)
+    return success(c, result)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+usersRoute.post('/me/cancel-deletion', authMiddleware, async (c) => {
+  try {
+    const { userId } = c.get('user')
+    const result = await accountService.cancelDeletion(userId)
+    return success(c, result)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
 })
 
 // Follow / Unfollow

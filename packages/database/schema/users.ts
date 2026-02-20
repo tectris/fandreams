@@ -22,6 +22,8 @@ export const users = pgTable('users', {
   timezone: varchar('timezone', { length: 50 }),
   profileViews: integer('profile_views').default(0).notNull(),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+  deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
+  deletionScheduledAt: timestamp('deletion_scheduled_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })

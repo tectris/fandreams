@@ -2,7 +2,7 @@ import { eq, desc } from 'drizzle-orm'
 import { users, kycDocuments } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
-import { sendKycApprovedEmail, sendKycRejectedEmail } from './email.service'
+import { sendKycApprovedEmail, sendKycRejectedEmail, sendNewKycSubmissionAlert } from './email.service'
 
 function validateDocumentKeyOwnership(key: string, userId: string): boolean {
   // R2 keys follow pattern: {folder}/{userId}/{timestamp}-{filename}
@@ -52,6 +52,22 @@ export async function submitKyc(
     .update(users)
     .set({ kycStatus: 'pending', updatedAt: new Date() })
     .where(eq(users.id, userId))
+
+  // Notify admins of new KYC submission (non-blocking)
+  const [kycUser] = await db
+    .select({ email: users.email, displayName: users.displayName, username: users.username })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1)
+
+  if (kycUser) {
+    sendNewKycSubmissionAlert({
+      username: kycUser.username,
+      email: kycUser.email,
+      displayName: kycUser.displayName || kycUser.username,
+      documentId: doc!.id,
+    }).catch((e) => console.error('Failed to send KYC submission alert:', e))
+  }
 
   return doc
 }
