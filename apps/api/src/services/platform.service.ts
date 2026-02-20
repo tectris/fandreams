@@ -223,7 +223,18 @@ export async function getPageContent(key: string): Promise<{ title: string; cont
 }
 
 export async function setPageContent(key: string, title: string, content: string, adminId: string) {
-  const allowedKeys = ['terms_and_conditions', 'privacy_policy', 'dmca', 'compliance']
+  const allowedKeys = [
+    // Legal & Compliance
+    'terms_and_conditions', 'privacy_policy', 'cookie_policy', 'dmca',
+    'compliance', 'acceptable_use_policy', 'age_verification',
+    // Contracts & Payments
+    'creator_contract', 'subscription_terms', 'refund_policy',
+    // Safety & Transparency
+    'safety_center', 'community_guidelines', 'complaints',
+    'anti_trafficking', 'transparency_report',
+    // Resources
+    'tax_guide', 'accessibility',
+  ]
   if (!allowedKeys.includes(key)) {
     throw new AppError('INVALID_KEY', 'Chave invalida', 400)
   }
