@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
   X, Coins, ShoppingCart, ArrowRightLeft, ArrowDownToLine,
-  QrCode, CreditCard, Loader2, CheckCircle2, ExternalLink, Copy,
+  QrCode, CreditCard, Loader2, CheckCircle2, ExternalLink, Copy, ArrowLeftRight,
 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
@@ -54,6 +55,8 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
   const user = useAuthStore((s) => s.user)
   const [tab, setTab] = useState<'wallet' | 'buy' | 'history'>('wallet')
   const [buyState, setBuyState] = useState<'choose' | 'processing' | 'pix' | 'waiting' | 'success'>('choose')
+  const [customMode, setCustomMode] = useState<'coins' | 'brl'>('brl')
+  const [customValue, setCustomValue] = useState('')
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null)
   const [pixData, setPixData] = useState<PixData | null>(null)
   const popupRef = useRef<Window | null>(null)
@@ -100,6 +103,27 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
     onError: (e: any) => {
       setBuyState('choose')
       toast.error(e.message || 'Erro ao iniciar pagamento')
+    },
+  })
+
+  const customCheckoutMutation = useMutation({
+    mutationFn: async (params: { amountBrl: number; paymentMethod: string; provider: string }) => {
+      const res = await api.post<any>('/payments/checkout/fancoins/custom', params)
+      return res.data
+    },
+    onSuccess: (data) => {
+      setPendingPaymentId(data.paymentId)
+      if (data.pixData) {
+        setPixData(data.pixData)
+        setBuyState('pix')
+      } else if (data.checkoutUrl) {
+        setBuyState('waiting')
+        popupRef.current = window.open(data.checkoutUrl, 'mp_checkout', 'width=600,height=700,scrollbars=yes')
+      }
+    },
+    onError: (e: any) => {
+      setBuyState('choose')
+      toast.error(e.message || 'Erro ao iniciar pagamento personalizado')
     },
   })
 
@@ -156,6 +180,26 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
   function handleBuy(packageId: string, method: 'pix' | 'credit_card') {
     setBuyState('processing')
     checkoutMutation.mutate({ packageId, paymentMethod: method, provider: 'mercadopago' })
+  }
+
+  function handleCustomBuy(method: 'pix' | 'credit_card') {
+    const RATE = 0.01
+    let amountBrl: number
+    if (customMode === 'brl') {
+      amountBrl = Number(customValue)
+    } else {
+      amountBrl = Number(customValue) * RATE
+    }
+    if (!amountBrl || amountBrl < 1) {
+      toast.error('Valor minimo de R$ 1,00')
+      return
+    }
+    if (amountBrl > 10000) {
+      toast.error('Valor maximo de R$ 10.000,00')
+      return
+    }
+    setBuyState('processing')
+    customCheckoutMutation.mutate({ amountBrl, paymentMethod: method, provider: 'mercadopago' })
   }
 
   function copyPixCode() {
@@ -418,6 +462,65 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
                       Nenhum pacote disponivel no momento
                     </p>
                   )}
+
+                  {/* Custom Purchase */}
+                  <div className="p-4 rounded-sm border border-primary/30 bg-primary/5">
+                    <h4 className="font-bold text-sm flex items-center gap-2 mb-3">
+                      <ArrowLeftRight className="w-4 h-4 text-primary" />
+                      Compra personalizada
+                    </h4>
+                    <div className="flex gap-1.5 mb-2">
+                      <button
+                        onClick={() => { setCustomMode('brl'); setCustomValue('') }}
+                        className={`text-xs px-2 py-1 rounded ${customMode === 'brl' ? 'bg-primary text-white' : 'bg-surface text-muted'}`}
+                      >
+                        R$ → Coins
+                      </button>
+                      <button
+                        onClick={() => { setCustomMode('coins'); setCustomValue('') }}
+                        className={`text-xs px-2 py-1 rounded ${customMode === 'coins' ? 'bg-primary text-white' : 'bg-surface text-muted'}`}
+                      >
+                        Coins → R$
+                      </button>
+                    </div>
+                    <Input
+                      type="number"
+                      placeholder={customMode === 'brl' ? 'Valor em R$' : 'Qtd FanCoins'}
+                      value={customValue}
+                      onChange={(e) => setCustomValue(e.target.value)}
+                      min={customMode === 'brl' ? 1 : 100}
+                      step={customMode === 'brl' ? '0.01' : '1'}
+                    />
+                    {customValue && Number(customValue) > 0 && (
+                      <p className="text-xs text-muted mt-1.5">
+                        {customMode === 'brl'
+                          ? `= ${Math.floor(Number(customValue) / 0.01).toLocaleString()} FanCoins`
+                          : `= R$ ${(Number(customValue) * 0.01).toFixed(2)}`
+                        }
+                        <span className="ml-1">(sem bonus)</span>
+                      </p>
+                    )}
+                    <div className="flex gap-2 mt-2">
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        className="flex-1"
+                        disabled={!customValue || Number(customValue) <= 0}
+                        onClick={() => handleCustomBuy('pix')}
+                      >
+                        <QrCode className="w-4 h-4 mr-1" /> PIX
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        disabled={!customValue || Number(customValue) <= 0}
+                        onClick={() => handleCustomBuy('credit_card')}
+                      >
+                        <CreditCard className="w-4 h-4 mr-1" /> Cartao
+                      </Button>
+                    </div>
+                  </div>
                 </>
               )}
             </div>

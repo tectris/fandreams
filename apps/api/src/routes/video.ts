@@ -130,6 +130,11 @@ videoRoute.get('/play/:videoId', authMiddleware, async (c) => {
     const expiresIn = Number(c.req.query('expires') || 3600)
     const signedUrl = bunny.getSignedUrl(videoId, expiresIn)
 
+    // Content protection headers
+    c.header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+    c.header('X-Content-Protection', 'fandreams-drm')
+    c.header('X-Frame-Options', 'SAMEORIGIN')
+
     return success(c, {
       playUrl: signedUrl,
       mp4Url: video.hasMP4Fallback ? bunny.getMp4Url(videoId) : null,

@@ -45,4 +45,13 @@ export const TIP_LIMITS = {
   maxTip: 50000.0,
 } as const
 
+export const CUSTOM_PURCHASE_LIMITS = {
+  minBrl: 1.0,
+  maxBrl: 10000.0,
+  minCoins: 100,
+  maxCoins: 1000000,
+  /** Base rate: 1 FanCoin = R$0.01 (no bonus for custom amounts) */
+  brlPerCoin: 0.01,
+} as const
+
 export const TOP_CREATOR_THRESHOLD = 50000

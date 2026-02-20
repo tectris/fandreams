@@ -5,6 +5,12 @@ import { success, error } from '../utils/response'
 import * as storage from '../services/storage.service'
 import * as mediaService from '../services/media.service'
 import * as bunny from '../services/bunny.service'
+import * as watermarkService from '../services/watermark.service'
+import * as steganographyService from '../services/steganography.service'
+import { db } from '../config/database'
+import { users } from '@fandreams/database'
+import { eq } from 'drizzle-orm'
+import { env } from '../config/env'
 
 const media = new Hono()
 
@@ -39,15 +45,52 @@ media.post('/upload', authMiddleware, uploadRateLimit, async (c) => {
   if (isImage && storage.isR2Configured()) {
     // Compress and upload to R2
     const compressed = await mediaService.compressImage(buffer, 'post')
-    const key = storage.generateKey('posts/images', userId, `upload.${compressed.format}`)
-    const result = await storage.uploadFile(compressed.buffer, key, compressed.contentType)
+    let processedBuffer = compressed.buffer
+    let finalFormat = compressed.format
+    let finalContentType = compressed.contentType
+
+    // Get creator username for watermark
+    const [creator] = await db
+      .select({ username: users.username })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+
+    // Apply visible watermark
+    if (creator?.username) {
+      try {
+        processedBuffer = await watermarkService.applyWatermark(processedBuffer, {
+          username: creator.username,
+          opacity: 0.3,
+        })
+      } catch (wmErr) {
+        console.error('Watermark failed (non-blocking):', wmErr)
+      }
+    }
+
+    // Apply invisible steganographic fingerprint
+    const stegoSecret = env.STEGO_SECRET || env.JWT_SECRET || 'fandreams-stego-default'
+    try {
+      processedBuffer = await steganographyService.embedFingerprint(
+        processedBuffer,
+        { userId },
+        stegoSecret,
+      )
+      finalFormat = 'png'
+      finalContentType = 'image/png'
+    } catch (stErr) {
+      console.error('Steganography failed (non-blocking):', stErr)
+    }
+
+    const key = storage.generateKey('posts/images', userId, `upload.${finalFormat}`)
+    const result = await storage.uploadFile(processedBuffer, key, finalContentType)
 
     return success(c, {
       key: result.url,
       mediaType,
-      fileSize: compressed.size,
+      fileSize: result.size,
       originalSize: file.size,
-      savings: `${Math.round((1 - compressed.size / file.size) * 100)}%`,
+      savings: `${Math.round((1 - result.size / file.size) * 100)}%`,
     })
   }
 

@@ -14,7 +14,7 @@ import { formatCurrency } from '@/lib/utils'
 import {
   Coins, TrendingUp, TrendingDown, ShoppingBag, Gift, CreditCard,
   QrCode, CheckCircle2, XCircle, Clock, Loader2, Bitcoin, Wallet,
-  ArrowDownToLine, Shield, AlertTriangle,
+  ArrowDownToLine, Shield, AlertTriangle, ArrowLeftRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
@@ -32,6 +32,8 @@ function WalletContent() {
   const [pixKey, setPixKey] = useState('')
   const [cryptoAddress, setCryptoAddress] = useState('')
   const [cryptoNetwork, setCryptoNetwork] = useState('TRC20')
+  const [customMode, setCustomMode] = useState<'coins' | 'brl'>('brl')
+  const [customValue, setCustomValue] = useState('')
   const [otpStep, setOtpStep] = useState(false)
   const [otpCode, setOtpCode] = useState('')
   const [otpSending, setOtpSending] = useState(false)
@@ -85,6 +87,17 @@ function WalletContent() {
     },
   })
 
+  const customCheckoutMutation = useMutation({
+    mutationFn: async (params: { amountBrl: number; paymentMethod: string; provider: string }) => {
+      const res = await api.post<any>('/payments/checkout/fancoins/custom', params)
+      return res.data
+    },
+    onSuccess: (data) => { window.location.href = data.checkoutUrl },
+    onError: (e: any) => {
+      toast.error(e.message || 'Erro ao iniciar pagamento personalizado')
+    },
+  })
+
   const directPurchaseMutation = useMutation({
     mutationFn: (packageId: string) => api.post('/fancoins/purchase', { packageId }),
     onSuccess: () => {
@@ -110,6 +123,28 @@ function WalletContent() {
     },
     onError: (e: any) => toast.error(e.message),
   })
+
+  function handleCustomPurchase(method: string, provider: string) {
+    const RATE = 0.01 // 1 FanCoin = R$0.01
+    let amountBrl: number
+
+    if (customMode === 'brl') {
+      amountBrl = Number(customValue)
+    } else {
+      amountBrl = Number(customValue) * RATE
+    }
+
+    if (!amountBrl || amountBrl < 1) {
+      toast.error('Valor minimo de R$ 1,00')
+      return
+    }
+    if (amountBrl > 10000) {
+      toast.error('Valor maximo de R$ 10.000,00')
+      return
+    }
+
+    customCheckoutMutation.mutate({ amountBrl, paymentMethod: method, provider })
+  }
 
   function handlePurchase(packageId: string, method: string, provider: string) {
     checkoutMutation.mutate(
@@ -167,7 +202,7 @@ function WalletContent() {
     }
   }
 
-  const isPurchasing = checkoutMutation.isPending || directPurchaseMutation.isPending
+  const isPurchasing = checkoutMutation.isPending || directPurchaseMutation.isPending || customCheckoutMutation.isPending
   const isCreator = user?.role === 'creator' || user?.role === 'admin'
   const fancoinToBrl = earnings?.fancoinToBrl || 0.01
 
@@ -245,7 +280,7 @@ function WalletContent() {
               ))}
             </div>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
             {FANCOIN_PACKAGES.map((pkg) => (
               <Card key={pkg.id}>
                 <CardContent className="pt-5">
@@ -299,6 +334,95 @@ function WalletContent() {
               </Card>
             ))}
           </div>
+
+          {/* Custom Purchase */}
+          <Card className="mb-8">
+            <CardContent className="pt-5">
+              <h3 className="font-bold text-sm flex items-center gap-2 mb-4">
+                <ArrowLeftRight className="w-4 h-4 text-primary" />
+                Compra personalizada
+              </h3>
+              <div className="flex gap-2 mb-3">
+                <Button size="sm" variant={customMode === 'brl' ? 'primary' : 'outline'} onClick={() => { setCustomMode('brl'); setCustomValue('') }}>
+                  R$ → FanCoins
+                </Button>
+                <Button size="sm" variant={customMode === 'coins' ? 'primary' : 'outline'} onClick={() => { setCustomMode('coins'); setCustomValue('') }}>
+                  FanCoins → R$
+                </Button>
+              </div>
+              <Input
+                label={customMode === 'brl' ? 'Valor em Reais (R$)' : 'Quantidade de FanCoins'}
+                type="number"
+                placeholder={customMode === 'brl' ? 'Ex: 25.00' : 'Ex: 2500'}
+                value={customValue}
+                onChange={(e) => setCustomValue(e.target.value)}
+                min={customMode === 'brl' ? 1 : 100}
+                step={customMode === 'brl' ? '0.01' : '1'}
+              />
+              {customValue && Number(customValue) > 0 && (
+                <div className="mt-2 p-3 bg-surface rounded-md text-sm">
+                  {customMode === 'brl' ? (
+                    <p>
+                      Voce recebera: <span className="font-bold text-foreground">{Math.floor(Number(customValue) / 0.01).toLocaleString()} FanCoins</span>
+                      <span className="text-xs text-muted ml-1">(sem bonus)</span>
+                    </p>
+                  ) : (
+                    <p>
+                      Valor a pagar: <span className="font-bold text-foreground">{formatCurrency(Number(customValue) * 0.01)}</span>
+                      <span className="text-xs text-muted ml-1">(sem bonus)</span>
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="flex gap-2 flex-wrap mt-3">
+                {providers?.some((p) => p.methods.includes('pix')) && (
+                  <Button size="sm" variant="primary" className="flex-1 min-w-[80px]" loading={isPurchasing}
+                    disabled={!customValue || Number(customValue) <= 0}
+                    onClick={() => handleCustomPurchase('pix', 'mercadopago')}>
+                    <QrCode className="w-4 h-4 mr-1" /> PIX
+                  </Button>
+                )}
+                {providers?.some((p) => p.methods.includes('credit_card')) && (
+                  <Button size="sm" variant="outline" className="flex-1 min-w-[80px]" loading={isPurchasing}
+                    disabled={!customValue || Number(customValue) <= 0}
+                    onClick={() => handleCustomPurchase('credit_card', 'mercadopago')}>
+                    <CreditCard className="w-4 h-4 mr-1" /> Cartao
+                  </Button>
+                )}
+                {providers?.some((p) => p.methods.includes('crypto')) && (
+                  <Button size="sm" variant="outline" className="flex-1 min-w-[80px]" loading={isPurchasing}
+                    disabled={!customValue || Number(customValue) <= 0}
+                    onClick={() => handleCustomPurchase('crypto', 'nowpayments')}>
+                    <Bitcoin className="w-4 h-4 mr-1" /> Crypto
+                  </Button>
+                )}
+                {providers?.some((p) => p.methods.includes('paypal')) && (
+                  <Button size="sm" variant="outline" className="flex-1 min-w-[80px]" loading={isPurchasing}
+                    disabled={!customValue || Number(customValue) <= 0}
+                    onClick={() => handleCustomPurchase('paypal', 'paypal')}>
+                    <Wallet className="w-4 h-4 mr-1" /> PayPal
+                  </Button>
+                )}
+                {(!providers || providers.length === 0) && (
+                  <>
+                    <Button size="sm" variant="primary" className="flex-1" loading={isPurchasing}
+                      disabled={!customValue || Number(customValue) <= 0}
+                      onClick={() => handleCustomPurchase('pix', 'mercadopago')}>
+                      <QrCode className="w-4 h-4 mr-1" /> PIX
+                    </Button>
+                    <Button size="sm" variant="outline" className="flex-1" loading={isPurchasing}
+                      disabled={!customValue || Number(customValue) <= 0}
+                      onClick={() => handleCustomPurchase('credit_card', 'mercadopago')}>
+                      <CreditCard className="w-4 h-4 mr-1" /> Cartao
+                    </Button>
+                  </>
+                )}
+              </div>
+              <p className="text-xs text-muted mt-2">
+                Taxa base: 100 FanCoins = R$ 1,00. Pacotes acima oferecem bonus.
+              </p>
+            </CardContent>
+          </Card>
         </>
       )}
 

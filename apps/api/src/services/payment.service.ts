@@ -277,6 +277,67 @@ export async function createFancoinPayment(
   }
 }
 
+/**
+ * Create a custom-amount FanCoin purchase payment (no preset package).
+ * Uses base rate: 100 FanCoins per R$1.00, no bonus.
+ */
+export async function createCustomFancoinPayment(
+  userId: string,
+  amountBrl: number,
+  paymentMethod: PaymentMethod,
+  provider: PaymentProvider,
+) {
+  const { CUSTOM_PURCHASE_LIMITS } = await import('@fandreams/shared')
+
+  if (amountBrl < CUSTOM_PURCHASE_LIMITS.minBrl || amountBrl > CUSTOM_PURCHASE_LIMITS.maxBrl) {
+    throw new AppError('INVALID', `Valor deve ser entre R$${CUSTOM_PURCHASE_LIMITS.minBrl} e R$${CUSTOM_PURCHASE_LIMITS.maxBrl}`, 400)
+  }
+
+  const coins = Math.floor(amountBrl / CUSTOM_PURCHASE_LIMITS.brlPerCoin)
+  const label = `${coins.toLocaleString()} FanCoins`
+
+  // Auto-route PIX to OpenPix when configured
+  const effectiveProvider = (paymentMethod === 'pix' && openpixService.isOpenPixConfigured())
+    ? 'openpix' as PaymentProvider
+    : provider
+
+  const feeRate = await getPlatformFeeRate()
+
+  const [payment] = await db
+    .insert(payments)
+    .values({
+      userId,
+      type: 'fancoin_purchase',
+      amount: String(amountBrl),
+      currency: effectiveProvider === 'nowpayments' ? 'USD' : 'BRL',
+      platformFee: String(amountBrl * feeRate),
+      paymentProvider: effectiveProvider,
+      status: 'pending',
+      metadata: { customPurchase: true, coins, amountBrl, paymentMethod, provider: effectiveProvider },
+    })
+    .returning()
+
+  // Build a "virtual" package object to reuse existing payment flow functions
+  const pkg = { id: 'custom', coins, price: amountBrl, bonus: 0, label }
+  const appUrl = env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+
+  switch (effectiveProvider) {
+    case 'openpix':
+      return createOpenPixPayment(payment, pkg)
+    case 'mercadopago':
+      if (paymentMethod === 'pix') {
+        return createMpPixPayment(payment, pkg, userId, appUrl)
+      }
+      return createMpPayment(payment, pkg, paymentMethod, appUrl)
+    case 'nowpayments':
+      return createNpPayment(payment, pkg, appUrl)
+    case 'paypal':
+      return createPpPayment(payment, pkg, appUrl)
+    default:
+      throw new AppError('INVALID_PROVIDER', 'Provedor de pagamento invalido', 400)
+  }
+}
+
 // ── MercadoPago Payment ──
 
 async function createMpPayment(payment: any, pkg: any, paymentMethod: string, appUrl: string) {
@@ -802,11 +863,20 @@ async function processPaymentConfirmation(
     const meta = payment.metadata as any
 
     if (payment.type === 'fancoin_purchase') {
-      const packageId = meta?.packageId
-      if (packageId) {
-        const pkg = FANCOIN_PACKAGES.find((p) => p.id === packageId)
-        if (pkg) {
-          await fancoinService.creditPurchase(payment.userId, pkg.coins + (pkg.bonus || 0), pkg.label, payment.id)
+      if (meta?.customPurchase) {
+        // Custom amount purchase — credit coins at base rate
+        const coins = meta.coins as number
+        const amountBrl = meta.amountBrl as number
+        if (coins > 0) {
+          await fancoinService.creditCustomPurchase(payment.userId, coins, amountBrl, payment.id)
+        }
+      } else {
+        const packageId = meta?.packageId
+        if (packageId) {
+          const pkg = FANCOIN_PACKAGES.find((p) => p.id === packageId)
+          if (pkg) {
+            await fancoinService.creditPurchase(payment.userId, pkg.coins + (pkg.bonus || 0), pkg.label, payment.id)
+          }
         }
       }
     }
