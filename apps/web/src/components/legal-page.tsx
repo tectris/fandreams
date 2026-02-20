@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Flame, ArrowLeft } from 'lucide-react'
 import { API_BASE_URL } from '@/lib/api'
 
@@ -12,6 +13,7 @@ type LegalPageProps = {
 }
 
 export function LegalPage({ pageKey, fallbackTitle, fallbackMessage }: LegalPageProps) {
+  const router = useRouter()
   const [content, setContent] = useState<{ title: string; content: string; updatedAt: string } | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -33,8 +35,13 @@ export function LegalPage({ pageKey, fallbackTitle, fallbackMessage }: LegalPage
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/40">
         <div className="max-w-4xl mx-auto px-6 h-14 flex items-center gap-4">
-          <Link href="/" className="flex items-center gap-2 text-muted hover:text-foreground transition-colors">
+          <button
+            onClick={() => router.back()}
+            className="flex items-center gap-2 text-muted hover:text-foreground transition-colors"
+          >
             <ArrowLeft className="w-4 h-4" />
+          </button>
+          <Link href="/" className="flex items-center gap-2">
             <Flame className="w-5 h-5 text-primary" />
             <span className="font-bold text-sm text-foreground">FanDreams</span>
           </Link>
