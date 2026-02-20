@@ -30,6 +30,7 @@ export const createPostSchema = z.object({
 export const updatePostSchema = z.object({
   contentText: z.string().max(5000).optional(),
   visibility: z.enum(['public', 'subscribers', 'ppv']).optional(),
+  ppvPrice: z.number().min(1).max(10000).optional(),
   isPinned: z.boolean().optional(),
   isArchived: z.boolean().optional(),
   isVisible: z.boolean().optional(),

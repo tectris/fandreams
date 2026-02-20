@@ -696,9 +696,15 @@ export async function getCreatorPostsDebug(creatorId: string) {
 }
 
 export async function updatePost(postId: string, creatorId: string, input: UpdatePostInput) {
+  const { ppvPrice, ...rest } = input
+  const setData: Record<string, unknown> = { ...rest, updatedAt: new Date() }
+  if (ppvPrice !== undefined) {
+    setData.ppvPrice = ppvPrice ? String(ppvPrice) : null
+  }
+
   const [post] = await db
     .update(posts)
-    .set({ ...input, updatedAt: new Date() })
+    .set(setData)
     .where(and(eq(posts.id, postId), eq(posts.creatorId, creatorId)))
     .returning()
 

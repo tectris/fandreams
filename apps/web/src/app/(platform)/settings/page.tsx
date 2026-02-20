@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Avatar } from '@/components/ui/avatar'
 import { StreakCounter } from '@/components/gamification/streak-counter'
 import { LevelBadge } from '@/components/gamification/level-badge'
-import { Settings, User, LogOut, KeyRound, Shield, CheckCircle2, Clock, XCircle, ArrowRight, Camera, ImagePlus } from 'lucide-react'
+import { Settings, User, LogOut, KeyRound, Shield, CheckCircle2, Clock, XCircle, ArrowRight, Camera, ImagePlus, AlertTriangle, Trash2, ShieldCheck, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { ImageEditor } from '@/components/image-editor'
 import Link from 'next/link'
@@ -89,6 +89,70 @@ export default function SettingsPage() {
     },
     onError: (e: any) => toast.error(e.message || 'Erro ao enviar imagem'),
   })
+
+  // Account management
+  const [showDeactivateDialog, setShowDeactivateDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [accountPassword, setAccountPassword] = useState('')
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+
+  const deactivateMutation = useMutation({
+    mutationFn: (password: string) => api.post('/users/me/deactivate', { password }),
+    onSuccess: () => {
+      toast.success('Conta desativada. Voce pode reativar fazendo login novamente.')
+      setShowDeactivateDialog(false)
+      setAccountPassword('')
+      api.setToken(null)
+      logout()
+      window.location.href = '/'
+    },
+    onError: (e: any) => toast.error(e.message),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (password: string) => api.post('/users/me/delete', { password }),
+    onSuccess: () => {
+      toast.success('Exclusao agendada. Sua conta sera excluida em 30 dias.')
+      setShowDeleteDialog(false)
+      setAccountPassword('')
+      setDeleteConfirmText('')
+      api.setToken(null)
+      logout()
+      window.location.href = '/'
+    },
+    onError: (e: any) => toast.error(e.message),
+  })
+
+  // 2FA toggle
+  const { data: settings } = useQuery({
+    queryKey: ['my-settings'],
+    queryFn: async () => {
+      const res = await api.get<any>('/users/me/settings')
+      return res.data
+    },
+  })
+
+  const toggle2faMutation = useMutation({
+    mutationFn: (enabled: boolean) => api.patch('/users/me/settings', { twoFactorEnabled: enabled }),
+    onSuccess: (_res, enabled) => {
+      queryClient.invalidateQueries({ queryKey: ['my-settings'] })
+      toast.success(enabled ? 'Verificacao em duas etapas ativada!' : 'Verificacao em duas etapas desativada.')
+    },
+    onError: (e: any) => toast.error(e.message),
+  })
+
+  function handleDeleteAccount(e: React.FormEvent) {
+    e.preventDefault()
+    if (deleteConfirmText !== 'EXCLUIR MINHA CONTA') {
+      toast.error('Digite "EXCLUIR MINHA CONTA" para confirmar')
+      return
+    }
+    if (!accountPassword) {
+      toast.error('Senha obrigatoria')
+      return
+    }
+    deleteMutation.mutate(accountPassword)
+  }
 
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -370,11 +434,215 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* 2FA */}
+      <Card className="mb-6">
+        <CardHeader>
+          <h2 className="font-bold flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-primary" />
+            Verificacao em duas etapas (2FA)
+          </h2>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-foreground">Codigo por email ao fazer login</p>
+              <p className="text-xs text-muted mt-1">
+                Receba um codigo de verificacao no seu email toda vez que fizer login
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={settings?.twoFactorEnabled || false}
+              onClick={() => toggle2faMutation.mutate(!settings?.twoFactorEnabled)}
+              disabled={toggle2faMutation.isPending}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                settings?.twoFactorEnabled ? 'bg-primary' : 'bg-border'
+              } ${toggle2faMutation.isPending ? 'opacity-50' : ''}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  settings?.twoFactorEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Account Management */}
+      <Card className="mb-6 border-error/20">
+        <CardHeader>
+          <h2 className="font-bold flex items-center gap-2 text-error">
+            <AlertTriangle className="w-5 h-5" />
+            Gerenciamento de conta
+          </h2>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Deactivate account */}
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">Desativar conta</p>
+              <p className="text-xs text-muted mt-1">
+                Sua conta ficara invisivel. Voce pode reativar a qualquer momento fazendo login.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => setShowDeactivateDialog(true)}
+            >
+              Desativar
+            </Button>
+          </div>
+
+          <div className="border-t border-border" />
+
+          {/* Delete account */}
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-error">Excluir conta permanentemente</p>
+              <p className="text-xs text-muted mt-1">
+                Sua conta sera excluida apos 30 dias. Durante este periodo voce pode cancelar fazendo login.
+              </p>
+            </div>
+            <Button
+              variant="danger"
+              size="sm"
+              className="shrink-0"
+              onClick={() => setShowDeleteDialog(true)}
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              Excluir
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Logout */}
-      <Button variant="danger" className="w-full" onClick={handleLogout}>
+      <Button variant="danger" className="w-full mb-6" onClick={handleLogout}>
         <LogOut className="w-4 h-4 mr-2" />
         Sair da conta
       </Button>
+
+      {/* Deactivate Dialog */}
+      {showDeactivateDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowDeactivateDialog(false)} />
+          <div className="relative bg-surface border border-border rounded-lg p-6 w-full max-w-md">
+            <button
+              onClick={() => { setShowDeactivateDialog(false); setAccountPassword('') }}
+              className="absolute top-4 right-4 text-muted hover:text-foreground"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-lg font-bold mb-2">Desativar conta</h3>
+            <p className="text-sm text-muted mb-4">
+              Sua conta ficara invisivel para outros usuarios. Todas as suas assinaturas permanecem ativas.
+              Voce pode reativar a qualquer momento fazendo login novamente.
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!accountPassword) { toast.error('Senha obrigatoria'); return }
+                deactivateMutation.mutate(accountPassword)
+              }}
+              className="space-y-4"
+            >
+              <Input
+                id="deactivatePassword"
+                label="Confirme sua senha"
+                type="password"
+                value={accountPassword}
+                onChange={(e) => setAccountPassword(e.target.value)}
+                autoFocus
+              />
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="flex-1"
+                  onClick={() => { setShowDeactivateDialog(false); setAccountPassword('') }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  variant="danger"
+                  className="flex-1"
+                  loading={deactivateMutation.isPending}
+                >
+                  Desativar conta
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Dialog */}
+      {showDeleteDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowDeleteDialog(false)} />
+          <div className="relative bg-surface border border-border rounded-lg p-6 w-full max-w-md">
+            <button
+              onClick={() => { setShowDeleteDialog(false); setAccountPassword(''); setDeleteConfirmText('') }}
+              className="absolute top-4 right-4 text-muted hover:text-foreground"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-lg font-bold text-error mb-2">Excluir conta permanentemente</h3>
+            <div className="p-3 rounded-md bg-error/5 border border-error/20 mb-4">
+              <p className="text-sm text-error">
+                Esta acao agendara a exclusao permanente da sua conta em 30 dias.
+                Todos os seus dados, conteudos e assinaturas serao removidos.
+              </p>
+            </div>
+            <form onSubmit={handleDeleteAccount} className="space-y-4">
+              <Input
+                id="deletePassword"
+                label="Confirme sua senha"
+                type="password"
+                value={accountPassword}
+                onChange={(e) => setAccountPassword(e.target.value)}
+              />
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1.5">
+                  Digite <span className="font-bold text-error">EXCLUIR MINHA CONTA</span> para confirmar
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-sm bg-surface-light border border-border text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-error"
+                  placeholder="EXCLUIR MINHA CONTA"
+                />
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="flex-1"
+                  onClick={() => { setShowDeleteDialog(false); setAccountPassword(''); setDeleteConfirmText('') }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  variant="danger"
+                  className="flex-1"
+                  loading={deleteMutation.isPending}
+                  disabled={deleteConfirmText !== 'EXCLUIR MINHA CONTA'}
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  Excluir conta
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Image Editor: Avatar */}
       {editingAvatarFile && (
