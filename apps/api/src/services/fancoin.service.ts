@@ -3,7 +3,7 @@ import { fancoinWallets, fancoinTransactions, creatorProfiles, users, posts, pay
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import { FANCOIN_PACKAGES, ECOSYSTEM_FUND_RATE, FAN_TIER_MULTIPLIERS } from '@fandreams/shared'
-import { getPlatformFeeRate, getP2pFeeRate, brlToFancoins, getFancoinToBrl } from './withdrawal.service'
+import { getPlatformFeeRate, getGraduatedFeeRate, getP2pFeeRate, brlToFancoins, getFancoinToBrl } from './withdrawal.service'
 
 // ── Ecosystem Fund ──
 
@@ -238,7 +238,7 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
   // The total distributed never exceeds the amount debited from the sender.
   // e.g. Obsidian (1.3x): platform fee is reduced by 30%, so more of the original amount goes to the creator.
   const tierMultiplier = await getTierMultiplier(fromUserId)
-  const feeRate = await getPlatformFeeRate()
+  const feeRate = await getGraduatedFeeRate(toCreatorId)
   const adjustedFeeRate = feeRate / tierMultiplier // Higher tier = lower effective fee
   const platformCut = Math.floor(amount * adjustedFeeRate)
   const afterFee = amount - platformCut
@@ -605,7 +605,7 @@ export async function unlockPpv(userId: string, postId: string) {
 
   // Tier multiplier: higher tier fans get a platform fee discount on PPV too
   const tierMultiplier = await getTierMultiplier(userId)
-  const ppvFeeRate = await getPlatformFeeRate()
+  const ppvFeeRate = await getGraduatedFeeRate(post.creatorId)
   const adjustedFeeRate = ppvFeeRate / tierMultiplier
   const platformCut = Math.floor(priceInCoins * adjustedFeeRate)
   const afterFee = priceInCoins - platformCut

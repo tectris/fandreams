@@ -8,6 +8,19 @@ export const PLATFORM_FEES = {
   introductory: 0.15,
 } as const
 
+/**
+ * Graduated fee tiers: creators with more subscribers pay lower platform fees.
+ * Each tier defines the minimum subscriber count and the fee rate.
+ * Tiers are ordered from highest to lowest subscriber count for efficient lookup.
+ */
+export const GRADUATED_FEE_TIERS = [
+  { minSubscribers: 5001, feePercent: 7, label: '5.001+' },
+  { minSubscribers: 2001, feePercent: 9, label: '2.001 - 5.000' },
+  { minSubscribers: 501, feePercent: 11, label: '501 - 2.000' },
+  { minSubscribers: 101, feePercent: 13, label: '101 - 500' },
+  { minSubscribers: 0, feePercent: 15, label: '0 - 100' },
+] as const
+
 export const PAYOUT_CONFIG = {
   minPayout: 50.0,
   payoutDays: [1, 15],
