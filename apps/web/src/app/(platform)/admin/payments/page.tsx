@@ -133,8 +133,22 @@ function SettingsTab({ providers, loadingProviders, settings, loadingSettings, s
                 </div>
               </div>
               <p className="text-xs text-muted">
-                Atual: <span className="font-bold text-foreground">{effectiveSettings.platform_fee_percent}%</span> — Criador recebe <span className="font-bold text-success">{100 - effectiveSettings.platform_fee_percent}%</span> de cada transacao
+                Atual: <span className="font-bold text-foreground">{effectiveSettings.platform_fee_percent}%</span> — Criador recebe <span className="font-bold text-success">{100 - effectiveSettings.platform_fee_percent}%</span> de cada transacao (taxa base)
               </p>
+              <div className="mt-4 p-3 bg-surface-light rounded-md border border-border/50">
+                <p className="text-xs font-semibold text-foreground mb-2">Taxa regressiva por assinantes (ativa por padrao)</p>
+                <div className="grid grid-cols-3 gap-1 text-xs text-muted">
+                  <span className="font-medium">Assinantes</span>
+                  <span className="font-medium text-center">Taxa</span>
+                  <span className="font-medium text-right">Criador</span>
+                  <span>0 - 100</span><span className="text-center">15%</span><span className="text-right text-success">85%</span>
+                  <span>101 - 500</span><span className="text-center">13%</span><span className="text-right text-success">87%</span>
+                  <span>501 - 2.000</span><span className="text-center">11%</span><span className="text-right text-success">89%</span>
+                  <span>2.001 - 5.000</span><span className="text-center">9%</span><span className="text-right text-success">91%</span>
+                  <span>5.001+</span><span className="text-center">7%</span><span className="text-right text-success">93%</span>
+                </div>
+                <p className="text-xs text-muted/60 mt-2">Definido em GRADUATED_FEE_TIERS. A taxa base acima e usada apenas para compras de FanCoins (sem criador envolvido).</p>
+              </div>
             </form>
           )}
         </CardContent>

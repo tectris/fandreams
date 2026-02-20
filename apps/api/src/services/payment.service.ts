@@ -6,7 +6,7 @@ import { AppError } from './auth.service'
 import { FANCOIN_PACKAGES } from '@fandreams/shared'
 import * as fancoinService from './fancoin.service'
 import * as affiliateService from './affiliate.service'
-import { getPlatformFeeRate } from './withdrawal.service'
+import { getPlatformFeeRate, getGraduatedFeeRate } from './withdrawal.service'
 import { sendPaymentConfirmedEmail, sendSubscriptionActivatedEmail } from './email.service'
 import * as openpixService from './openpix.service'
 
@@ -1037,7 +1037,7 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
     .limit(1)
   if (existing) throw new AppError('ALREADY_UNLOCKED', 'Voce ja desbloqueou este post', 409)
 
-  const feeRate = await getPlatformFeeRate()
+  const feeRate = await getGraduatedFeeRate(post.creatorId)
   const amount = Number(post.ppvPrice)
   const platformFee = amount * feeRate
   const creatorAmount = amount - platformFee

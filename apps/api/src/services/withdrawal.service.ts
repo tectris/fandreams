@@ -2,7 +2,7 @@ import { eq, and, gte, sql, desc, count } from 'drizzle-orm'
 import { payouts, fancoinWallets, fancoinTransactions, platformSettings, creatorProfiles } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
-import { PAYOUT_CONFIG } from '@fandreams/shared'
+import { PAYOUT_CONFIG, GRADUATED_FEE_TIERS } from '@fandreams/shared'
 
 // ── Platform Settings Helpers ──
 
@@ -32,9 +32,47 @@ export async function setSetting(key: string, value: any, updatedBy: string) {
 
 // ── Platform Fee ──
 
+/** Returns the base platform fee rate (admin-configurable). Used as the default/max rate. */
 export async function getPlatformFeeRate(): Promise<number> {
   const percent = await getSetting<number>('platform_fee_percent', 15)
   return percent / 100
+}
+
+/**
+ * Returns the graduated fee rate for a specific creator based on their subscriber count.
+ * Creators with more active subscribers get a lower platform fee.
+ * Falls back to the base admin-configured rate if graduated fees are disabled or the
+ * creator has no profile.
+ */
+export async function getGraduatedFeeRate(creatorId: string): Promise<number> {
+  // Check if graduated fees are enabled (admin can disable via settings)
+  const graduatedEnabled = await getSetting<boolean>('graduated_fees_enabled', true)
+  if (!graduatedEnabled) {
+    return getPlatformFeeRate()
+  }
+
+  // Look up creator's subscriber count
+  const [profile] = await db
+    .select({ totalSubscribers: creatorProfiles.totalSubscribers })
+    .from(creatorProfiles)
+    .where(eq(creatorProfiles.userId, creatorId))
+    .limit(1)
+
+  if (!profile) {
+    return getPlatformFeeRate()
+  }
+
+  const subscribers = profile.totalSubscribers || 0
+
+  // Find matching tier (tiers are sorted highest-first)
+  for (const tier of GRADUATED_FEE_TIERS) {
+    if (subscribers >= tier.minSubscribers) {
+      return tier.feePercent / 100
+    }
+  }
+
+  // Fallback to base rate
+  return getPlatformFeeRate()
 }
 
 // ── FanCoin Rate ──

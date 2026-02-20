@@ -8,7 +8,7 @@ import * as fancoinService from './fancoin.service'
 import * as affiliateService from './affiliate.service'
 import * as bonusService from './bonus.service'
 import * as openpixService from './openpix.service'
-import { getPlatformFeeRate } from './withdrawal.service'
+import { getPlatformFeeRate, getGraduatedFeeRate } from './withdrawal.service'
 import { sendSubscriptionCancelledEmail } from './email.service'
 
 // ── Create subscription with MP checkout ──
@@ -125,7 +125,7 @@ export async function createSubscriptionCheckout(
       })
       .returning()
 
-    const promoFeeRate = await getPlatformFeeRate()
+    const promoFeeRate = await getGraduatedFeeRate(creatorId)
     const platformFee = amount * promoFeeRate
     const creatorAmount = amount - platformFee
 
@@ -235,7 +235,7 @@ export async function createSubscriptionCheckout(
     .returning()
 
   // Create pending payment record
-  const feeRate = await getPlatformFeeRate()
+  const feeRate = await getGraduatedFeeRate(creatorId)
   const platformFee = amount * feeRate
   const creatorAmount = amount - platformFee
 
@@ -283,7 +283,7 @@ async function activateSubscription(fanId: string, creatorId: string, tierId?: s
   periodEnd.setMonth(periodEnd.getMonth() + 1)
 
   const amount = Number(price || 0)
-  const feeRate = await getPlatformFeeRate()
+  const feeRate = await getGraduatedFeeRate(creatorId)
   const platformFee = amount * feeRate
   const creatorAmount = amount - platformFee
 
@@ -394,7 +394,7 @@ export async function activateSubscriptionFromWebhook(
 
     // Credit creator earnings as FanCoins
     const amount = Number(sub.pricePaid || 0)
-    const webhookFeeRate = await getPlatformFeeRate()
+    const webhookFeeRate = await getGraduatedFeeRate(sub.creatorId)
     const platformFee = amount * webhookFeeRate
     const creatorAmount = amount - platformFee
 
@@ -504,7 +504,7 @@ export async function recordSubscriptionPayment(
       .where(eq(subscriptions.id, sub.id))
 
     // Record payment
-    const recurringFeeRate = await getPlatformFeeRate()
+    const recurringFeeRate = await getGraduatedFeeRate(sub.creatorId)
     const platformFee = amount * recurringFeeRate
     const creatorAmount = amount - platformFee
 
