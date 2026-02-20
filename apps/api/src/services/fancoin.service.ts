@@ -3,7 +3,7 @@ import { fancoinWallets, fancoinTransactions, creatorProfiles, users, posts, pay
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import { FANCOIN_PACKAGES, ECOSYSTEM_FUND_RATE, FAN_TIER_MULTIPLIERS } from '@fandreams/shared'
-import { getPlatformFeeRate, getGraduatedFeeRate, brlToFancoins } from './withdrawal.service'
+import { getPlatformFeeRate, getGraduatedFeeRate, getP2pFeeRate, brlToFancoins, getFancoinToBrl } from './withdrawal.service'
 
 // ── Ecosystem Fund ──
 
@@ -112,6 +112,53 @@ export async function getTransactions(userId: string, limit = 50) {
     .limit(limit)
 
   return txs
+}
+
+/**
+ * Credit FanCoins from a custom (non-package) purchase.
+ * Custom purchases use the base rate with no bonus.
+ */
+export async function purchaseCustomFancoins(userId: string, amountBrl: number) {
+  const { CUSTOM_PURCHASE_LIMITS } = await import('@fandreams/shared')
+  if (amountBrl < CUSTOM_PURCHASE_LIMITS.minBrl || amountBrl > CUSTOM_PURCHASE_LIMITS.maxBrl) {
+    throw new AppError('INVALID', `Valor deve ser entre R$${CUSTOM_PURCHASE_LIMITS.minBrl} e R$${CUSTOM_PURCHASE_LIMITS.maxBrl}`, 400)
+  }
+
+  const coins = Math.floor(amountBrl / CUSTOM_PURCHASE_LIMITS.brlPerCoin)
+  if (coins < CUSTOM_PURCHASE_LIMITS.minCoins) {
+    throw new AppError('INVALID', `Minimo de ${CUSTOM_PURCHASE_LIMITS.minCoins} FanCoins`, 400)
+  }
+
+  // Ensure wallet exists
+  await getWallet(userId)
+
+  // Atomic credit: all purchased coins are non-withdrawable (bonusBalance)
+  const [updated] = await db
+    .update(fancoinWallets)
+    .set({
+      balance: sql`${fancoinWallets.balance} + ${coins}`,
+      bonusBalance: sql`${fancoinWallets.bonusBalance} + ${coins}`,
+      totalEarned: sql`${fancoinWallets.totalEarned} + ${coins}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(fancoinWallets.userId, userId))
+    .returning({ balance: fancoinWallets.balance })
+
+  const newBalance = Number(updated?.balance ?? 0)
+  const label = `${coins.toLocaleString()} FanCoins (personalizado)`
+
+  const [tx] = await db
+    .insert(fancoinTransactions)
+    .values({
+      userId,
+      type: 'purchase',
+      amount: coins,
+      balanceAfter: newBalance,
+      description: `Compra personalizada de ${label}`,
+    })
+    .returning()
+
+  return { transaction: tx, newBalance, coins, amountBrl, label }
 }
 
 export async function purchaseFancoins(userId: string, packageId: string) {
@@ -280,6 +327,147 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
 }
 
 /**
+ * Preview a P2P transfer: returns the fee breakdown without executing.
+ */
+export async function previewTransfer(fromUserId: string, amount: number) {
+  if (amount <= 0) throw new AppError('INVALID', 'Valor invalido', 400)
+  if (!Number.isInteger(amount)) throw new AppError('INVALID', 'Valor deve ser inteiro', 400)
+
+  const tierMultiplier = await getTierMultiplier(fromUserId)
+  const feeRate = await getP2pFeeRate()
+  const adjustedFeeRate = feeRate / tierMultiplier
+  const platformCut = Math.floor(amount * adjustedFeeRate)
+  const afterFee = amount - platformCut
+  const ecosystemFund = Math.floor(afterFee * ECOSYSTEM_FUND_RATE)
+  const receiverAmount = afterFee - ecosystemFund
+  const fancoinToBrl = await getFancoinToBrl()
+
+  return {
+    amount,
+    platformFee: platformCut,
+    platformFeePercent: Math.round(adjustedFeeRate * 10000) / 100,
+    ecosystemFund,
+    ecosystemFundPercent: ECOSYSTEM_FUND_RATE * 100,
+    totalFees: platformCut + ecosystemFund,
+    totalFeesPercent: Math.round((platformCut + ecosystemFund) / amount * 10000) / 100,
+    receiverGets: receiverAmount,
+    receiverGetsBrl: Math.round(receiverAmount * fancoinToBrl * 100) / 100,
+    tierMultiplier,
+  }
+}
+
+/**
+ * Transfer FanCoins between any two users (P2P wallet-to-wallet).
+ * Uses a separate P2P fee rate (default 2%) instead of the general platform fee.
+ */
+export async function transferToUser(fromUserId: string, toUserId: string, amount: number, message?: string) {
+  if (amount <= 0) throw new AppError('INVALID', 'Valor invalido', 400)
+  if (!Number.isInteger(amount)) throw new AppError('INVALID', 'Valor deve ser inteiro', 400)
+  if (fromUserId === toUserId) throw new AppError('INVALID', 'Nao pode transferir para si mesmo', 400)
+
+  // Look up both usernames
+  const [sender] = await db
+    .select({ username: users.username })
+    .from(users)
+    .where(eq(users.id, fromUserId))
+    .limit(1)
+  const [receiver] = await db
+    .select({ username: users.username, id: users.id })
+    .from(users)
+    .where(eq(users.id, toUserId))
+    .limit(1)
+
+  if (!receiver) throw new AppError('NOT_FOUND', 'Usuario destinatario nao encontrado', 404)
+
+  // ATOMIC debit
+  const [debitResult] = await db
+    .update(fancoinWallets)
+    .set({
+      balance: sql`${fancoinWallets.balance} - ${amount}`,
+      bonusBalance: sql`GREATEST(0, ${fancoinWallets.bonusBalance} - ${amount})`,
+      totalSpent: sql`${fancoinWallets.totalSpent} + ${amount}`,
+      updatedAt: new Date(),
+    })
+    .where(
+      sql`${fancoinWallets.userId} = ${fromUserId} AND ${fancoinWallets.balance} >= ${amount}`,
+    )
+    .returning({ balance: fancoinWallets.balance })
+
+  if (!debitResult) {
+    throw new AppError('INSUFFICIENT_BALANCE', 'Saldo insuficiente de FanCoins', 400)
+  }
+
+  const newSenderBalance = Number(debitResult.balance)
+
+  // Apply P2P-specific fee (lower than general platform fee)
+  const tierMultiplier = await getTierMultiplier(fromUserId)
+  const feeRate = await getP2pFeeRate()
+  const adjustedFeeRate = feeRate / tierMultiplier
+  const platformCut = Math.floor(amount * adjustedFeeRate)
+  const afterFee = amount - platformCut
+
+  // Ecosystem fund: 1%
+  const receiverAmount = await collectEcosystemFund(afterFee, `Fundo ecossistema: transferencia @${sender?.username} -> @${receiver?.username}`)
+
+  // ATOMIC credit
+  const [creditResult] = await db
+    .update(fancoinWallets)
+    .set({
+      balance: sql`${fancoinWallets.balance} + ${receiverAmount}`,
+      totalEarned: sql`${fancoinWallets.totalEarned} + ${receiverAmount}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(fancoinWallets.userId, toUserId))
+    .returning({ balance: fancoinWallets.balance })
+
+  if (!creditResult) {
+    await getWallet(toUserId)
+    await db
+      .update(fancoinWallets)
+      .set({
+        balance: sql`${fancoinWallets.balance} + ${receiverAmount}`,
+        totalEarned: sql`${fancoinWallets.totalEarned} + ${receiverAmount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(fancoinWallets.userId, toUserId))
+  }
+
+  const newReceiverBalance = Number(creditResult?.balance ?? receiverAmount)
+  const senderUsername = sender?.username || 'usuario'
+  const receiverUsername = receiver?.username || 'usuario'
+
+  const msgSuffix = message ? ` — "${message}"` : ''
+
+  await db.insert(fancoinTransactions).values([
+    {
+      userId: fromUserId,
+      type: 'transfer_sent',
+      amount: -amount,
+      balanceAfter: newSenderBalance,
+      description: `Transferencia para @${receiverUsername}${msgSuffix}`,
+    },
+    {
+      userId: toUserId,
+      type: 'transfer_received',
+      amount: receiverAmount,
+      balanceAfter: newReceiverBalance,
+      description: `Transferencia de @${senderUsername}${msgSuffix}`,
+    },
+  ])
+
+  const ecosystemFundAmount = afterFee - receiverAmount
+  return {
+    sent: amount,
+    receiverGot: receiverAmount,
+    platformFee: platformCut,
+    ecosystemFund: ecosystemFundAmount,
+    tierMultiplier,
+    fromUsername: senderUsername,
+    toUsername: receiverUsername,
+  }
+}
+
+/**
  * Credit FanCoins after a confirmed payment.
  * Called by the payment webhook handler.
  * Uses atomic SQL to prevent double-credit from concurrent webhooks.
@@ -328,6 +516,53 @@ export async function creditPurchase(userId: string, totalCoins: number, label: 
     balanceAfter: newBalance,
     referenceId: paymentId,
     description: `Compra de ${label}`,
+  })
+
+  return { newBalance, credited: totalCoins }
+}
+
+/**
+ * Credit FanCoins after a confirmed custom-amount payment.
+ * Called by the payment webhook handler for custom purchases.
+ */
+export async function creditCustomPurchase(userId: string, totalCoins: number, amountBrl: number, paymentId: string) {
+  // Idempotency check
+  const [existing] = await db
+    .select({ id: fancoinTransactions.id })
+    .from(fancoinTransactions)
+    .where(
+      sql`${fancoinTransactions.referenceId} = ${paymentId} AND ${fancoinTransactions.type} = 'purchase'`,
+    )
+    .limit(1)
+
+  if (existing) {
+    const wallet = await getWallet(userId)
+    return { newBalance: Number(wallet.balance), credited: 0, duplicate: true }
+  }
+
+  await getWallet(userId)
+
+  const [updated] = await db
+    .update(fancoinWallets)
+    .set({
+      balance: sql`${fancoinWallets.balance} + ${totalCoins}`,
+      bonusBalance: sql`${fancoinWallets.bonusBalance} + ${totalCoins}`,
+      totalEarned: sql`${fancoinWallets.totalEarned} + ${totalCoins}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(fancoinWallets.userId, userId))
+    .returning({ balance: fancoinWallets.balance })
+
+  const newBalance = Number(updated?.balance ?? 0)
+  const label = `${totalCoins.toLocaleString()} FanCoins (R$${amountBrl.toFixed(2)})`
+
+  await db.insert(fancoinTransactions).values({
+    userId,
+    type: 'purchase',
+    amount: totalCoins,
+    balanceAfter: newBalance,
+    referenceId: paymentId,
+    description: `Compra personalizada de ${label}`,
   })
 
   return { newBalance, credited: totalCoins }

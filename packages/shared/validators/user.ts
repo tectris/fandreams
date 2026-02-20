@@ -14,6 +14,7 @@ export const updateSettingsSchema = z.object({
   notificationMessages: z.boolean().optional(),
   privacyShowOnline: z.boolean().optional(),
   privacyShowActivity: z.boolean().optional(),
+  twoFactorEnabled: z.boolean().optional(),
   theme: z.enum(['light', 'dark', 'auto']).optional(),
 })
 

@@ -5,6 +5,7 @@ import { useState, useEffect, type ReactNode } from 'react'
 import { Toaster } from 'sonner'
 import { useAuthStore, useThemeStore } from './store'
 import { api } from './api'
+import { HeadScripts } from '@/components/head-scripts'
 
 function ThemeHydrator() {
   const hydrate = useThemeStore((s) => s.hydrate)
@@ -78,6 +79,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <ThemeHydrator />
       <AuthHydrator />
+      <HeadScripts />
       {children}
       <ToasterWithTheme />
     </QueryClientProvider>

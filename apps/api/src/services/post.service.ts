@@ -1,5 +1,5 @@
 import { eq, desc, and, or, sql, inArray, gt, like } from 'drizzle-orm'
-import { posts, postMedia, postLikes, postComments, postBookmarks, subscriptions, users, creatorProfiles, fancoinTransactions, postViews, payments, follows } from '@fandreams/database'
+import { posts, postMedia, postLikes, postComments, postBookmarks, subscriptions, users, creatorProfiles, fancoinTransactions, postViews, payments, follows, contentCategories } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import type { CreatePostInput, UpdatePostInput } from '@fandreams/shared'
@@ -118,6 +118,9 @@ export async function createPost(creatorId: string, input: CreatePostInput) {
       postType: input.postType,
       visibility: input.visibility,
       tierId: input.tierId,
+      categoryId: input.categoryId || null,
+      subcategory: input.subcategory || null,
+      tags: input.tags && input.tags.length > 0 ? input.tags : null,
       ppvPrice: input.ppvPrice ? String(input.ppvPrice) : null,
       scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
       publishedAt: input.scheduledAt ? new Date(input.scheduledAt) : new Date(),
@@ -201,6 +204,17 @@ async function resolvePostDetails(post: typeof posts.$inferSelect, viewerId?: st
     .where(eq(users.id, post.creatorId))
     .limit(1)
 
+  // Resolve category name
+  let category: { id: string; name: string; slug: string; isAdult: boolean } | null = null
+  if (post.categoryId) {
+    const [cat] = await db
+      .select({ id: contentCategories.id, name: contentCategories.name, slug: contentCategories.slug, isAdult: contentCategories.isAdult })
+      .from(contentCategories)
+      .where(eq(contentCategories.id, post.categoryId))
+      .limit(1)
+    category = cat || null
+  }
+
   let hasAccess = post.visibility === 'public'
   let isLiked = false
   let isBookmarked = false
@@ -258,6 +272,7 @@ async function resolvePostDetails(post: typeof posts.$inferSelect, viewerId?: st
     ...post,
     media: hasAccess ? media : media.map((m) => ({ ...m, storageKey: m.isPreview ? m.storageKey : null })),
     creator,
+    category,
     hasAccess,
     isLiked,
     isBookmarked,
@@ -304,6 +319,9 @@ export async function getFeed(userId: string, page = 1, limit = 20) {
       visibility: posts.visibility,
       ppvPrice: posts.ppvPrice,
       isVisible: posts.isVisible,
+      categoryId: posts.categoryId,
+      subcategory: posts.subcategory,
+      tags: posts.tags,
       likeCount: posts.likeCount,
       commentCount: posts.commentCount,
       tipCount: posts.tipCount,
@@ -313,9 +331,13 @@ export async function getFeed(userId: string, page = 1, limit = 20) {
       creatorUsername: users.username,
       creatorDisplayName: users.displayName,
       creatorAvatarUrl: users.avatarUrl,
+      categoryName: contentCategories.name,
+      categorySlug: contentCategories.slug,
+      categoryIsAdult: contentCategories.isAdult,
     })
     .from(posts)
     .innerJoin(users, eq(posts.creatorId, users.id))
+    .leftJoin(contentCategories, eq(posts.categoryId, contentCategories.id))
     .where(feedConditions)
     .orderBy(desc(posts.publishedAt))
     .limit(limit)
@@ -431,6 +453,9 @@ export async function getPublicFeed(page = 1, limit = 20) {
       contentText: posts.contentText,
       postType: posts.postType,
       visibility: posts.visibility,
+      categoryId: posts.categoryId,
+      subcategory: posts.subcategory,
+      tags: posts.tags,
       likeCount: posts.likeCount,
       commentCount: posts.commentCount,
       shareCount: posts.shareCount,
@@ -439,9 +464,13 @@ export async function getPublicFeed(page = 1, limit = 20) {
       creatorUsername: users.username,
       creatorDisplayName: users.displayName,
       creatorAvatarUrl: users.avatarUrl,
+      categoryName: contentCategories.name,
+      categorySlug: contentCategories.slug,
+      categoryIsAdult: contentCategories.isAdult,
     })
     .from(posts)
     .innerJoin(users, eq(posts.creatorId, users.id))
+    .leftJoin(contentCategories, eq(posts.categoryId, contentCategories.id))
     .where(and(eq(posts.visibility, 'public'), eq(posts.isArchived, false), eq(posts.isVisible, true)))
     .orderBy(desc(posts.publishedAt))
     .limit(limit)
@@ -488,6 +517,9 @@ export async function getCreatorPosts(creatorId: string, viewerId?: string, page
       visibility: posts.visibility,
       ppvPrice: posts.ppvPrice,
       isVisible: posts.isVisible,
+      categoryId: posts.categoryId,
+      subcategory: posts.subcategory,
+      tags: posts.tags,
       likeCount: posts.likeCount,
       commentCount: posts.commentCount,
       tipCount: posts.tipCount,
@@ -497,9 +529,13 @@ export async function getCreatorPosts(creatorId: string, viewerId?: string, page
       creatorUsername: users.username,
       creatorDisplayName: users.displayName,
       creatorAvatarUrl: users.avatarUrl,
+      categoryName: contentCategories.name,
+      categorySlug: contentCategories.slug,
+      categoryIsAdult: contentCategories.isAdult,
     })
     .from(posts)
     .innerJoin(users, eq(posts.creatorId, users.id))
+    .leftJoin(contentCategories, eq(posts.categoryId, contentCategories.id))
     .where(and(...conditions))
     .orderBy(desc(posts.isPinned), desc(posts.publishedAt))
     .limit(limit)
@@ -660,9 +696,15 @@ export async function getCreatorPostsDebug(creatorId: string) {
 }
 
 export async function updatePost(postId: string, creatorId: string, input: UpdatePostInput) {
+  const { ppvPrice, ...rest } = input
+  const setData: Record<string, unknown> = { ...rest, updatedAt: new Date() }
+  if (ppvPrice !== undefined) {
+    setData.ppvPrice = ppvPrice ? String(ppvPrice) : null
+  }
+
   const [post] = await db
     .update(posts)
-    .set({ ...input, updatedAt: new Date() })
+    .set(setData)
     .where(and(eq(posts.id, postId), eq(posts.creatorId, creatorId)))
     .returning()
 

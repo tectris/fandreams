@@ -6,9 +6,12 @@ import * as storage from '../services/storage.service'
 import * as media from '../services/media.service'
 import * as bunny from '../services/bunny.service'
 import * as postService from '../services/post.service'
+import * as watermarkService from '../services/watermark.service'
+import * as steganographyService from '../services/steganography.service'
 import { db } from '../config/database'
 import { users } from '@fandreams/database'
 import { eq } from 'drizzle-orm'
+import { env } from '../config/env'
 
 const uploadRoute = new Hono()
 
@@ -146,12 +149,50 @@ uploadRoute.post('/post/:postId/media', authMiddleware, creatorMiddleware, async
     if (isImage) {
       // Compress image
       const compressed = await media.compressImage(buffer, 'post')
-      const key = storage.generateKey('posts/images', userId, `${postId}.${compressed.format}`)
-      uploadResult = await storage.uploadFile(compressed.buffer, key, compressed.contentType)
+      let processedBuffer = compressed.buffer
+      let finalFormat = compressed.format
+      let finalContentType = compressed.contentType
+
+      // Get creator username for watermark
+      const [creator] = await db
+        .select({ username: users.username })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1)
+
+      // Apply visible watermark (non-blocking if fails)
+      if (creator?.username) {
+        try {
+          processedBuffer = await watermarkService.applyWatermark(processedBuffer, {
+            username: creator.username,
+            opacity: 0.3,
+          })
+        } catch (wmErr) {
+          console.error('Watermark failed (non-blocking):', wmErr)
+        }
+      }
+
+      // Apply invisible steganographic fingerprint (non-blocking if fails)
+      const stegoSecret = env.STEGO_SECRET || env.JWT_SECRET || 'fandreams-stego-default'
+      try {
+        processedBuffer = await steganographyService.embedFingerprint(
+          processedBuffer,
+          { userId, postId },
+          stegoSecret,
+        )
+        // Steganography outputs PNG to preserve LSB data
+        finalFormat = 'png'
+        finalContentType = 'image/png'
+      } catch (stErr) {
+        console.error('Steganography failed (non-blocking):', stErr)
+      }
+
+      const key = storage.generateKey('posts/images', userId, `${postId}.${finalFormat}`)
+      uploadResult = await storage.uploadFile(processedBuffer, key, finalContentType)
       width = compressed.width
       height = compressed.height
 
-      // Generate thumbnail
+      // Generate thumbnail (from original compressed, no watermark on thumbs)
       const thumb = await media.generateThumbnail(buffer)
       const thumbKey = storage.generateKey('thumbnails', userId, `${postId}-thumb.${thumb.format}`)
       const thumbResult = await storage.uploadFile(thumb.buffer, thumbKey, thumb.contentType)

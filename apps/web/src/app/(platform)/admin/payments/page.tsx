@@ -12,12 +12,13 @@ import { Input } from '@/components/ui/input'
 import { formatCurrency } from '@/lib/utils'
 import {
   Settings, Shield, AlertTriangle, CheckCircle2, XCircle,
-  Clock, ArrowDownToLine, DollarSign, Loader2, Gift, Coins,
+  Clock, ArrowDownToLine, DollarSign, Loader2, Gift, Coins, Send,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
 const KNOWN_GATEWAYS = [
-  { id: 'mercadopago', label: 'MercadoPago', description: 'PIX e Cartao de Credito', envVars: 'MERCADOPAGO_ACCESS_TOKEN, MERCADOPAGO_SANDBOX' },
+  { id: 'openpix', label: 'Woovi (OpenPix)', description: 'PIX a vista e Assinaturas recorrentes via PIX', envVars: 'OPENPIX_APP_ID, OPENPIX_WEBHOOK_SECRET, OPENPIX_SANDBOX' },
+  { id: 'mercadopago', label: 'MercadoPago', description: 'Cartao de Credito e Assinaturas via cartao', envVars: 'MERCADOPAGO_ACCESS_TOKEN, MERCADOPAGO_SANDBOX' },
   { id: 'nowpayments', label: 'NOWPayments', description: 'Bitcoin, USDT, ETH e outras criptos', envVars: 'NOWPAYMENTS_API_KEY, NOWPAYMENTS_IPN_SECRET, NOWPAYMENTS_SANDBOX' },
   { id: 'paypal', label: 'PayPal', description: 'Pagamentos via PayPal', envVars: 'PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_SANDBOX' },
 ]
@@ -30,6 +31,7 @@ const DEFAULT_SETTINGS = {
   min_payout: 50,
   fancoin_to_brl: 0.01,
   platform_fee_percent: 15,
+  p2p_fee_percent: 2,
   creator_bonus_enabled: false,
   creator_bonus_coins: 1000,
   creator_bonus_required_subs: 1,
@@ -148,6 +150,53 @@ function SettingsTab({ providers, loadingProviders, settings, loadingSettings, s
                   <span>5.001+</span><span className="text-center">7%</span><span className="text-right text-success">93%</span>
                 </div>
                 <p className="text-xs text-muted/60 mt-2">Definido em GRADUATED_FEE_TIERS. A taxa base acima e usada apenas para compras de FanCoins (sem criador envolvido).</p>
+              </div>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* P2P Transfer Fee */}
+      <Card>
+        <CardHeader>
+          <h2 className="font-bold flex items-center gap-2">
+            <Send className="w-5 h-5 text-primary" /> Taxa de Transferencia P2P
+          </h2>
+          <p className="text-xs text-muted mt-1">Percentual retido em transferencias entre usuarios (wallet-to-wallet). Separada da taxa geral da plataforma.</p>
+        </CardHeader>
+        <CardContent>
+          {loadingSettings ? (
+            <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+          ) : (
+            <form className="space-y-4" onSubmit={(e) => {
+              e.preventDefault()
+              const form = new FormData(e.currentTarget)
+              const fee = Number(form.get('p2p_fee_percent'))
+              if (fee < 0 || fee > 20) return
+              settingsMutation.mutate({ p2p_fee_percent: fee })
+            }}>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <Input
+                    label="Taxa P2P (%)"
+                    name="p2p_fee_percent"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="20"
+                    defaultValue={effectiveSettings.p2p_fee_percent}
+                  />
+                </div>
+                <div className="pt-5">
+                  <Button type="submit" loading={settingsMutation.isPending}>
+                    Salvar
+                  </Button>
+                </div>
+              </div>
+              <div className="p-3 bg-surface-light rounded-md text-xs text-muted space-y-1">
+                <p>Taxa P2P: <span className="font-bold text-foreground">{effectiveSettings.p2p_fee_percent}%</span> + Fundo ecossistema: <span className="font-bold text-foreground">1%</span></p>
+                <p>Total retido por transferencia: <span className="font-bold text-warning">{(effectiveSettings.p2p_fee_percent + 1).toFixed(1)}%</span></p>
+                <p>Exemplo: 1.000 FanCoins enviados → destinatario recebe ~<span className="font-bold text-success">{Math.floor(1000 * (1 - (effectiveSettings.p2p_fee_percent / 100)) * (1 - 0.01)).toLocaleString()}</span> FanCoins</p>
               </div>
             </form>
           )}

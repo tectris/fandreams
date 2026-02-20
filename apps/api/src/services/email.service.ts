@@ -419,3 +419,204 @@ export async function sendKycRejectedEmail(
     `),
   })
 }
+
+// ── Account Management Emails ──
+
+export async function sendAccountDeactivatedEmail(to: string, displayName: string): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: 'Conta desativada - FanDreams',
+    html: baseTemplate(`
+      ${heading('Conta desativada')}
+      ${paragraph(`${highlight(displayName)}, sua conta foi desativada conforme solicitado.`)}
+      ${paragraph('Enquanto sua conta estiver desativada:')}
+      <ul style="margin: 0 0 16px; padding-left: 20px; color: #b0b0c0; font-size: 14px; line-height: 2;">
+        <li>Seu perfil nao sera visivel para outros usuarios</li>
+        <li>Suas assinaturas permanecem ativas</li>
+        <li>Voce pode reativar sua conta a qualquer momento fazendo login</li>
+      </ul>
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Reativar conta', `${appUrl}/login`)}
+      </div>
+    `),
+  })
+}
+
+export async function sendAccountReactivatedEmail(to: string, displayName: string): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: 'Conta reativada - FanDreams',
+    html: baseTemplate(`
+      ${heading('Bem-vindo de volta!')}
+      ${paragraph(`${highlight(displayName)}, sua conta foi reativada com sucesso.`)}
+      ${paragraph('Tudo esta como voce deixou. Explore novos conteudos e aproveite a plataforma!')}
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Ir para o Feed', `${appUrl}/feed`)}
+      </div>
+    `),
+  })
+}
+
+export async function sendAccountDeletionScheduledEmail(to: string, displayName: string, deletionDate: string): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: 'Exclusao de conta agendada - FanDreams',
+    html: baseTemplate(`
+      ${heading('Exclusao de conta agendada')}
+      ${paragraph(`${highlight(displayName)}, sua solicitacao de exclusao de conta foi registrada.`)}
+      ${infoBox(`Sua conta e todos os dados associados serao excluidos permanentemente em ${highlight(deletionDate)}.`)}
+      ${paragraph('Ate essa data, voce pode cancelar a exclusao fazendo login na plataforma.')}
+      ${paragraph(`${highlight('Atencao:')} Apos a exclusao, esta acao nao podera ser desfeita. Todos os seus dados, conteudos e assinaturas serao removidos permanentemente.`)}
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Cancelar exclusao', `${appUrl}/login`)}
+      </div>
+    `),
+  })
+}
+
+export async function sendAccountDeletedEmail(to: string, displayName: string): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: 'Conta excluida - FanDreams',
+    html: baseTemplate(`
+      ${heading('Conta excluida')}
+      ${paragraph(`${highlight(displayName)}, sua conta FanDreams foi excluida permanentemente conforme agendado.`)}
+      ${paragraph('Todos os dados associados a sua conta foram removidos.')}
+      ${paragraph('Se desejar, voce pode criar uma nova conta a qualquer momento.')}
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Criar nova conta', `${appUrl}/register`)}
+      </div>
+    `),
+  })
+}
+
+// ── Admin Notification Emails ──
+
+const adminEmails = env.ADMIN_NOTIFICATION_EMAILS
+  ? env.ADMIN_NOTIFICATION_EMAILS.split(',').map((e: string) => e.trim()).filter(Boolean)
+  : []
+
+async function sendToAdmins(subject: string, html: string): Promise<void> {
+  for (const email of adminEmails) {
+    sendEmail({ to: email, subject, html }).catch((e) =>
+      console.error(`Failed to send admin email to ${email}:`, e),
+    )
+  }
+}
+
+export async function sendNewSignupAlert(data: { username: string; email: string; displayName: string }): Promise<void> {
+  if (adminEmails.length === 0) return
+
+  await sendToAdmins(
+    `Novo cadastro: ${data.username} - FanDreams`,
+    baseTemplate(`
+      ${heading('Novo usuario cadastrado')}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #1a1a23; border: 1px solid #23232d; border-radius: 8px; margin: 16px 0;">
+        <tr>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #23232d;">
+            <span style="font-size: 13px; color: #6b6b7b;">Username</span><br />
+            <span style="font-size: 15px; color: #f0f0f5; font-weight: 600;">@${data.username}</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #23232d;">
+            <span style="font-size: 13px; color: #6b6b7b;">Nome</span><br />
+            <span style="font-size: 15px; color: #f0f0f5;">${data.displayName}</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 16px;">
+            <span style="font-size: 13px; color: #6b6b7b;">E-mail</span><br />
+            <span style="font-size: 15px; color: #f0f0f5;">${data.email}</span>
+          </td>
+        </tr>
+      </table>
+      ${paragraph(`Registrado em ${highlight(new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }))}.`)}
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Ver painel admin', `${appUrl}/admin`)}
+      </div>
+    `),
+  )
+}
+
+export async function sendNewKycSubmissionAlert(data: { username: string; email: string; displayName: string; documentId: string }): Promise<void> {
+  if (adminEmails.length === 0) return
+
+  await sendToAdmins(
+    `Nova solicitacao KYC: ${data.username} - FanDreams`,
+    baseTemplate(`
+      ${heading('Nova solicitacao de verificacao KYC')}
+      ${paragraph('Um usuario enviou documentos para verificacao de identidade.')}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #1a1a23; border: 1px solid #23232d; border-radius: 8px; margin: 16px 0;">
+        <tr>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #23232d;">
+            <span style="font-size: 13px; color: #6b6b7b;">Username</span><br />
+            <span style="font-size: 15px; color: #f0f0f5; font-weight: 600;">@${data.username}</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 16px; border-bottom: 1px solid #23232d;">
+            <span style="font-size: 13px; color: #6b6b7b;">Nome</span><br />
+            <span style="font-size: 15px; color: #f0f0f5;">${data.displayName}</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 16px;">
+            <span style="font-size: 13px; color: #6b6b7b;">E-mail</span><br />
+            <span style="font-size: 15px; color: #f0f0f5;">${data.email}</span>
+          </td>
+        </tr>
+      </table>
+      ${paragraph('Revise os documentos no painel de administracao.')}
+      <div style="text-align: center; margin: 28px 0;">
+        ${button('Revisar KYC', `${appUrl}/admin/kyc`)}
+      </div>
+    `),
+  )
+}
+
+// ── 2FA OTP Email ──
+
+export async function send2faOtpEmail(to: string, code: string): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: `Codigo de verificacao de login - FanDreams`,
+    html: baseTemplate(`
+      ${heading('Codigo de verificacao')}
+      ${paragraph('Alguem esta tentando fazer login na sua conta FanDreams. Use o codigo abaixo para confirmar sua identidade:')}
+      <div style="text-align: center; margin: 28px 0;">
+        <div style="display: inline-block; background: #1a1a23; border: 2px solid #e11d48; border-radius: 12px; padding: 20px 40px;">
+          <span style="font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #f0f0f5; font-family: 'Courier New', monospace;">${code}</span>
+        </div>
+      </div>
+      ${infoBox(`Este codigo expira em ${highlight('10 minutos')}. Nao compartilhe com ninguem.`)}
+      ${paragraph('Se voce nao tentou fazer login, altere sua senha imediatamente.')}
+    `),
+  })
+}
+
+export async function send2faEnabledEmail(to: string, displayName: string): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: 'Verificacao em duas etapas ativada - FanDreams',
+    html: baseTemplate(`
+      ${heading('2FA ativado')}
+      ${paragraph(`${highlight(displayName)}, a verificacao em duas etapas foi ativada na sua conta.`)}
+      ${paragraph('A partir de agora, sempre que fizer login, voce recebera um codigo de verificacao por email para confirmar sua identidade.')}
+      ${infoBox('Se voce nao ativou esta funcionalidade, altere sua senha imediatamente e entre em contato com o suporte.')}
+    `),
+  })
+}
+
+export async function send2faDisabledEmail(to: string, displayName: string): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: 'Verificacao em duas etapas desativada - FanDreams',
+    html: baseTemplate(`
+      ${heading('2FA desativado')}
+      ${paragraph(`${highlight(displayName)}, a verificacao em duas etapas foi desativada na sua conta.`)}
+      ${paragraph('Sua conta agora sera acessada apenas com email e senha. Recomendamos manter o 2FA ativo para maior seguranca.')}
+      ${infoBox('Se voce nao desativou esta funcionalidade, altere sua senha imediatamente e entre em contato com o suporte.')}
+    `),
+  })
+}

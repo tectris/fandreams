@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema } from '@fandreams/shared'
 import { validateBody } from '../middleware/validation'
 import * as authService from '../services/auth.service'
+import { complete2faLogin } from '../services/twofa-login.service'
 import { success, error } from '../utils/response'
 import { authMiddleware } from '../middleware/auth'
 import { authRateLimit, sensitiveRateLimit } from '../middleware/rateLimit'
@@ -73,6 +74,24 @@ auth.post('/reset-password', sensitiveRateLimit, validateBody(resetPasswordSchem
   try {
     const { token, password } = c.req.valid('json')
     const result = await authService.resetPassword(token, password)
+    return success(c, result)
+  } catch (e) {
+    if (e instanceof authService.AppError) {
+      return error(c, e.status as any, e.code, e.message)
+    }
+    throw e
+  }
+})
+
+// ── 2FA Verification ──
+
+auth.post('/verify-2fa', authRateLimit, async (c) => {
+  try {
+    const { challengeToken, code } = await c.req.json()
+    if (!challengeToken || !code) {
+      return error(c, 400, 'MISSING_FIELDS', 'Token e codigo obrigatorios')
+    }
+    const result = await complete2faLogin(challengeToken, code)
     return success(c, result)
   } catch (e) {
     if (e instanceof authService.AppError) {

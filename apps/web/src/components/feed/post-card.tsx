@@ -41,6 +41,11 @@ interface PostCardProps {
     ppvPrice?: string | null
     isPinned?: boolean
     isVisible?: boolean
+    categoryName?: string | null
+    categorySlug?: string | null
+    categoryIsAdult?: boolean | null
+    subcategory?: string | null
+    tags?: string[] | null
     likeCount: number
     commentCount: number
     shareCount?: number
@@ -66,7 +71,7 @@ interface PostCardProps {
   isAuthenticated?: boolean
   onLike?: (postId: string) => void
   onBookmark?: (postId: string) => void
-  onEdit?: (postId: string, data: { contentText?: string; isPinned?: boolean }) => void
+  onEdit?: (postId: string, data: { contentText?: string; isPinned?: boolean; ppvPrice?: number }) => void
   onToggleVisibility?: (postId: string) => void
   onDelete?: (postId: string) => void
   onComment?: (postId: string, content: string) => void
@@ -109,6 +114,7 @@ export function PostCard({
   const [menuOpen, setMenuOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState(post.contentText || '')
+  const [editPrice, setEditPrice] = useState(post.ppvPrice || '')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showComments, setShowComments] = useState(false)
   const [commentText, setCommentText] = useState('')
@@ -154,7 +160,11 @@ export function PostCard({
   }
 
   function handleEdit() {
-    onEdit?.(post.id, { contentText: editText })
+    const data: { contentText?: string; ppvPrice?: number } = { contentText: editText }
+    if (post.visibility === 'ppv' && editPrice) {
+      data.ppvPrice = Number(editPrice)
+    }
+    onEdit?.(post.id, data)
     setEditing(false)
     setMenuOpen(false)
   }
@@ -330,7 +340,7 @@ export function PostCard({
   }
 
   return (
-    <Card className={`mb-6 ${isHidden ? 'opacity-50 grayscale' : ''}`}>
+    <Card className={`mb-6 overflow-visible ${isHidden ? 'opacity-50 grayscale' : ''}`}>
       {/* Hidden indicator */}
       {isHidden && isOwner && (
         <div className="px-4 pt-3 flex items-center gap-2 text-muted">
@@ -478,6 +488,21 @@ export function PostCard({
             rows={3}
             className="w-full px-3 py-2 rounded-sm bg-surface-light border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none text-sm"
           />
+          {post.visibility === 'ppv' && (
+            <div className="mt-2">
+              <label className="block text-xs font-medium text-muted mb-1">Preco PPV (R$)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="1"
+                max="10000"
+                value={editPrice}
+                onChange={(e) => setEditPrice(e.target.value)}
+                placeholder="29.90"
+                className="w-full px-3 py-2 rounded-sm bg-surface-light border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          )}
           <div className="flex gap-2 mt-2">
             <Button size="sm" onClick={handleEdit}>
               <Check className="w-4 h-4 mr-1" />
@@ -489,6 +514,7 @@ export function PostCard({
               onClick={() => {
                 setEditing(false)
                 setEditText(post.contentText || '')
+                setEditPrice(post.ppvPrice || '')
               }}
             >
               <X className="w-4 h-4 mr-1" />
@@ -508,6 +534,26 @@ export function PostCard({
             )}
           </div>
         )
+      )}
+
+      {/* Category & Tags */}
+      {(post.categoryName || (post.tags && post.tags.length > 0)) && (
+        <div className="px-4 pb-3 flex flex-wrap items-center gap-1.5">
+          {post.categoryName && (
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-[11px] font-medium ${post.categoryIsAdult ? 'bg-error/10 text-error' : 'bg-surface-light text-muted'}`}>
+              {post.categoryName}
+              {post.subcategory && <span className="ml-1 opacity-70">/ {post.subcategory}</span>}
+            </span>
+          )}
+          {post.tags && post.tags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center px-1.5 py-0.5 rounded-sm bg-primary/5 text-primary/70 text-[11px]"
+            >
+              #{tag}
+            </span>
+          ))}
+        </div>
       )}
 
       {/* Media */}

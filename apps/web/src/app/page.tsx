@@ -23,7 +23,10 @@ import {
   Play,
   Megaphone,
   Swords,
+  Sun,
+  Moon,
 } from 'lucide-react'
+import { useThemeStore } from '@/lib/store'
 import { CookieConsent } from '@/components/cookie-consent'
 import { ContactModal } from '@/components/contact-modal'
 import { PageContentModal } from '@/components/page-content-modal'
@@ -233,6 +236,7 @@ export default function LandingPage() {
   const [contactOpen, setContactOpen] = useState(false)
   const [pageModal, setPageModal] = useState<{ key: string; title: string } | null>(null)
   const [showBanner, setShowBanner] = useState(false)
+  const { theme, toggleTheme } = useThemeStore()
   const heroRef = useRef<HTMLElement>(null)
 
   const { scrollYProgress } = useScroll()
@@ -284,6 +288,13 @@ export default function LandingPage() {
             <Link href="/explore" className="hidden sm:block text-sm text-muted hover:text-foreground transition-colors">
               Explorar
             </Link>
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 rounded-full hover:bg-surface-light transition-colors text-muted hover:text-foreground"
+              title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
             <Link href="/login" className="text-sm text-muted hover:text-foreground transition-colors">
               Entrar
             </Link>
@@ -732,27 +743,66 @@ export default function LandingPage() {
       </section>
 
       {/* ─── Footer ─── */}
-      <footer className="border-t border-border/40 py-10">
+      <footer className="border-t border-border/40 py-12">
         <div className="max-w-6xl mx-auto px-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-2">
-              <Flame className="w-4 h-4 text-primary" />
-              <span className="font-semibold text-sm text-foreground tracking-tight">FanDreams</span>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-10">
+            {/* Coluna 1: Sobre */}
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <Flame className="w-4 h-4 text-primary" />
+                <span className="font-semibold text-sm text-foreground tracking-tight">FanDreams</span>
+              </div>
+              <div className="space-y-2 text-xs text-muted">
+                <button onClick={() => setContactOpen(true)} className="block hover:text-foreground transition-colors">Contato</button>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-muted">
-              <button onClick={() => setPageModal({ key: 'terms_and_conditions', title: 'Termos de Uso' })} className="hover:text-foreground transition-colors">Termos de Uso</button>
-              <button onClick={() => setPageModal({ key: 'privacy_policy', title: 'Politica de Privacidade' })} className="hover:text-foreground transition-colors">Politica de Privacidade</button>
-              <button onClick={() => setPageModal({ key: 'dmca', title: 'DMCA' })} className="hover:text-foreground transition-colors">DMCA</button>
-              <button onClick={() => setPageModal({ key: 'compliance', title: 'Compliance' })} className="hover:text-foreground transition-colors">Compliance</button>
-              <button onClick={() => setContactOpen(true)} className="hover:text-foreground transition-colors">
-                Contato
-              </button>
+
+            {/* Coluna 2: Legal & Compliance */}
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-3">Legal & Compliance</p>
+              <div className="space-y-2 text-xs text-muted">
+                <button onClick={() => setPageModal({ key: 'terms_and_conditions', title: 'Termos de Uso' })} className="block hover:text-foreground transition-colors">Termos de Uso</button>
+                <button onClick={() => setPageModal({ key: 'privacy_policy', title: 'Politica de Privacidade' })} className="block hover:text-foreground transition-colors">Privacidade</button>
+                <button onClick={() => setPageModal({ key: 'cookie_policy', title: 'Politica de Cookies' })} className="block hover:text-foreground transition-colors">Cookies</button>
+                <button onClick={() => setPageModal({ key: 'dmca', title: 'DMCA e Direitos Autorais' })} className="block hover:text-foreground transition-colors">DMCA</button>
+                <button onClick={() => setPageModal({ key: 'compliance', title: 'Compliance' })} className="block hover:text-foreground transition-colors">Compliance</button>
+                <button onClick={() => setPageModal({ key: 'acceptable_use_policy', title: 'Politica de Uso Aceitavel' })} className="block hover:text-foreground transition-colors">Uso Aceitavel</button>
+                <button onClick={() => setPageModal({ key: 'age_verification', title: 'Verificacao de Idade' })} className="block hover:text-foreground transition-colors">Verificacao de Idade</button>
+                <button onClick={() => setPageModal({ key: 'creator_contract', title: 'Contrato do Criador' })} className="block hover:text-foreground transition-colors">Contrato do Criador</button>
+                <button onClick={() => setPageModal({ key: 'subscription_terms', title: 'Termos de Assinatura' })} className="block hover:text-foreground transition-colors">Termos de Assinatura</button>
+                <button onClick={() => setPageModal({ key: 'complaints', title: 'Reclamacoes e Denuncias' })} className="block hover:text-foreground transition-colors">Reclamacoes</button>
+                <button onClick={() => setPageModal({ key: 'anti_trafficking', title: 'Anti-Trafico' })} className="block hover:text-foreground transition-colors">Anti-Trafico</button>
+              </div>
             </div>
-            <p className="text-xs text-muted/60">2026 FanDreams</p>
+
+            {/* Coluna 3: Seguranca & Transparencia */}
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-3">Seguranca</p>
+              <div className="space-y-2 text-xs text-muted">
+                <button onClick={() => setPageModal({ key: 'safety_center', title: 'Centro de Seguranca' })} className="block hover:text-foreground transition-colors">Centro de Seguranca</button>
+                <button onClick={() => setPageModal({ key: 'community_guidelines', title: 'Diretrizes da Comunidade' })} className="block hover:text-foreground transition-colors">Diretrizes da Comunidade</button>
+                <button onClick={() => setPageModal({ key: 'transparency_report', title: 'Transparencia' })} className="block hover:text-foreground transition-colors">Transparencia</button>
+              </div>
+            </div>
+
+            {/* Coluna 4: Recursos */}
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-3">Recursos</p>
+              <div className="space-y-2 text-xs text-muted">
+                <button onClick={() => setPageModal({ key: 'refund_policy', title: 'Reembolsos' })} className="block hover:text-foreground transition-colors">Pagamentos e Reembolsos</button>
+                <button onClick={() => setPageModal({ key: 'tax_guide', title: 'Guia Tributario' })} className="block hover:text-foreground transition-colors">Guia Tributario</button>
+                <button onClick={() => setPageModal({ key: 'accessibility', title: 'Acessibilidade' })} className="block hover:text-foreground transition-colors">Acessibilidade</button>
+              </div>
+            </div>
           </div>
-          <div className="mt-6 flex items-center justify-center gap-2 text-xs text-muted/40">
-            <Shield className="w-3 h-3" />
-            <span>Plataforma segura. Cobranca discreta no extrato.</span>
+
+          {/* Bottom bar */}
+          <div className="border-t border-border/40 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-xs text-muted/60">2026 FanDreams. Todos os direitos reservados.</p>
+            <div className="flex items-center gap-2 text-xs text-muted/40">
+              <Shield className="w-3 h-3" />
+              <span>Plataforma segura. Cobranca discreta no extrato.</span>
+            </div>
           </div>
         </div>
       </footer>
@@ -763,7 +813,7 @@ export default function LandingPage() {
       {/* ─── Contact Modal ─── */}
       <ContactModal open={contactOpen} onClose={() => setContactOpen(false)} />
 
-      {/* ─── Page Content Modal (Terms, Privacy, DMCA, Compliance) ─── */}
+      {/* ─── Page Content Modal (Legal & Compliance Pages) ─── */}
       <PageContentModal
         open={!!pageModal}
         onClose={() => setPageModal(null)}

@@ -5,7 +5,8 @@ import { db } from '../config/database'
 import { env } from '../config/env'
 import { hashPassword, verifyPassword } from '../utils/password'
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken, blacklistRefreshToken, isRefreshTokenBlacklisted } from '../utils/tokens'
-import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail } from './email.service'
+import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail, sendNewSignupAlert } from './email.service'
+import { initiate2fa } from './twofa.service'
 import { recordFailedLogin, isAccountLocked, clearLoginAttempts } from '../middleware/rateLimit'
 import type { RegisterInput, LoginInput } from '@fandreams/shared'
 
@@ -117,6 +118,13 @@ export async function register(input: RegisterInput) {
     console.error('Failed to send welcome email:', err),
   )
 
+  // Notify admins of new signup (non-blocking)
+  sendNewSignupAlert({
+    username: user.username,
+    email: user.email,
+    displayName: user.displayName || user.username,
+  }).catch((err) => console.error('Failed to send signup alert:', err))
+
   return { user, accessToken, refreshToken }
 }
 
@@ -167,8 +175,9 @@ export async function login(input: LoginInput) {
     throw new AppError('INVALID_CREDENTIALS', 'Email ou senha incorretos', 401)
   }
 
-  if (!user.isActive) {
-    throw new AppError('ACCOUNT_DISABLED', 'Conta desativada', 403)
+  // Permanently deleted accounts cannot login
+  if (!user.isActive && user.passwordHash === 'DELETED') {
+    throw new AppError('ACCOUNT_DELETED', 'Esta conta foi excluida permanentemente', 403)
   }
 
   const valid = await verifyPassword(input.password, user.passwordHash)
@@ -180,12 +189,40 @@ export async function login(input: LoginInput) {
   // Clear lockout on successful login
   clearLoginAttempts(input.email)
 
-  await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id))
+  // Check if 2FA is enabled
+  const [settings] = await db
+    .select({ twoFactorEnabled: userSettings.twoFactorEnabled })
+    .from(userSettings)
+    .where(eq(userSettings.userId, user.id))
+    .limit(1)
+
+  if (settings?.twoFactorEnabled) {
+    // Initiate 2FA challenge - don't generate tokens yet
+    const challengeToken = await initiate2fa(user.id, user.email, user.role)
+    return {
+      requires2fa: true,
+      challengeToken,
+      user: {
+        email: user.email.replace(/^(.{2})(.*)(@.*)$/, '$1***$3'),
+      },
+    }
+  }
+
+  // If user is deactivated (but not deleted), reactivate on login
+  if (!user.isActive) {
+    await db
+      .update(users)
+      .set({ isActive: true, deactivatedAt: null, deletionScheduledAt: null, lastLoginAt: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, user.id))
+  } else {
+    await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id))
+  }
 
   const accessToken = generateAccessToken(user.id, user.role)
   const refreshToken = generateRefreshToken(user.id)
 
   return {
+    requires2fa: false,
     user: {
       id: user.id,
       email: user.email,
@@ -194,6 +231,7 @@ export async function login(input: LoginInput) {
       avatarUrl: user.avatarUrl,
       role: user.role,
       kycStatus: user.kycStatus ?? 'none',
+      reactivated: !user.isActive,
     },
     accessToken,
     refreshToken,

@@ -2,6 +2,7 @@ import { neon } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-http'
 import * as users from './schema/users'
 import * as creators from './schema/creators'
+import * as categories from './schema/categories'
 import * as posts from './schema/posts'
 import * as subscriptions from './schema/subscriptions'
 import * as payments from './schema/payments'
@@ -17,10 +18,12 @@ import * as guilds from './schema/guilds'
 import * as pitch from './schema/pitch'
 import * as commitments from './schema/commitments'
 import * as platform from './schema/platform'
+import * as documentAcceptances from './schema/document-acceptances'
 
 export const schema = {
   ...users,
   ...creators,
+  ...categories,
   ...posts,
   ...subscriptions,
   ...payments,
@@ -36,6 +39,7 @@ export const schema = {
   ...pitch,
   ...commitments,
   ...platform,
+  ...documentAcceptances,
 }
 
 export function createDb(databaseUrl: string) {
@@ -47,6 +51,7 @@ export type Database = ReturnType<typeof createDb>
 
 export * from './schema/users'
 export * from './schema/creators'
+export * from './schema/categories'
 export * from './schema/posts'
 export * from './schema/subscriptions'
 export * from './schema/payments'
@@ -62,3 +67,4 @@ export * from './schema/guilds'
 export * from './schema/pitch'
 export * from './schema/commitments'
 export * from './schema/platform'
+export * from './schema/document-acceptances'

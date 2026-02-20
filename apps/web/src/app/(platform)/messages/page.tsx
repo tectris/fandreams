@@ -9,8 +9,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { timeAgo } from '@/lib/utils'
-import { MessageCircle, Send, ArrowLeft, Loader2 } from 'lucide-react'
+import { MessageCircle, Send, ArrowLeft, Loader2, ImagePlus } from 'lucide-react'
 import { toast } from 'sonner'
+import { ImageEditor } from '@/components/image-editor'
 
 interface OtherParticipant {
   id: string
@@ -57,7 +58,10 @@ function MessagesContent() {
   const [messageInput, setMessageInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const mediaInputRef = useRef<HTMLInputElement>(null)
   const [startedConv, setStartedConv] = useState(false)
+  const [editingMessageImage, setEditingMessageImage] = useState<File | null>(null)
+  const [sendingMedia, setSendingMedia] = useState(false)
 
   const recipientId = searchParams.get('to')
 
@@ -141,6 +145,43 @@ function MessagesContent() {
     const text = messageInput.trim()
     if (!text || !activeConversation) return
     sendMutation.mutate(text)
+  }
+
+  function handleMediaSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('Apenas imagens sao aceitas')
+      return
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error('Imagem deve ter no maximo 20MB')
+      return
+    }
+    setEditingMessageImage(file)
+    e.target.value = ''
+  }
+
+  async function handleMediaEditorSave(editedFile: File) {
+    setEditingMessageImage(null)
+    if (!activeConversation) return
+    setSendingMedia(true)
+    try {
+      const uploadRes = await api.upload<{ key: string; mediaType: string }>('/media/upload', editedFile)
+      await api.post(`/messages/conversations/${activeConversation}/messages`, {
+        content: messageInput.trim() || null,
+        mediaUrl: api.getMediaUrl(uploadRes.data.key),
+        mediaType: uploadRes.data.mediaType,
+      })
+      setMessageInput('')
+      queryClient.invalidateQueries({ queryKey: ['messages', activeConversation] })
+      queryClient.invalidateQueries({ queryKey: ['conversations'] })
+      toast.success('Imagem enviada!')
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao enviar imagem')
+    } finally {
+      setSendingMedia(false)
+    }
   }
 
   const activeConv = conversations?.find((c) => c.id === activeConversation)
@@ -315,6 +356,22 @@ function MessagesContent() {
                 className="flex items-center gap-2 px-4 py-3 border-t border-border"
               >
                 <input
+                  ref={mediaInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleMediaSelect}
+                />
+                <button
+                  type="button"
+                  onClick={() => mediaInputRef.current?.click()}
+                  disabled={sendingMedia}
+                  className="p-2 rounded-full hover:bg-surface-light transition-colors text-muted hover:text-foreground disabled:opacity-50"
+                  title="Enviar imagem"
+                >
+                  {sendingMedia ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImagePlus className="w-5 h-5" />}
+                </button>
+                <input
                   ref={inputRef}
                   type="text"
                   value={messageInput}
@@ -343,6 +400,16 @@ function MessagesContent() {
           )}
         </div>
       </div>
+
+      {/* Image Editor for messages */}
+      {editingMessageImage && (
+        <ImageEditor
+          file={editingMessageImage}
+          userTier="bronze"
+          onSave={handleMediaEditorSave}
+          onCancel={() => setEditingMessageImage(null)}
+        />
+      )}
     </div>
   )
 }

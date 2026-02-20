@@ -3,6 +3,7 @@ import { users, userSettings, creatorProfiles, subscriptionTiers, subscriptionPr
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import { hashPassword, verifyPassword } from '../utils/password'
+import { send2faEnabledEmail, send2faDisabledEmail } from './email.service'
 import type { UpdateProfileInput, UpdateSettingsInput } from '@fandreams/shared'
 
 export async function getProfile(userId: string) {
@@ -18,6 +19,9 @@ export async function getProfile(userId: string) {
       role: users.role,
       country: users.country,
       language: users.language,
+      isActive: users.isActive,
+      deactivatedAt: users.deactivatedAt,
+      deletionScheduledAt: users.deletionScheduledAt,
       createdAt: users.createdAt,
     })
     .from(users)
@@ -167,6 +171,24 @@ export async function updateSettings(userId: string, input: UpdateSettingsInput)
     .set({ ...input, updatedAt: new Date() })
     .where(eq(userSettings.userId, userId))
     .returning()
+
+  // Send 2FA status change email (non-blocking)
+  if (input.twoFactorEnabled !== undefined) {
+    const [user] = await db
+      .select({ email: users.email, displayName: users.displayName, username: users.username })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+
+    if (user) {
+      const name = user.displayName || user.username || ''
+      if (input.twoFactorEnabled) {
+        send2faEnabledEmail(user.email, name).catch((e: any) => console.error('Failed to send 2FA enabled email:', e))
+      } else {
+        send2faDisabledEmail(user.email, name).catch((e: any) => console.error('Failed to send 2FA disabled email:', e))
+      }
+    }
+  }
 
   return updated
 }

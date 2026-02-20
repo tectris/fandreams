@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
@@ -9,8 +9,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
   X, Coins, ShoppingCart, ArrowRightLeft, ArrowDownToLine,
-  QrCode, CreditCard, Loader2, CheckCircle2, ExternalLink, Copy,
+  QrCode, CreditCard, Loader2, CheckCircle2, ExternalLink, Copy, ArrowLeftRight,
+  Send, Search, UserIcon, MessageSquare,
+  ChevronDown,
 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Input } from '@/components/ui/input'
+import { Avatar } from '@/components/ui/avatar'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
@@ -44,6 +49,30 @@ type PixData = {
   expiresAt: string
 }
 
+type SearchUser = {
+  id: string
+  username: string
+  displayName: string
+  avatarUrl: string | null
+}
+
+function groupTransactionsByMonth(transactions: Transaction[]) {
+  const groups: Record<string, Transaction[]> = {}
+  for (const tx of transactions) {
+    const date = new Date(tx.createdAt)
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    if (!groups[key]) groups[key] = []
+    groups[key].push(tx)
+  }
+  return Object.entries(groups)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([key, txs]) => {
+      const [year, month] = key.split('-')
+      const label = new Date(Number(year), Number(month) - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+      return { key, label: label.charAt(0).toUpperCase() + label.slice(1), transactions: txs }
+    })
+}
+
 interface FancoinDrawerProps {
   open: boolean
   onClose: () => void
@@ -52,12 +81,23 @@ interface FancoinDrawerProps {
 export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
   const queryClient = useQueryClient()
   const user = useAuthStore((s) => s.user)
-  const [tab, setTab] = useState<'wallet' | 'buy' | 'history'>('wallet')
+  const [tab, setTab] = useState<'wallet' | 'buy' | 'send' | 'history'>('wallet')
   const [buyState, setBuyState] = useState<'choose' | 'processing' | 'pix' | 'waiting' | 'success'>('choose')
+  const [customMode, setCustomMode] = useState<'coins' | 'brl'>('brl')
+  const [customValue, setCustomValue] = useState('')
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null)
   const [pixData, setPixData] = useState<PixData | null>(null)
   const popupRef = useRef<Window | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // P2P Transfer state
+  const [sendQuery, setSendQuery] = useState('')
+  const [sendAmount, setSendAmount] = useState('')
+  const [sendMessage, setSendMessage] = useState('')
+  const [selectedUser, setSelectedUser] = useState<SearchUser | null>(null)
+  const [sendState, setSendState] = useState<'search' | 'confirm' | 'sending' | 'success'>('search')
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
 
   const isCreator = user?.role === 'creator' || user?.role === 'admin'
 
@@ -77,6 +117,43 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
     queryKey: ['fancoin-packages'],
     queryFn: () => api.get<Package[]>('/fancoins/packages'),
     enabled: open && tab === 'buy',
+  })
+
+  const { data: searchResults, isFetching: isSearching } = useQuery({
+    queryKey: ['fancoin-search-user', sendQuery],
+    queryFn: () => api.get<SearchUser[]>(`/fancoins/search-user?q=${encodeURIComponent(sendQuery)}`),
+    enabled: open && tab === 'send' && sendQuery.length >= 2 && !selectedUser,
+  })
+
+  const debouncedSendAmount = useMemo(() => {
+    const n = Number(sendAmount)
+    return n > 0 && Number.isInteger(n) ? n : 0
+  }, [sendAmount])
+
+  const { data: transferPreviewData, isFetching: isLoadingPreview } = useQuery({
+    queryKey: ['transfer-preview', debouncedSendAmount],
+    queryFn: () => api.get<any>(`/fancoins/transfer-preview?amount=${debouncedSendAmount}`),
+    enabled: open && tab === 'send' && debouncedSendAmount > 0 && !!selectedUser,
+  })
+  const transferPreview = transferPreviewData?.data
+
+  const [feeAccepted, setFeeAccepted] = useState(false)
+
+  const transferMutation = useMutation({
+    mutationFn: async (params: { toUsername: string; amount: number; message?: string }) => {
+      const res = await api.post<any>('/fancoins/transfer', params)
+      return res.data
+    },
+    onSuccess: (data) => {
+      setSendState('success')
+      queryClient.invalidateQueries({ queryKey: ['fancoin-wallet'] })
+      queryClient.invalidateQueries({ queryKey: ['fancoin-transactions'] })
+      toast.success(`${data.sent?.toLocaleString() || sendAmount} FanCoins enviados!`)
+    },
+    onError: (e: any) => {
+      setSendState('confirm')
+      toast.error(e.message || 'Erro ao enviar FanCoins')
+    },
   })
 
   const checkoutMutation = useMutation({
@@ -100,6 +177,27 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
     onError: (e: any) => {
       setBuyState('choose')
       toast.error(e.message || 'Erro ao iniciar pagamento')
+    },
+  })
+
+  const customCheckoutMutation = useMutation({
+    mutationFn: async (params: { amountBrl: number; paymentMethod: string; provider: string }) => {
+      const res = await api.post<any>('/payments/checkout/fancoins/custom', params)
+      return res.data
+    },
+    onSuccess: (data) => {
+      setPendingPaymentId(data.paymentId)
+      if (data.pixData) {
+        setPixData(data.pixData)
+        setBuyState('pix')
+      } else if (data.checkoutUrl) {
+        setBuyState('waiting')
+        popupRef.current = window.open(data.checkoutUrl, 'mp_checkout', 'width=600,height=700,scrollbars=yes')
+      }
+    },
+    onError: (e: any) => {
+      setBuyState('choose')
+      toast.error(e.message || 'Erro ao iniciar pagamento personalizado')
     },
   })
 
@@ -146,6 +244,13 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
       setBuyState('choose')
       setPendingPaymentId(null)
       setPixData(null)
+      // Reset P2P state
+      setSendQuery('')
+      setSendAmount('')
+      setSendMessage('')
+      setSelectedUser(null)
+      setSendState('search')
+      setFeeAccepted(false)
       if (pollRef.current) {
         clearInterval(pollRef.current)
         pollRef.current = null
@@ -158,6 +263,26 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
     checkoutMutation.mutate({ packageId, paymentMethod: method, provider: 'mercadopago' })
   }
 
+  function handleCustomBuy(method: 'pix' | 'credit_card') {
+    const RATE = 0.01
+    let amountBrl: number
+    if (customMode === 'brl') {
+      amountBrl = Number(customValue)
+    } else {
+      amountBrl = Number(customValue) * RATE
+    }
+    if (!amountBrl || amountBrl < 1) {
+      toast.error('Valor minimo de R$ 1,00')
+      return
+    }
+    if (amountBrl > 10000) {
+      toast.error('Valor maximo de R$ 10.000,00')
+      return
+    }
+    setBuyState('processing')
+    customCheckoutMutation.mutate({ amountBrl, paymentMethod: method, provider: 'mercadopago' })
+  }
+
   function copyPixCode() {
     if (pixData?.qrCode) {
       navigator.clipboard.writeText(pixData.qrCode)
@@ -165,9 +290,56 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
     }
   }
 
+  function handleSendTransfer() {
+    if (!selectedUser) return
+    const amount = Number(sendAmount)
+    if (!amount || amount <= 0) {
+      toast.error('Informe o valor em FanCoins')
+      return
+    }
+    if (amount > Number(wallet?.balance || 0)) {
+      toast.error('Saldo insuficiente')
+      return
+    }
+    setSendState('sending')
+    transferMutation.mutate({
+      toUsername: selectedUser.username,
+      amount,
+      message: sendMessage || undefined,
+    })
+  }
+
+  function resetSendState() {
+    setSendQuery('')
+    setSendAmount('')
+    setSendMessage('')
+    setSelectedUser(null)
+    setSendState('search')
+    setFeeAccepted(false)
+  }
+
   const wallet = walletData?.data
   const transactions = transactionsData?.data ?? []
   const packages = packagesData?.data ?? []
+
+  const groupedTransactions = useMemo(() => {
+    return groupTransactionsByMonth(transactions)
+  }, [transactions])
+
+  useEffect(() => {
+    if (groupedTransactions.length > 0 && expandedMonths.size === 0) {
+      setExpandedMonths(new Set([groupedTransactions[0].key]))
+    }
+  }, [groupedTransactions])
+
+  function toggleMonth(key: string) {
+    setExpandedMonths((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
   const fancoinToBrl = wallet?.fancoinToBrl || 0.01
   const balanceBrl = Number(wallet?.balance || 0) * fancoinToBrl
 
@@ -209,6 +381,7 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
           {[
             { id: 'wallet' as const, icon: Coins, label: 'Carteira' },
             { id: 'buy' as const, icon: ShoppingCart, label: 'Comprar' },
+            { id: 'send' as const, icon: Send, label: 'Enviar' },
             { id: 'history' as const, icon: ArrowRightLeft, label: 'Historico' },
           ].map((t) => (
             <button
@@ -240,6 +413,19 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
                 <div className="text-left">
                   <p className="font-medium text-sm">Comprar FanCoins</p>
                   <p className="text-xs text-muted">PIX ou Cartao de Credito</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setTab('send')}
+                className="w-full flex items-center gap-3 p-4 rounded-sm border border-border hover:border-primary/50 transition-colors"
+              >
+                <div className="p-2 bg-warning/10 rounded-sm">
+                  <Send className="w-5 h-5 text-warning" />
+                </div>
+                <div className="text-left">
+                  <p className="font-medium text-sm">Enviar FanCoins</p>
+                  <p className="text-xs text-muted">Transferir para outro usuario</p>
                 </div>
               </button>
 
@@ -418,6 +604,242 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
                       Nenhum pacote disponivel no momento
                     </p>
                   )}
+
+                  {/* Custom Purchase */}
+                  <div className="p-4 rounded-sm border border-primary/30 bg-primary/5">
+                    <h4 className="font-bold text-sm flex items-center gap-2 mb-3">
+                      <ArrowLeftRight className="w-4 h-4 text-primary" />
+                      Compra personalizada
+                    </h4>
+                    <div className="flex gap-1.5 mb-2">
+                      <button
+                        onClick={() => { setCustomMode('brl'); setCustomValue('') }}
+                        className={`text-xs px-2 py-1 rounded ${customMode === 'brl' ? 'bg-primary text-white' : 'bg-surface text-muted'}`}
+                      >
+                        R$ → Coins
+                      </button>
+                      <button
+                        onClick={() => { setCustomMode('coins'); setCustomValue('') }}
+                        className={`text-xs px-2 py-1 rounded ${customMode === 'coins' ? 'bg-primary text-white' : 'bg-surface text-muted'}`}
+                      >
+                        Coins → R$
+                      </button>
+                    </div>
+                    <Input
+                      type="number"
+                      placeholder={customMode === 'brl' ? 'Valor em R$' : 'Qtd FanCoins'}
+                      value={customValue}
+                      onChange={(e) => setCustomValue(e.target.value)}
+                      min={customMode === 'brl' ? 1 : 100}
+                      step={customMode === 'brl' ? '0.01' : '1'}
+                    />
+                    {customValue && Number(customValue) > 0 && (
+                      <p className="text-xs text-muted mt-1.5">
+                        {customMode === 'brl'
+                          ? `= ${Math.floor(Number(customValue) / 0.01).toLocaleString()} FanCoins`
+                          : `= R$ ${(Number(customValue) * 0.01).toFixed(2)}`
+                        }
+                        <span className="ml-1">(sem bonus)</span>
+                      </p>
+                    )}
+                    <div className="flex gap-2 mt-2">
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        className="flex-1"
+                        disabled={!customValue || Number(customValue) <= 0}
+                        onClick={() => handleCustomBuy('pix')}
+                      >
+                        <QrCode className="w-4 h-4 mr-1" /> PIX
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        disabled={!customValue || Number(customValue) <= 0}
+                        onClick={() => handleCustomBuy('credit_card')}
+                      >
+                        <CreditCard className="w-4 h-4 mr-1" /> Cartao
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {tab === 'send' && (
+            <div className="space-y-4">
+              {sendState === 'success' && (
+                <div className="text-center py-6 space-y-3">
+                  <CheckCircle2 className="w-10 h-10 text-success mx-auto" />
+                  <p className="text-sm font-medium">FanCoins enviados com sucesso!</p>
+                  <p className="text-xs text-muted">
+                    {selectedUser && `Para @${selectedUser.username}`}
+                  </p>
+                  <Button size="sm" onClick={resetSendState}>
+                    Enviar para outra pessoa
+                  </Button>
+                </div>
+              )}
+
+              {sendState === 'sending' && (
+                <div className="text-center py-6">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+                  <p className="text-sm text-muted mt-2">Enviando FanCoins...</p>
+                </div>
+              )}
+
+              {(sendState === 'search' || sendState === 'confirm') && (
+                <>
+                  {/* Selected user or search */}
+                  {selectedUser ? (
+                    <div className="flex items-center gap-3 p-3 rounded-sm border border-primary/30 bg-primary/5">
+                      <Avatar src={selectedUser.avatarUrl} alt={selectedUser.displayName || selectedUser.username} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{selectedUser.displayName || selectedUser.username}</p>
+                        <p className="text-xs text-muted">@{selectedUser.username}</p>
+                      </div>
+                      <button
+                        onClick={() => { setSelectedUser(null); setSendQuery(''); setSendState('search') }}
+                        className="p-1 rounded-sm hover:bg-surface-light"
+                      >
+                        <X className="w-4 h-4 text-muted" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-xs font-medium text-muted mb-1 block">Buscar usuario</label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
+                        <input
+                          type="text"
+                          placeholder="@usuario"
+                          value={sendQuery}
+                          onChange={(e) => setSendQuery(e.target.value.replace(/^@/, ''))}
+                          className="w-full pl-9 pr-3 py-2.5 rounded-sm border border-border bg-surface text-sm focus:outline-none focus:border-primary"
+                        />
+                        {isSearching && (
+                          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted" />
+                        )}
+                      </div>
+
+                      {/* Search results */}
+                      {searchResults?.data && searchResults.data.length > 0 && !selectedUser && (
+                        <div className="mt-2 border border-border rounded-sm overflow-hidden">
+                          {searchResults.data.map((u) => (
+                            <button
+                              key={u.id}
+                              onClick={() => {
+                                setSelectedUser(u)
+                                setSendQuery('')
+                              }}
+                              className="w-full flex items-center gap-3 p-3 hover:bg-surface-light transition-colors border-b border-border/50 last:border-b-0"
+                            >
+                              <Avatar src={u.avatarUrl} alt={u.displayName || u.username} size="xs" />
+                              <div className="text-left min-w-0">
+                                <p className="text-sm font-medium truncate">{u.displayName || u.username}</p>
+                                <p className="text-xs text-muted">@{u.username}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {sendQuery.length >= 2 && !isSearching && searchResults?.data?.length === 0 && (
+                        <p className="text-xs text-muted mt-2 text-center py-2">Nenhum usuario encontrado</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Amount */}
+                  {selectedUser && (
+                    <>
+                      <div>
+                        <label className="text-xs font-medium text-muted mb-1 block">Quantidade de FanCoins</label>
+                        <Input
+                          type="number"
+                          placeholder="Ex: 500"
+                          value={sendAmount}
+                          onChange={(e) => { setSendAmount(e.target.value); setFeeAccepted(false) }}
+                          min={1}
+                          step="1"
+                        />
+                      </div>
+
+                      {/* Fee preview */}
+                      {transferPreview && debouncedSendAmount > 0 && (
+                        <div className="p-3 bg-surface-light border border-border/50 rounded-sm space-y-1.5 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-muted">Voce envia</span>
+                            <span className="font-medium">{transferPreview.amount.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted">Taxa P2P ({transferPreview.platformFeePercent}%)</span>
+                            <span className="text-error">-{transferPreview.platformFee.toLocaleString()}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted">Fundo eco ({transferPreview.ecosystemFundPercent}%)</span>
+                            <span className="text-error">-{transferPreview.ecosystemFund.toLocaleString()}</span>
+                          </div>
+                          <div className="border-t border-border/50 pt-1.5 flex justify-between">
+                            <span className="font-medium text-foreground">Recebe</span>
+                            <span className="font-bold text-success">{transferPreview.receiverGets.toLocaleString()} FanCoins</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted">≈</span>
+                            <span className="text-muted">{formatCurrency(transferPreview.receiverGetsBrl)}</span>
+                          </div>
+                          {transferPreview.tierMultiplier > 1 && (
+                            <p className="text-primary">Tier bonus: {transferPreview.tierMultiplier}x</p>
+                          )}
+                        </div>
+                      )}
+
+                      {isLoadingPreview && debouncedSendAmount > 0 && (
+                        <div className="flex items-center gap-2 text-xs text-muted py-1">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Calculando taxas...
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="text-xs font-medium text-muted mb-1 block">Mensagem (opcional)</label>
+                        <input
+                          type="text"
+                          placeholder="Ex: Parabens pelo conteudo!"
+                          value={sendMessage}
+                          onChange={(e) => setSendMessage(e.target.value.slice(0, 200))}
+                          maxLength={200}
+                          className="w-full px-3 py-2.5 rounded-sm border border-border bg-surface text-sm focus:outline-none focus:border-primary"
+                        />
+                        <p className="text-xs text-muted mt-0.5 text-right">{sendMessage.length}/200</p>
+                      </div>
+
+                      {/* Fee acceptance */}
+                      {transferPreview && debouncedSendAmount > 0 && (
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={feeAccepted}
+                            onChange={(e) => setFeeAccepted(e.target.checked)}
+                            className="w-4 h-4 mt-0.5 rounded border-border text-primary"
+                          />
+                          <span className="text-xs text-muted">
+                            Concordo com a taxa de {transferPreview.totalFeesPercent}%. Destinatario recebe <span className="font-medium text-success">{transferPreview.receiverGets.toLocaleString()}</span> FanCoins.
+                          </span>
+                        </label>
+                      )}
+
+                      <Button
+                        className="w-full"
+                        disabled={!sendAmount || Number(sendAmount) <= 0 || !feeAccepted}
+                        onClick={handleSendTransfer}
+                      >
+                        <Send className="w-4 h-4 mr-2" />
+                        Confirmar envio
+                      </Button>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -425,30 +847,67 @@ export function FancoinDrawer({ open, onClose }: FancoinDrawerProps) {
 
           {tab === 'history' && (
             <div className="space-y-2">
-              {transactions.length > 0 ? (
-                transactions.map((tx) => (
-                  <div
-                    key={tx.id}
-                    className="flex items-center justify-between py-3 border-b border-border/50"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">
-                        <TransactionDescription text={tx.description || tx.type} />
-                      </p>
-                      <p className="text-xs text-muted">
-                        {new Date(tx.createdAt).toLocaleDateString('pt-BR')}
-                      </p>
+              {groupedTransactions.length > 0 ? (
+                groupedTransactions.map((group) => {
+                  const isOpen = expandedMonths.has(group.key)
+                  const total = group.transactions.reduce((sum, tx) => sum + Number(tx.amount), 0)
+                  return (
+                    <div key={group.key} className="border border-border/50 rounded-sm overflow-hidden">
+                      <button
+                        onClick={() => toggleMonth(group.key)}
+                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-surface-light transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ChevronDown
+                            className={`w-4 h-4 text-muted transition-transform ${isOpen ? '' : '-rotate-90'}`}
+                          />
+                          <span className="text-sm font-medium">{group.label}</span>
+                          <span className="text-xs text-muted">({group.transactions.length})</span>
+                        </div>
+                        <span className={`text-xs font-bold ${total >= 0 ? 'text-success' : 'text-error'}`}>
+                          {total >= 0 ? '+' : ''}{total.toLocaleString()}
+                        </span>
+                      </button>
+                      <AnimatePresence initial={false}>
+                        {isOpen && (
+                          <motion.div
+                            initial={{ height: 0 }}
+                            animate={{ height: 'auto' }}
+                            exit={{ height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="border-t border-border/50">
+                              {group.transactions.map((tx) => (
+                                <div
+                                  key={tx.id}
+                                  className="flex items-center justify-between px-3 py-2.5 border-b border-border/30 last:border-0"
+                                >
+                                  <div>
+                                    <p className="text-sm font-medium">
+                                      <TransactionDescription text={tx.description || tx.type} />
+                                    </p>
+                                    <p className="text-xs text-muted">
+                                      {new Date(tx.createdAt).toLocaleDateString('pt-BR')}
+                                    </p>
+                                  </div>
+                                  <span
+                                    className={`text-sm font-bold ${
+                                      Number(tx.amount) >= 0 ? 'text-success' : 'text-error'
+                                    }`}
+                                  >
+                                    {Number(tx.amount) >= 0 ? '+' : ''}
+                                    {Number(tx.amount).toLocaleString()}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
-                    <span
-                      className={`text-sm font-bold ${
-                        Number(tx.amount) >= 0 ? 'text-success' : 'text-error'
-                      }`}
-                    >
-                      {Number(tx.amount) >= 0 ? '+' : ''}
-                      {Number(tx.amount).toLocaleString()}
-                    </span>
-                  </div>
-                ))
+                  )
+                })
               ) : (
                 <p className="text-sm text-muted text-center py-8">Nenhuma transacao ainda</p>
               )}
