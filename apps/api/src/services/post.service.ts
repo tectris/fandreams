@@ -730,10 +730,15 @@ export async function togglePostVisibility(postId: string, creatorId: string) {
   return updated
 }
 
-export async function deletePost(postId: string, creatorId: string) {
+export async function deletePost(postId: string, userId: string, role?: string) {
+  // Admins can delete any post; creators can only delete their own
+  const condition = role === 'admin'
+    ? eq(posts.id, postId)
+    : and(eq(posts.id, postId), eq(posts.creatorId, userId))
+
   const [deleted] = await db
     .delete(posts)
-    .where(and(eq(posts.id, postId), eq(posts.creatorId, creatorId)))
+    .where(condition)
     .returning({ id: posts.id })
 
   if (!deleted) throw new AppError('NOT_FOUND', 'Post nao encontrado', 404)

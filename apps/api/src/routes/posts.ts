@@ -115,9 +115,9 @@ postsRoute.patch('/:id/toggle-visibility', authMiddleware, creatorMiddleware, as
 
 postsRoute.delete('/:id', authMiddleware, creatorMiddleware, async (c) => {
   try {
-    const { userId } = c.get('user')
+    const { userId, role } = c.get('user')
     const postId = c.req.param('id')
-    await postService.deletePost(postId, userId)
+    await postService.deletePost(postId, userId, role)
     return success(c, { deleted: true })
   } catch (e) {
     if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
