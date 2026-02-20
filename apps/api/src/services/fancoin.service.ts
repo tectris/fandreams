@@ -327,6 +327,117 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
 }
 
 /**
+ * Transfer FanCoins between any two users (P2P wallet-to-wallet).
+ * Same fee structure as tips: platform fee + ecosystem fund.
+ */
+export async function transferToUser(fromUserId: string, toUserId: string, amount: number, message?: string) {
+  if (amount <= 0) throw new AppError('INVALID', 'Valor invalido', 400)
+  if (!Number.isInteger(amount)) throw new AppError('INVALID', 'Valor deve ser inteiro', 400)
+  if (fromUserId === toUserId) throw new AppError('INVALID', 'Nao pode transferir para si mesmo', 400)
+
+  // Look up both usernames
+  const [sender] = await db
+    .select({ username: users.username })
+    .from(users)
+    .where(eq(users.id, fromUserId))
+    .limit(1)
+  const [receiver] = await db
+    .select({ username: users.username, id: users.id })
+    .from(users)
+    .where(eq(users.id, toUserId))
+    .limit(1)
+
+  if (!receiver) throw new AppError('NOT_FOUND', 'Usuario destinatario nao encontrado', 404)
+
+  // ATOMIC debit
+  const [debitResult] = await db
+    .update(fancoinWallets)
+    .set({
+      balance: sql`${fancoinWallets.balance} - ${amount}`,
+      bonusBalance: sql`GREATEST(0, ${fancoinWallets.bonusBalance} - ${amount})`,
+      totalSpent: sql`${fancoinWallets.totalSpent} + ${amount}`,
+      updatedAt: new Date(),
+    })
+    .where(
+      sql`${fancoinWallets.userId} = ${fromUserId} AND ${fancoinWallets.balance} >= ${amount}`,
+    )
+    .returning({ balance: fancoinWallets.balance })
+
+  if (!debitResult) {
+    throw new AppError('INSUFFICIENT_BALANCE', 'Saldo insuficiente de FanCoins', 400)
+  }
+
+  const newSenderBalance = Number(debitResult.balance)
+
+  // Apply same fees as tips
+  const tierMultiplier = await getTierMultiplier(fromUserId)
+  const feeRate = await getPlatformFeeRate()
+  const adjustedFeeRate = feeRate / tierMultiplier
+  const platformCut = Math.floor(amount * adjustedFeeRate)
+  const afterFee = amount - platformCut
+
+  // Ecosystem fund: 1%
+  const receiverAmount = await collectEcosystemFund(afterFee, `Fundo ecossistema: transferencia @${sender?.username} -> @${receiver?.username}`)
+
+  // ATOMIC credit
+  const [creditResult] = await db
+    .update(fancoinWallets)
+    .set({
+      balance: sql`${fancoinWallets.balance} + ${receiverAmount}`,
+      totalEarned: sql`${fancoinWallets.totalEarned} + ${receiverAmount}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(fancoinWallets.userId, toUserId))
+    .returning({ balance: fancoinWallets.balance })
+
+  if (!creditResult) {
+    await getWallet(toUserId)
+    await db
+      .update(fancoinWallets)
+      .set({
+        balance: sql`${fancoinWallets.balance} + ${receiverAmount}`,
+        totalEarned: sql`${fancoinWallets.totalEarned} + ${receiverAmount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(fancoinWallets.userId, toUserId))
+  }
+
+  const newReceiverBalance = Number(creditResult?.balance ?? receiverAmount)
+  const senderUsername = sender?.username || 'usuario'
+  const receiverUsername = receiver?.username || 'usuario'
+
+  const msgSuffix = message ? ` — "${message}"` : ''
+
+  await db.insert(fancoinTransactions).values([
+    {
+      userId: fromUserId,
+      type: 'transfer_sent',
+      amount: -amount,
+      balanceAfter: newSenderBalance,
+      description: `Transferencia para @${receiverUsername}${msgSuffix}`,
+    },
+    {
+      userId: toUserId,
+      type: 'transfer_received',
+      amount: receiverAmount,
+      balanceAfter: newReceiverBalance,
+      description: `Transferencia de @${senderUsername}${msgSuffix}`,
+    },
+  ])
+
+  const ecosystemFundAmount = afterFee - receiverAmount
+  return {
+    sent: amount,
+    receiverGot: receiverAmount,
+    platformFee: platformCut,
+    ecosystemFund: ecosystemFundAmount,
+    tierMultiplier,
+    fromUsername: senderUsername,
+    toUsername: receiverUsername,
+  }
+}
+
+/**
  * Credit FanCoins after a confirmed payment.
  * Called by the payment webhook handler.
  * Uses atomic SQL to prevent double-credit from concurrent webhooks.

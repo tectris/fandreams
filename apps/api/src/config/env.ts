@@ -40,6 +40,7 @@ const envSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().default('http://localhost:3000'),
   CORS_ORIGINS: z.string().optional(),
   PLATFORM_FEE_PERCENT: z.coerce.number().default(12),
+  STEGO_SECRET: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)
