@@ -307,12 +307,14 @@ function WalletContent() {
 
   const groupedTransactions = useMemo(() => {
     if (!transactions) return []
-    const groups = groupTransactionsByMonth(transactions)
-    if (groups.length > 0 && expandedMonths.size === 0) {
-      setExpandedMonths(new Set([groups[0].key]))
-    }
-    return groups
+    return groupTransactionsByMonth(transactions)
   }, [transactions])
+
+  useEffect(() => {
+    if (groupedTransactions.length > 0 && expandedMonths.size === 0) {
+      setExpandedMonths(new Set([groupedTransactions[0].key]))
+    }
+  }, [groupedTransactions])
 
   function toggleMonth(key: string) {
     setExpandedMonths((prev) => {
