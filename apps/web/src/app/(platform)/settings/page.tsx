@@ -491,7 +491,13 @@ export default function SettingsPage() {
               variant="outline"
               size="sm"
               className="shrink-0"
-              onClick={() => setShowDeactivateDialog(true)}
+              onClick={() => {
+                if (user?.role === 'admin') {
+                  toast.error('Contas admin nao podem ser desativadas. Remova o papel de admin antes.')
+                  return
+                }
+                setShowDeactivateDialog(true)
+              }}
             >
               Desativar
             </Button>
@@ -511,7 +517,13 @@ export default function SettingsPage() {
               variant="danger"
               size="sm"
               className="shrink-0"
-              onClick={() => setShowDeleteDialog(true)}
+              onClick={() => {
+                if (user?.role === 'admin') {
+                  toast.error('Contas admin nao podem ser excluidas. Remova o papel de admin antes.')
+                  return
+                }
+                setShowDeleteDialog(true)
+              }}
             >
               <Trash2 className="w-3.5 h-3.5 mr-1" />
               Excluir

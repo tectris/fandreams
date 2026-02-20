@@ -9,12 +9,16 @@ const DELETION_GRACE_DAYS = 30
 
 export async function deactivateAccount(userId: string, password: string) {
   const [user] = await db
-    .select({ id: users.id, email: users.email, displayName: users.displayName, username: users.username, passwordHash: users.passwordHash, isActive: users.isActive })
+    .select({ id: users.id, email: users.email, displayName: users.displayName, username: users.username, passwordHash: users.passwordHash, isActive: users.isActive, role: users.role })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1)
 
   if (!user) throw new AppError('NOT_FOUND', 'Usuario nao encontrado', 404)
+
+  if (user.role === 'admin') {
+    throw new AppError('ADMIN_PROTECTED', 'Contas admin nao podem ser desativadas. Remova o papel de admin antes de desativar.', 403)
+  }
 
   const valid = await verifyPassword(password, user.passwordHash)
   if (!valid) throw new AppError('INVALID_PASSWORD', 'Senha incorreta', 400)
@@ -59,12 +63,16 @@ export async function reactivateAccount(userId: string) {
 
 export async function scheduleDeletion(userId: string, password: string) {
   const [user] = await db
-    .select({ id: users.id, email: users.email, displayName: users.displayName, username: users.username, passwordHash: users.passwordHash, deletionScheduledAt: users.deletionScheduledAt })
+    .select({ id: users.id, email: users.email, displayName: users.displayName, username: users.username, passwordHash: users.passwordHash, deletionScheduledAt: users.deletionScheduledAt, role: users.role })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1)
 
   if (!user) throw new AppError('NOT_FOUND', 'Usuario nao encontrado', 404)
+
+  if (user.role === 'admin') {
+    throw new AppError('ADMIN_PROTECTED', 'Contas admin nao podem ser excluidas. Remova o papel de admin antes de excluir.', 403)
+  }
 
   const valid = await verifyPassword(password, user.passwordHash)
   if (!valid) throw new AppError('INVALID_PASSWORD', 'Senha incorreta', 400)
