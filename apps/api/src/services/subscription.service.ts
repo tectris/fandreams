@@ -8,7 +8,7 @@ import * as fancoinService from './fancoin.service'
 import * as affiliateService from './affiliate.service'
 import * as bonusService from './bonus.service'
 import * as openpixService from './openpix.service'
-import { getPlatformFeeRate, getGraduatedFeeRate } from './withdrawal.service'
+import { getGraduatedFeeRate } from './withdrawal.service'
 import { sendSubscriptionCancelledEmail } from './email.service'
 
 // ── Create subscription with MP checkout ──
@@ -658,7 +658,7 @@ export async function handleOpenPixSubscriptionRenewal(
     .where(eq(subscriptions.id, sub.id))
 
   // Record payment
-  const renewalFeeRate = await getPlatformFeeRate()
+  const renewalFeeRate = await getGraduatedFeeRate(sub.creatorId)
   const platformFee = amount * renewalFeeRate
   const creatorAmount = amount - platformFee
 
