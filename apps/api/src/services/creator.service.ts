@@ -66,7 +66,7 @@ export async function updateCreatorProfile(
     tags: string[]
     subscriptionPrice: number
     welcomeMessage: string
-    messagesEnabled: boolean
+    messagesSetting: string
     payoutMethod: string
     payoutDetails: unknown
   }>,
@@ -76,7 +76,7 @@ export async function updateCreatorProfile(
   if (data.tags !== undefined) updateData.tags = data.tags
   if (data.subscriptionPrice !== undefined) updateData.subscriptionPrice = String(data.subscriptionPrice)
   if (data.welcomeMessage !== undefined) updateData.welcomeMessage = data.welcomeMessage
-  if (data.messagesEnabled !== undefined) updateData.messagesEnabled = data.messagesEnabled
+  if (data.messagesSetting !== undefined) updateData.messagesSetting = data.messagesSetting
   if (data.payoutMethod !== undefined) updateData.payoutMethod = data.payoutMethod
   if (data.payoutDetails !== undefined) updateData.payoutDetails = data.payoutDetails
 

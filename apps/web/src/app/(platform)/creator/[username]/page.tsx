@@ -518,12 +518,24 @@ export default function CreatorProfilePage() {
                   </Button>
                 )}
                 {/* Send Message */}
-                {profile.creator?.messagesEnabled !== false && (
-                  <Link href={`/messages?to=${profile.id}`}>
-                    <Button variant="outline" size="sm" title="Enviar mensagem">
+                {profile.creator?.messagesSetting !== 'disabled' && (
+                  profile.creator?.messagesSetting === 'subscribers' && !isSubscribed ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      title="Assine para enviar mensagens"
+                      onClick={() => handleSubscribe()}
+                      className="text-muted"
+                    >
                       <MessageCircle className="w-4 h-4" />
                     </Button>
-                  </Link>
+                  ) : (
+                    <Link href={`/messages?to=${profile.id}`}>
+                      <Button variant="outline" size="sm" title="Enviar mensagem">
+                        <MessageCircle className="w-4 h-4" />
+                      </Button>
+                    </Link>
+                  )
                 )}
               </>
             )}
