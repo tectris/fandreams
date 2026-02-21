@@ -1,5 +1,5 @@
 import { eq, and, or, desc, sql, asc } from 'drizzle-orm'
-import { conversations, messages, users, creatorProfiles, userSettings } from '@fandreams/database'
+import { conversations, messages, users, creatorProfiles, userSettings, subscriptions } from '@fandreams/database'
 import { db } from '../config/database'
 import { AppError } from './auth.service'
 import { sendNewMessageEmail } from './email.service'
@@ -79,16 +79,37 @@ export async function getOrCreateConversation(userId: string, recipientId: strin
     throw new AppError('NOT_FOUND', 'Usuario nao encontrado', 404)
   }
 
-  // Check if creator has messages enabled
+  // Check creator message settings
   if (recipient.role === 'creator' || recipient.role === 'admin') {
     const [profile] = await db
-      .select({ messagesEnabled: creatorProfiles.messagesEnabled })
+      .select({ messagesSetting: creatorProfiles.messagesSetting })
       .from(creatorProfiles)
       .where(eq(creatorProfiles.userId, recipientId))
       .limit(1)
 
-    if (profile && !profile.messagesEnabled) {
+    const setting = profile?.messagesSetting || 'all'
+
+    if (setting === 'disabled') {
       throw new AppError('MESSAGES_DISABLED', 'Este criador nao esta aceitando mensagens', 403)
+    }
+
+    if (setting === 'subscribers') {
+      // Check if sender has an active subscription to this creator
+      const [activeSub] = await db
+        .select({ id: subscriptions.id })
+        .from(subscriptions)
+        .where(
+          and(
+            eq(subscriptions.fanId, userId),
+            eq(subscriptions.creatorId, recipientId),
+            eq(subscriptions.status, 'active'),
+          ),
+        )
+        .limit(1)
+
+      if (!activeSub) {
+        throw new AppError('SUBSCRIPTION_REQUIRED', 'Somente assinantes podem enviar mensagens para este criador', 403)
+      }
     }
   }
 

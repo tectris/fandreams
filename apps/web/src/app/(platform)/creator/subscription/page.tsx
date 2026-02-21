@@ -21,7 +21,7 @@ interface Promo {
 
 interface CreatorProfile {
   subscriptionPrice: string | null
-  messagesEnabled: boolean
+  messagesSetting: 'all' | 'subscribers' | 'disabled'
   promos: Promo[]
 }
 
@@ -102,10 +102,10 @@ export default function CreatorSubscriptionPage() {
     onError: (e: any) => toast.error(e.message || 'Erro ao atualizar promocao'),
   })
 
-  // Toggle messages enabled
+  // Update messages setting
   const messagesMutation = useMutation({
-    mutationFn: (messagesEnabled: boolean) =>
-      api.patch('/creators/me', { messagesEnabled }),
+    mutationFn: (messagesSetting: string) =>
+      api.patch('/creators/me', { messagesSetting }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['creator-profile'] })
       toast.success('Configuracao de mensagens atualizada!')
@@ -447,26 +447,42 @@ export default function CreatorSubscriptionPage() {
           </h2>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-sm">Receber mensagens</p>
-              <p className="text-xs text-muted">
-                {profile?.messagesEnabled !== false
-                  ? 'Fas podem te enviar mensagens pelo seu perfil.'
-                  : 'Mensagens desativadas. Nenhum botao de mensagem aparece no seu perfil.'}
-              </p>
-            </div>
-            <button
-              onClick={() => messagesMutation.mutate(!profile?.messagesEnabled)}
-              className="p-2 rounded-sm hover:bg-surface-light transition-colors"
-              disabled={messagesMutation.isPending}
-            >
-              {profile?.messagesEnabled !== false ? (
-                <ToggleRight className="w-6 h-6 text-success" />
-              ) : (
-                <ToggleLeft className="w-6 h-6 text-muted" />
-              )}
-            </button>
+          <p className="text-sm text-muted mb-4">
+            Escolha quem pode te enviar mensagens pelo seu perfil.
+          </p>
+          <div className="space-y-2">
+            {([
+              { value: 'all', label: 'Todos', description: 'Qualquer usuario pode te enviar mensagens' },
+              { value: 'subscribers', label: 'Somente assinantes', description: 'Apenas assinantes ativos podem te enviar mensagens' },
+              { value: 'disabled', label: 'Desabilitado', description: 'Ninguem pode te enviar mensagens' },
+            ] as const).map((option) => {
+              const current = profile?.messagesSetting || 'all'
+              const isSelected = current === option.value
+              return (
+                <button
+                  key={option.value}
+                  onClick={() => {
+                    if (!isSelected) messagesMutation.mutate(option.value)
+                  }}
+                  disabled={messagesMutation.isPending}
+                  className={`w-full flex items-center gap-3 p-3 rounded-sm border text-left transition-colors ${
+                    isSelected
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:border-primary/50'
+                  }`}
+                >
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                    isSelected ? 'border-primary' : 'border-muted'
+                  }`}>
+                    {isSelected && <div className="w-2 h-2 rounded-full bg-primary" />}
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">{option.label}</p>
+                    <p className="text-xs text-muted">{option.description}</p>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </CardContent>
       </Card>

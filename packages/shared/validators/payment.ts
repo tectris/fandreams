@@ -37,7 +37,7 @@ export const createTierSchema = z.object({
 
 export const updateSubscriptionPriceSchema = z.object({
   subscriptionPrice: z.number().min(5).max(5000).optional(),
-  messagesEnabled: z.boolean().optional(),
+  messagesSetting: z.enum(['all', 'subscribers', 'disabled']).optional(),
 })
 
 export const createPromoSchema = z.object({
