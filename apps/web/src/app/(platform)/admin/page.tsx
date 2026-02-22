@@ -8,8 +8,6 @@ import { Button } from '@/components/ui/button'
 import { Shield, Users, FileText, Star, UserCheck, DollarSign, Globe, MessageSquare } from 'lucide-react'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
-import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
 
 type DashboardStats = {
   totalUsers: number
@@ -28,18 +26,10 @@ type DashboardStats = {
 
 export default function AdminDashboardPage() {
   const { user } = useAuthStore()
-  const router = useRouter()
-
-  useEffect(() => {
-    if (user && user.role !== 'admin') {
-      router.push('/feed')
-    }
-  }, [user, router])
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'dashboard'],
     queryFn: () => api.get<DashboardStats>('/admin/dashboard'),
-    enabled: user?.role === 'admin',
   })
 
   const stats = data?.data

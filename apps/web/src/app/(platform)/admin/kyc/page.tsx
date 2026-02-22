@@ -21,8 +21,6 @@ import {
   X,
 } from 'lucide-react'
 import { useAuthStore } from '@/lib/store'
-import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
@@ -62,7 +60,6 @@ const statusTabs = [
 
 export default function AdminKycPage() {
   const { user } = useAuthStore()
-  const router = useRouter()
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('pending')
@@ -70,15 +67,10 @@ export default function AdminKycPage() {
   const [rejectReason, setRejectReason] = useState('')
   const [previewImage, setPreviewImage] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (user && user.role !== 'admin') router.push('/feed')
-  }, [user, router])
-
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'kyc', statusFilter, page],
     queryFn: () =>
       api.get<KycResponse>(`/admin/kyc?status=${statusFilter}&page=${page}&limit=20`),
-    enabled: user?.role === 'admin',
   })
 
   const reviewMutation = useMutation({

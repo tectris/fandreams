@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
-import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,7 +22,6 @@ type SeoSettings = {
 
 export default function AdminSeoPage() {
   const { user } = useAuthStore()
-  const router = useRouter()
   const queryClient = useQueryClient()
   const logoInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
@@ -35,17 +33,12 @@ export default function AdminSeoPage() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [heroVideoUrl, setHeroVideoUrl] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (user && user.role !== 'admin') router.push('/feed')
-  }, [user, router])
-
   const { data: seoData } = useQuery({
     queryKey: ['admin', 'seo'],
     queryFn: async () => {
       const res = await api.get<SeoSettings>('/platform/seo')
       return res.data
     },
-    enabled: user?.role === 'admin',
   })
 
   useEffect(() => {

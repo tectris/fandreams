@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
-import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -357,25 +356,12 @@ function SettingsTab({ providers, loadingProviders, settings, loadingSettings, s
 }
 
 export default function AdminPaymentsPage() {
-  const router = useRouter()
   const user = useAuthStore((s) => s.user)
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'pending' | 'all' | 'settings'>('pending')
   const [rejectId, setRejectId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-
-  const isAdmin = user?.role === 'admin'
-
-  useEffect(() => {
-    if (user && !isAdmin) {
-      router.push('/feed')
-    }
-  }, [user, isAdmin, router])
-
-  if (!isAdmin) {
-    return null
-  }
 
   const { data: pendingPayouts, isLoading: loadingPending } = useQuery({
     queryKey: ['admin-payouts-pending'],
