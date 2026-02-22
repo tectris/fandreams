@@ -32,3 +32,4 @@ coverage/
 
 # Misc
 *.tsbuildinfo
+__pycache__/
