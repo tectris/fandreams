@@ -239,16 +239,27 @@ export async function cancelSubscription(globalID: string): Promise<void> {
 // ── Webhook verification ──
 
 export function verifyWebhookSignature(rawBody: string, signatureHeader: string | undefined): boolean {
-  if (!env.OPENPIX_WEBHOOK_SECRET || !signatureHeader) {
-    return !env.OPENPIX_WEBHOOK_SECRET // Skip validation if no secret configured
+  if (!env.OPENPIX_WEBHOOK_SECRET) {
+    throw new AppError('WEBHOOK_NOT_CONFIGURED', 'OPENPIX_WEBHOOK_SECRET is not configured', 500)
+  }
+
+  if (!signatureHeader) {
+    return false
   }
 
   const computed = crypto
-    .createHmac('sha1', env.OPENPIX_WEBHOOK_SECRET)
+    .createHmac('sha256', env.OPENPIX_WEBHOOK_SECRET)
     .update(rawBody)
     .digest('base64')
 
-  return computed === signatureHeader
+  const computedBuf = Buffer.from(computed, 'utf8')
+  const signatureBuf = Buffer.from(signatureHeader, 'utf8')
+
+  if (computedBuf.length !== signatureBuf.length) {
+    return false
+  }
+
+  return crypto.timingSafeEqual(computedBuf, signatureBuf)
 }
 
 // ── Parse webhook ──

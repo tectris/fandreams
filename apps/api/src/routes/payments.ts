@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { authMiddleware } from '../middleware/auth'
+import { financialRateLimit } from '../middleware/rateLimit'
 import * as paymentService from '../services/payment.service'
 import * as subscriptionService from '../services/subscription.service'
 import { success, error } from '../utils/response'
@@ -16,7 +17,7 @@ paymentsRoute.get('/providers', async (c) => {
 })
 
 // Create a FanCoin purchase checkout (multi-provider)
-paymentsRoute.post('/checkout/fancoins', authMiddleware, async (c) => {
+paymentsRoute.post('/checkout/fancoins', authMiddleware, financialRateLimit, async (c) => {
   try {
     const { userId } = c.get('user')
     const { packageId, paymentMethod, provider } = await c.req.json()
@@ -39,7 +40,7 @@ paymentsRoute.post('/checkout/fancoins', authMiddleware, async (c) => {
 })
 
 // Create a custom-amount FanCoin purchase checkout
-paymentsRoute.post('/checkout/fancoins/custom', authMiddleware, async (c) => {
+paymentsRoute.post('/checkout/fancoins/custom', authMiddleware, financialRateLimit, async (c) => {
   try {
     const { userId } = c.get('user')
     const { amountBrl, paymentMethod, provider } = await c.req.json()
@@ -75,7 +76,7 @@ paymentsRoute.get('/status/:id', authMiddleware, async (c) => {
 })
 
 // PayPal capture (called when user returns from PayPal)
-paymentsRoute.post('/paypal/capture', authMiddleware, async (c) => {
+paymentsRoute.post('/paypal/capture', authMiddleware, financialRateLimit, async (c) => {
   try {
     const { orderId, paymentId } = await c.req.json()
     if (!orderId || !paymentId) {
@@ -90,7 +91,7 @@ paymentsRoute.post('/paypal/capture', authMiddleware, async (c) => {
 })
 
 // Create a PPV checkout (MercadoPago)
-paymentsRoute.post('/checkout/ppv', authMiddleware, async (c) => {
+paymentsRoute.post('/checkout/ppv', authMiddleware, financialRateLimit, async (c) => {
   try {
     const { userId } = c.get('user')
     const { postId, paymentMethod } = await c.req.json()
@@ -136,88 +137,61 @@ async function processMpWebhookEvent(type: string, dataId: string) {
 // MercadoPago webhook
 paymentsRoute.post('/webhook/mercadopago', async (c) => {
   try {
-    const isProduction = env.NODE_ENV === 'production'
-
-    // In production, signature verification is MANDATORY
-    if (env.MERCADOPAGO_WEBHOOK_SECRET) {
-      const signature = c.req.header('x-signature')
-      const requestId = c.req.header('x-request-id')
-
-      if (!signature || !requestId) {
-        if (isProduction) {
-          console.warn('MP Webhook: missing signature headers in production — rejecting')
-          return c.json({ received: true, error: 'missing_signature' }, 200)
-        }
-      } else {
-        const parts = signature.split(',')
-        const tsRaw = parts.find((p) => p.trim().startsWith('ts='))
-        const hashRaw = parts.find((p) => p.trim().startsWith('v1='))
-        const ts = tsRaw?.split('=')[1]
-        const hash = hashRaw?.split('=')[1]
-
-        if (ts && hash) {
-          const body = await c.req.text()
-          const bodyJson = JSON.parse(body)
-          const dataId = bodyJson?.data?.id
-
-          const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`
-          const computed = crypto
-            .createHmac('sha256', env.MERCADOPAGO_WEBHOOK_SECRET)
-            .update(manifest)
-            .digest('hex')
-
-          // Timing-safe comparison to prevent side-channel attacks
-          const computedBuf = Buffer.from(computed, 'utf8')
-          const hashBuf = Buffer.from(hash, 'utf8')
-          if (computedBuf.length !== hashBuf.length || !crypto.timingSafeEqual(computedBuf, hashBuf)) {
-            console.warn('MP Webhook: invalid signature — rejecting')
-            return c.json({ received: true, error: 'invalid_signature' }, 200)
-          }
-
-          const result = await processMpWebhookEvent(bodyJson.type, String(dataId))
-          return c.json({ received: true, ...result }, 200)
-        } else if (isProduction) {
-          console.warn('Webhook: malformed signature in production — rejecting')
-          return c.json({ received: true, error: 'malformed_signature' }, 200)
-        }
-      }
-    } else if (isProduction) {
-      console.error('Webhook: MERCADOPAGO_WEBHOOK_SECRET not set in production!')
-      return c.json({ received: true, error: 'not_configured' }, 200)
+    // ALWAYS require webhook secret — reject if not configured
+    if (!env.MERCADOPAGO_WEBHOOK_SECRET) {
+      console.error('MP Webhook: MERCADOPAGO_WEBHOOK_SECRET not configured — rejecting')
+      return c.json({ received: true, error: 'webhook_not_configured' }, 500)
     }
 
-    // Without signature verification (dev/testing only)
-    const body = await c.req.json()
-    const dataId = body?.data?.id
-    const type = body?.type || body?.action
+    const signature = c.req.header('x-signature')
+    const requestId = c.req.header('x-request-id')
 
-    if (dataId) {
-      const result = await processMpWebhookEvent(type, String(dataId))
-      return c.json({ received: true, ...result }, 200)
+    if (!signature || !requestId) {
+      console.warn('MP Webhook: missing signature headers — rejecting')
+      return c.json({ received: true, error: 'missing_signature' }, 401)
     }
 
-    return c.json({ received: true }, 200)
+    const parts = signature.split(',')
+    const tsRaw = parts.find((p) => p.trim().startsWith('ts='))
+    const hashRaw = parts.find((p) => p.trim().startsWith('v1='))
+    const ts = tsRaw?.split('=')[1]
+    const hash = hashRaw?.split('=')[1]
+
+    if (!ts || !hash) {
+      console.warn('MP Webhook: malformed signature — rejecting')
+      return c.json({ received: true, error: 'invalid_signature' }, 401)
+    }
+
+    const body = await c.req.text()
+    const bodyJson = JSON.parse(body)
+    const dataId = bodyJson?.data?.id
+
+    const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`
+    const computed = crypto
+      .createHmac('sha256', env.MERCADOPAGO_WEBHOOK_SECRET)
+      .update(manifest)
+      .digest('hex')
+
+    // Timing-safe comparison to prevent side-channel attacks
+    const computedBuf = Buffer.from(computed, 'utf8')
+    const hashBuf = Buffer.from(hash, 'utf8')
+    if (computedBuf.length !== hashBuf.length || !crypto.timingSafeEqual(computedBuf, hashBuf)) {
+      console.warn('MP Webhook: invalid signature — rejecting')
+      return c.json({ received: true, error: 'invalid_signature' }, 401)
+    }
+
+    const result = await processMpWebhookEvent(bodyJson.type, String(dataId))
+    return c.json({ received: true, ...result }, 200)
   } catch (err) {
     console.error('MP Webhook error:', err)
     return c.json({ received: true, error: 'processing_error' }, 200)
   }
 })
 
-// Legacy webhook path (backwards compatibility)
+// Legacy webhook path — disabled for security, use /webhook/mercadopago instead
 paymentsRoute.post('/webhook', async (c) => {
-  try {
-    const body = await c.req.json()
-    const dataId = body?.data?.id
-    const type = body?.type || body?.action
-    if (dataId) {
-      const result = await processMpWebhookEvent(type, String(dataId))
-      return c.json({ received: true, ...result }, 200)
-    }
-    return c.json({ received: true }, 200)
-  } catch (err) {
-    console.error('Legacy webhook error:', err)
-    return c.json({ received: true }, 200)
-  }
+  console.warn('Legacy webhook endpoint called — disabled for security')
+  return c.json({ received: true, error: 'legacy_webhook_disabled', message: 'Use /webhook/mercadopago with signature verification' }, 410)
 })
 
 // OpenPix/Woovi PIX webhook
@@ -262,18 +236,20 @@ paymentsRoute.post('/webhook/nowpayments', async (c) => {
   try {
     const body = await c.req.json()
 
-    // Verify IPN signature if secret is configured
+    // Require IPN signature verification when secret is configured
     if (env.NOWPAYMENTS_IPN_SECRET) {
       const sig = c.req.header('x-nowpayments-sig')
-      if (sig) {
-        const sorted = JSON.stringify(body, Object.keys(body).sort())
-        const computed = crypto.createHmac('sha512', env.NOWPAYMENTS_IPN_SECRET).update(sorted).digest('hex')
-        const computedBuf = Buffer.from(computed, 'utf8')
-        const sigBuf = Buffer.from(sig, 'utf8')
-        if (computedBuf.length !== sigBuf.length || !crypto.timingSafeEqual(computedBuf, sigBuf)) {
-          console.warn('NP Webhook: invalid signature')
-          return c.json({ received: true }, 200)
-        }
+      if (!sig) {
+        console.warn('NP Webhook: missing signature header — rejecting')
+        return c.json({ received: true, error: 'missing_signature' }, 401)
+      }
+      const sorted = JSON.stringify(body, Object.keys(body).sort())
+      const computed = crypto.createHmac('sha512', env.NOWPAYMENTS_IPN_SECRET).update(sorted).digest('hex')
+      const computedBuf = Buffer.from(computed, 'utf8')
+      const sigBuf = Buffer.from(sig, 'utf8')
+      if (computedBuf.length !== sigBuf.length || !crypto.timingSafeEqual(computedBuf, sigBuf)) {
+        console.warn('NP Webhook: invalid signature — rejecting')
+        return c.json({ received: true, error: 'invalid_signature' }, 401)
       }
     }
 
@@ -288,7 +264,62 @@ paymentsRoute.post('/webhook/nowpayments', async (c) => {
 // PayPal webhook
 paymentsRoute.post('/webhook/paypal', async (c) => {
   try {
-    const body = await c.req.json()
+    const rawBody = await c.req.text()
+    const body = JSON.parse(rawBody)
+
+    // Verify PayPal webhook signature when PAYPAL_WEBHOOK_ID is configured
+    if (env.PAYPAL_WEBHOOK_ID) {
+      const transmissionId = c.req.header('paypal-transmission-id')
+      const transmissionTime = c.req.header('paypal-transmission-time')
+      const certUrl = c.req.header('paypal-cert-url')
+      const authAlgo = c.req.header('paypal-auth-algo')
+      const transmissionSig = c.req.header('paypal-transmission-sig')
+
+      if (!transmissionId || !transmissionTime || !transmissionSig) {
+        console.warn('PP Webhook: missing signature headers — rejecting')
+        return c.json({ received: true, error: 'missing_signature' }, 401)
+      }
+
+      // Verify via PayPal API
+      const paypalApi = env.PAYPAL_SANDBOX === 'true'
+        ? 'https://api-m.sandbox.paypal.com'
+        : 'https://api-m.paypal.com'
+
+      const auth = Buffer.from(`${env.PAYPAL_CLIENT_ID}:${env.PAYPAL_CLIENT_SECRET}`).toString('base64')
+      const tokenRes = await fetch(`${paypalApi}/v1/oauth2/token`, {
+        method: 'POST',
+        headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'grant_type=client_credentials',
+      })
+      const tokenData = await tokenRes.json() as any
+      if (!tokenRes.ok) {
+        console.error('PP Webhook: failed to get access token for verification')
+        return c.json({ received: true, error: 'verification_error' }, 500)
+      }
+
+      const verifyRes = await fetch(`${paypalApi}/v1/notifications/verify-webhook-signature`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${tokenData.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          auth_algo: authAlgo,
+          cert_url: certUrl,
+          transmission_id: transmissionId,
+          transmission_sig: transmissionSig,
+          transmission_time: transmissionTime,
+          webhook_id: env.PAYPAL_WEBHOOK_ID,
+          webhook_event: body,
+        }),
+      })
+      const verifyData = await verifyRes.json() as any
+      if (!verifyRes.ok || verifyData.verification_status !== 'SUCCESS') {
+        console.warn('PP Webhook: invalid signature — rejecting')
+        return c.json({ received: true, error: 'invalid_signature' }, 401)
+      }
+    }
+
     const result = await paymentService.handlePaypalWebhook(body)
     return c.json({ received: true, ...result }, 200)
   } catch (err) {

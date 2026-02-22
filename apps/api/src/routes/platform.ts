@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { z } from 'zod'
 import { authMiddleware, adminMiddleware } from '../middleware/auth'
 import { sensitiveRateLimit } from '../middleware/rateLimit'
 import * as platformService from '../services/platform.service'
@@ -89,9 +90,9 @@ platform.get('/seo', async (c) => {
 platform.post('/otp/request', authMiddleware, sensitiveRateLimit, async (c) => {
   try {
     const { userId } = c.get('user')
-    const { purpose } = await c.req.json()
-
-    if (!purpose || !['withdrawal'].includes(purpose)) {
+    const body = await c.req.json()
+    const purpose = body?.purpose
+    if (!purpose || typeof purpose !== 'string' || !['withdrawal'].includes(purpose)) {
       return error(c, 400, 'INVALID_PURPOSE', 'Proposito invalido')
     }
 
@@ -121,12 +122,13 @@ platform.post('/otp/request', authMiddleware, sensitiveRateLimit, async (c) => {
 })
 
 // Verify OTP
-platform.post('/otp/verify', authMiddleware, async (c) => {
+platform.post('/otp/verify', authMiddleware, sensitiveRateLimit, async (c) => {
   try {
     const { userId } = c.get('user')
-    const { code, purpose } = await c.req.json()
-
-    if (!code || !purpose) {
+    const body = await c.req.json()
+    const code = typeof body?.code === 'string' ? body.code.trim() : ''
+    const purpose = typeof body?.purpose === 'string' ? body.purpose : ''
+    if (!code || code.length < 4 || code.length > 8 || !purpose) {
       return error(c, 400, 'MISSING_FIELDS', 'Codigo e proposito obrigatorios')
     }
 
@@ -270,8 +272,8 @@ platform.get('/admin/cookie-consents/stats', authMiddleware, adminMiddleware, as
 // Cookie consent list
 platform.get('/admin/cookie-consents', authMiddleware, adminMiddleware, async (c) => {
   try {
-    const page = Number(c.req.query('page') || 1)
-    const limit = Number(c.req.query('limit') || 20)
+    const page = Math.max(1, Math.floor(Number(c.req.query('page') || 1)) || 1)
+    const limit = Math.min(100, Math.max(1, Math.floor(Number(c.req.query('limit') || 20)) || 20))
     const result = await platformService.getCookieConsents(page, limit)
     return success(c, result)
   } catch (e) {
@@ -302,8 +304,8 @@ platform.post('/admin/page/:key', authMiddleware, adminMiddleware, async (c) => 
 // Contact messages
 platform.get('/admin/contact-messages', authMiddleware, adminMiddleware, async (c) => {
   try {
-    const page = Number(c.req.query('page') || 1)
-    const limit = Number(c.req.query('limit') || 20)
+    const page = Math.max(1, Math.floor(Number(c.req.query('page') || 1)) || 1)
+    const limit = Math.min(100, Math.max(1, Math.floor(Number(c.req.query('limit') || 20)) || 20))
     const unreadOnly = c.req.query('unread') === 'true'
     const result = await platformService.getContactMessages(page, limit, unreadOnly)
     return success(c, result)

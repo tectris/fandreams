@@ -1,9 +1,19 @@
 import { Hono } from 'hono'
+import { z } from 'zod'
 import { authMiddleware, adminMiddleware } from '../middleware/auth'
 import * as adminService from '../services/admin.service'
 import * as kycService from '../services/kyc.service'
 import { success, error, paginated } from '../utils/response'
 import { AppError } from '../services/auth.service'
+
+function escapeLike(str: string): string {
+  return str.replace(/[%_\\]/g, '\\$&')
+}
+
+const adminUpdateUserSchema = z.object({
+  role: z.enum(['fan', 'creator', 'admin']).optional(),
+  isActive: z.boolean().optional(),
+})
 
 const admin = new Hono()
 
@@ -15,9 +25,9 @@ admin.get('/dashboard', async (c) => {
 })
 
 admin.get('/users', async (c) => {
-  const page = Number(c.req.query('page') || 1)
-  const limit = Number(c.req.query('limit') || 20)
-  const search = c.req.query('search') || ''
+  const page = Math.max(1, Math.floor(Number(c.req.query('page') || 1)) || 1)
+  const limit = Math.min(100, Math.max(1, Math.floor(Number(c.req.query('limit') || 20)) || 20))
+  const search = escapeLike(c.req.query('search') || '')
   const result = await adminService.getUsers(page, limit, search)
   return paginated(c, result.users, { page, limit, total: result.total })
 })
@@ -26,7 +36,7 @@ admin.patch('/users/:id', async (c) => {
   try {
     const targetUserId = c.req.param('id')
     const { userId: adminUserId } = c.get('user')
-    const body = await c.req.json()
+    const body = adminUpdateUserSchema.parse(await c.req.json())
     const updated = await adminService.updateUser(targetUserId, body, adminUserId)
     return success(c, updated)
   } catch (e) {
@@ -37,8 +47,8 @@ admin.patch('/users/:id', async (c) => {
 
 // KYC Management
 admin.get('/kyc', async (c) => {
-  const page = Number(c.req.query('page') || 1)
-  const limit = Number(c.req.query('limit') || 20)
+  const page = Math.max(1, Math.floor(Number(c.req.query('page') || 1)) || 1)
+  const limit = Math.min(100, Math.max(1, Math.floor(Number(c.req.query('limit') || 20)) || 20))
   const status = c.req.query('status') || 'pending'
   const result = await adminService.getKycSubmissions(page, limit, status)
   return success(c, result)

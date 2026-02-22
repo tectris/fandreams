@@ -207,6 +207,8 @@ export async function changePassword(userId: string, currentPassword: string, ne
 
   const newHash = await hashPassword(newPassword)
   await db.update(users).set({ passwordHash: newHash, updatedAt: new Date() }).where(eq(users.id, userId))
+  // Note: existing access tokens will expire naturally in 15 minutes.
+  // Refresh tokens should be revoked - caller should blacklist the current refresh token.
   return { changed: true }
 }
 

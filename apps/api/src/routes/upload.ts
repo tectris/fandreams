@@ -173,7 +173,7 @@ uploadRoute.post('/post/:postId/media', authMiddleware, creatorMiddleware, async
       }
 
       // Apply invisible steganographic fingerprint (non-blocking if fails)
-      const stegoSecret = env.STEGO_SECRET || env.JWT_SECRET || 'fandreams-stego-default'
+      const stegoSecret = env.STEGO_SECRET || env.JWT_SECRET
       try {
         processedBuffer = await steganographyService.embedFingerprint(
           processedBuffer,

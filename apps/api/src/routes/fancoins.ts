@@ -14,6 +14,10 @@ import { success, error } from '../utils/response'
 import { AppError } from '../services/auth.service'
 import { getFancoinToBrl } from '../services/withdrawal.service'
 
+function escapeLike(str: string): string {
+  return str.replace(/[%_\\]/g, '\\$&')
+}
+
 const fancoins = new Hono()
 
 fancoins.get('/wallet', authMiddleware, async (c) => {
@@ -105,6 +109,10 @@ fancoins.get('/search-user', authMiddleware, async (c) => {
     return success(c, [])
   }
 
+  if (q.length > 100) {
+    return success(c, [])
+  }
+
   const searchTerm = q.startsWith('@') ? q.slice(1) : q
 
   const results = await db
@@ -117,7 +125,7 @@ fancoins.get('/search-user', authMiddleware, async (c) => {
     .from(users)
     .where(
       and(
-        like(users.username, `${searchTerm}%`),
+        like(users.username, `${escapeLike(searchTerm)}%`),
         ne(users.id, userId),
         eq(users.isActive, true),
       ),
@@ -131,7 +139,8 @@ fancoins.get('/search-user', authMiddleware, async (c) => {
 fancoins.get('/transfer-preview', authMiddleware, async (c) => {
   try {
     const { userId } = c.get('user')
-    const amount = Number(c.req.query('amount'))
+    const rawAmount = Number(c.req.query('amount'))
+    const amount = Number.isFinite(rawAmount) ? rawAmount : 0
 
     if (!amount || !Number.isInteger(amount) || amount <= 0) {
       return error(c, 400, 'INVALID', 'Informe um valor inteiro positivo')

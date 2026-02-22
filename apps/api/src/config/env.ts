@@ -34,6 +34,7 @@ const envSchema = z.object({
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),
   PAYPAL_SANDBOX: z.enum(['true', 'false']).default('true'),
+  PAYPAL_WEBHOOK_ID: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default('FanDreams <noreply@fandreams.app>'),
   ADMIN_NOTIFICATION_EMAILS: z.string().optional(),
@@ -55,8 +56,17 @@ if (parsed.data.NODE_ENV === 'production') {
   const warnings: string[] = []
   const fatal: string[] = []
 
-  // Non-critical: MP webhook secret only needed for receiving payment webhooks
-  if (!parsed.data.MERCADOPAGO_WEBHOOK_SECRET) warnings.push('MERCADOPAGO_WEBHOOK_SECRET')
+  // Webhook secrets are REQUIRED when their corresponding provider is configured
+  if (parsed.data.MERCADOPAGO_ACCESS_TOKEN && !parsed.data.MERCADOPAGO_WEBHOOK_SECRET) {
+    fatal.push('MERCADOPAGO_WEBHOOK_SECRET (required when MERCADOPAGO_ACCESS_TOKEN is set)')
+  }
+  if (parsed.data.OPENPIX_APP_ID && !parsed.data.OPENPIX_WEBHOOK_SECRET) {
+    fatal.push('OPENPIX_WEBHOOK_SECRET (required when OPENPIX_APP_ID is set)')
+  }
+
+  // Auth secrets required in production
+  if (!parsed.data.EMAIL_VERIFY_SECRET) fatal.push('EMAIL_VERIFY_SECRET')
+  if (!parsed.data.PASSWORD_RESET_SECRET) fatal.push('PASSWORD_RESET_SECRET')
 
   // Critical: Redis needed for rate limiting in production
   if (!parsed.data.UPSTASH_REDIS_REST_URL) warnings.push('UPSTASH_REDIS_REST_URL')
