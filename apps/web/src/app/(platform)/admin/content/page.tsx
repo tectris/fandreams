@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
-import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -142,7 +141,6 @@ const CATEGORIES: { key: CategoryKey; label: string; icon: React.ElementType; pa
 
 export default function AdminContentPage() {
   const { user } = useAuthStore()
-  const router = useRouter()
   const queryClient = useQueryClient()
 
   const [activeCategory, setActiveCategory] = useState<CategoryKey>('legal')
@@ -152,10 +150,6 @@ export default function AdminContentPage() {
   const [pageTitles, setPageTitles] = useState<Record<string, string>>({})
   const [pageContents, setPageContents] = useState<Record<string, string>>({})
 
-  useEffect(() => {
-    if (user && user.role !== 'admin') router.push('/feed')
-  }, [user, router])
-
   // ─── Queries for all pages using useQueries ───
   const pageQueryResults = useQueries({
     queries: ALL_PAGES.map(page => ({
@@ -164,7 +158,6 @@ export default function AdminContentPage() {
         const res = await api.get<PageContent>(`/platform/page/${page.key}`)
         return { key: page.key, data: res.data }
       },
-      enabled: user?.role === 'admin',
     })),
   })
 
@@ -175,7 +168,6 @@ export default function AdminContentPage() {
       const res = await api.get<any>('/platform/admin/cookie-consents/stats')
       return res.data
     },
-    enabled: user?.role === 'admin',
   })
 
   // ─── Contact messages ───
@@ -185,7 +177,6 @@ export default function AdminContentPage() {
       const res = await api.get<any>('/platform/admin/contact-messages')
       return res.data
     },
-    enabled: user?.role === 'admin',
   })
 
   // ─── Load fetched data into state ───

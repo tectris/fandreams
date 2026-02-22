@@ -8,8 +8,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Shield, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAuthStore } from '@/lib/store'
-import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
 import { toast } from 'sonner'
 
 type User = {
@@ -26,23 +24,15 @@ type User = {
 
 export default function AdminUsersPage() {
   const { user } = useAuthStore()
-  const router = useRouter()
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
 
-  useEffect(() => {
-    if (user && user.role !== 'admin') {
-      router.push('/feed')
-    }
-  }, [user, router])
-
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'users', page, search],
     queryFn: () =>
       api.get<User[]>(`/admin/users?page=${page}&limit=20&search=${encodeURIComponent(search)}`),
-    enabled: user?.role === 'admin',
   })
 
   const updateUserMutation = useMutation({
