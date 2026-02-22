@@ -71,7 +71,10 @@ export function verify2fa(challengeToken: string, code: string): { userId: strin
     return null
   }
 
-  if (otp.code !== code) return null
+  // Use timing-safe comparison to prevent timing attacks
+  const codeBuffer = Buffer.from(otp.code)
+  const inputBuffer = Buffer.from(code.padEnd(otp.code.length).slice(0, otp.code.length))
+  if (codeBuffer.length !== inputBuffer.length || !crypto.timingSafeEqual(codeBuffer, inputBuffer)) return null
 
   // Success - clean up and return user info
   pendingOtps.delete(challengeToken)

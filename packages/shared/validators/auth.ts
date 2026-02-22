@@ -9,9 +9,11 @@ export const registerSchema = z.object({
     .regex(/^[a-zA-Z0-9_]+$/, 'Username pode conter apenas letras, numeros e _'),
   password: z
     .string()
-    .min(8, 'Senha deve ter pelo menos 8 caracteres')
+    .min(10, 'Senha deve ter pelo menos 10 caracteres')
     .regex(/[A-Z]/, 'Senha deve conter pelo menos uma letra maiuscula')
-    .regex(/[0-9]/, 'Senha deve conter pelo menos um numero'),
+    .regex(/[a-z]/, 'Senha deve conter pelo menos uma letra minuscula')
+    .regex(/[0-9]/, 'Senha deve conter pelo menos um numero')
+    .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/, 'Senha deve conter pelo menos um caractere especial'),
   displayName: z.string().min(1).max(100).optional(),
   dateOfBirth: z.string().refine(
     (date) => {
@@ -35,9 +37,11 @@ export const resetPasswordSchema = z.object({
   token: z.string().min(1),
   password: z
     .string()
-    .min(8, 'Senha deve ter pelo menos 8 caracteres')
+    .min(10, 'Senha deve ter pelo menos 10 caracteres')
     .regex(/[A-Z]/, 'Senha deve conter pelo menos uma letra maiuscula')
-    .regex(/[0-9]/, 'Senha deve conter pelo menos um numero'),
+    .regex(/[a-z]/, 'Senha deve conter pelo menos uma letra minuscula')
+    .regex(/[0-9]/, 'Senha deve conter pelo menos um numero')
+    .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/, 'Senha deve conter pelo menos um caractere especial'),
 })
 
 export type RegisterInput = z.infer<typeof registerSchema>

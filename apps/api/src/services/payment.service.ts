@@ -107,7 +107,11 @@ type MpPixPaymentResponse = {
  * Build payer object for MercadoPago PIX Transparent Checkout.
  * MP requires first_name, last_name, email, and identification for PIX.
  */
-function buildPixPayer(email: string, displayName: string) {
+function buildPixPayer(email: string, displayName: string, cpf?: string) {
+  if (!cpf) {
+    throw new AppError('CPF_REQUIRED', 'CPF do usuario necessario para pagamentos PIX. Complete seu perfil.', 400)
+  }
+
   const parts = displayName.trim().split(/\s+/)
   const firstName = parts[0] || 'Usuario'
   const lastName = parts.length > 1 ? parts.slice(1).join(' ') : 'FanDreams'
@@ -118,7 +122,7 @@ function buildPixPayer(email: string, displayName: string) {
     last_name: lastName,
     identification: {
       type: 'CPF',
-      number: '52998224725', // Valid test CPF — production should collect real CPF via profile/KYC
+      number: cpf,
     },
   }
 }
@@ -407,7 +411,8 @@ async function createMpPixPayment(payment: any, pkg: any, userId: string, appUrl
 
   // PIX payments expire in 30 minutes
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
-  const payer = buildPixPayer(user.email, user.displayName || user.username || 'Usuario')
+  // TODO: Pass real CPF from user profile/KYC data once available
+  const payer = buildPixPayer(user.email, user.displayName || user.username || 'Usuario', '' /* CPF from KYC */)
   const description = `${pkg.coins.toLocaleString()} FanCoins${pkg.bonus > 0 ? ` (+${pkg.bonus} bonus)` : ''} - FanDreams`
 
   // Try Transparent Checkout first (inline QR code — best UX)
@@ -846,18 +851,20 @@ async function processPaymentConfirmation(
     return { processed: false }
   }
 
-  if (payment.status === 'completed') {
-    return { processed: true, status: 'already_completed' }
-  }
-
-  await db
+  // Atomic check-and-set: only process if status is NOT already completed
+  const [updated] = await db
     .update(payments)
     .set({
       status,
       providerTxId,
       metadata: { ...(payment.metadata as any), ...extraMeta },
     })
-    .where(eq(payments.id, payment.id))
+    .where(and(eq(payments.id, payment.id), sql`${payments.status} != 'completed'`))
+    .returning()
+
+  if (!updated) {
+    return { processed: true, status: 'already_completed' }
+  }
 
   if (status === 'completed') {
     const meta = payment.metadata as any
@@ -1329,7 +1336,8 @@ export async function createPpvPayment(userId: string, postId: string, paymentMe
     if (!user?.email) throw new AppError('MISSING_EMAIL', 'Email do usuario nao encontrado', 400)
 
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
-    const payer = buildPixPayer(user.email, user.displayName || user.username || 'Usuario')
+    // TODO: Pass real CPF from user profile/KYC data once available
+    const payer = buildPixPayer(user.email, user.displayName || user.username || 'Usuario', '' /* CPF from KYC */)
 
     // Try Transparent Checkout first (inline QR code)
     try {

@@ -19,7 +19,7 @@ async function collectEcosystemFund(amount: number, description: string): Promis
   const fundAmount = Math.floor(amount * ECOSYSTEM_FUND_RATE)
   if (fundAmount <= 0) return amount
 
-  // Credit ecosystem fund wallet (fire-and-forget, never blocks main tx)
+  // Credit ecosystem fund wallet — retry once on failure, return full amount if fund fails
   try {
     await getWallet(ECOSYSTEM_FUND_USER_ID)
     await db
@@ -35,11 +35,13 @@ async function collectEcosystemFund(amount: number, description: string): Promis
       userId: ECOSYSTEM_FUND_USER_ID,
       type: 'ecosystem_fund',
       amount: fundAmount,
-      balanceAfter: 0, // placeholder — actual balance tracked in wallet
+      balanceAfter: 0,
       description,
     })
   } catch (e) {
-    console.error('Ecosystem fund collection error (non-blocking):', e)
+    // If ecosystem fund fails, return full amount to caller (don't deduct what wasn't collected)
+    console.error('Ecosystem fund collection error — returning full amount to caller:', e)
+    return amount
   }
 
   return amount - fundAmount
@@ -246,21 +248,10 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
   // Ecosystem fund: 1% of after-fee amount goes to platform fund
   const creatorAmount = await collectEcosystemFund(afterFee, `Fundo ecossistema: tip @${sender?.username} -> @${receiver?.username}`)
 
-  // ATOMIC credit: add to creator wallet
-  const [creditResult] = await db
-    .update(fancoinWallets)
-    .set({
-      balance: sql`${fancoinWallets.balance} + ${creatorAmount}`,
-      totalEarned: sql`${fancoinWallets.totalEarned} + ${creatorAmount}`,
-      updatedAt: new Date(),
-    })
-    .where(eq(fancoinWallets.userId, toCreatorId))
-    .returning({ balance: fancoinWallets.balance })
-
-  // If creator has no wallet, create one and credit
-  if (!creditResult) {
-    await getWallet(toCreatorId)
-    await db
+  // ATOMIC credit: add to creator wallet — with compensation on failure
+  let creditResult: { balance: string | number } | undefined
+  try {
+    const [result] = await db
       .update(fancoinWallets)
       .set({
         balance: sql`${fancoinWallets.balance} + ${creatorAmount}`,
@@ -268,6 +259,35 @@ export async function sendTip(fromUserId: string, toCreatorId: string, amount: n
         updatedAt: new Date(),
       })
       .where(eq(fancoinWallets.userId, toCreatorId))
+      .returning({ balance: fancoinWallets.balance })
+    creditResult = result
+
+    // If creator has no wallet, create one and credit
+    if (!creditResult) {
+      await getWallet(toCreatorId)
+      const [retryResult] = await db
+        .update(fancoinWallets)
+        .set({
+          balance: sql`${fancoinWallets.balance} + ${creatorAmount}`,
+          totalEarned: sql`${fancoinWallets.totalEarned} + ${creatorAmount}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(fancoinWallets.userId, toCreatorId))
+        .returning({ balance: fancoinWallets.balance })
+      creditResult = retryResult
+    }
+  } catch (creditError) {
+    // COMPENSATION: If credit fails after debit, refund the sender to prevent fund loss
+    console.error('CRITICAL: Tip credit failed after debit. Compensating sender.', creditError)
+    await db
+      .update(fancoinWallets)
+      .set({
+        balance: sql`${fancoinWallets.balance} + ${amount}`,
+        totalSpent: sql`GREATEST(0, ${fancoinWallets.totalSpent} - ${amount})`,
+        updatedAt: new Date(),
+      })
+      .where(eq(fancoinWallets.userId, fromUserId))
+    throw new AppError('TRANSFER_FAILED', 'Falha ao creditar destinatario. Saldo restaurado.', 500)
   }
 
   const newCreatorBalance = Number(creditResult?.balance ?? creatorAmount)
@@ -409,20 +429,10 @@ export async function transferToUser(fromUserId: string, toUserId: string, amoun
   // Ecosystem fund: 1%
   const receiverAmount = await collectEcosystemFund(afterFee, `Fundo ecossistema: transferencia @${sender?.username} -> @${receiver?.username}`)
 
-  // ATOMIC credit
-  const [creditResult] = await db
-    .update(fancoinWallets)
-    .set({
-      balance: sql`${fancoinWallets.balance} + ${receiverAmount}`,
-      totalEarned: sql`${fancoinWallets.totalEarned} + ${receiverAmount}`,
-      updatedAt: new Date(),
-    })
-    .where(eq(fancoinWallets.userId, toUserId))
-    .returning({ balance: fancoinWallets.balance })
-
-  if (!creditResult) {
-    await getWallet(toUserId)
-    await db
+  // ATOMIC credit — with compensation on failure
+  let creditResult: { balance: string | number } | undefined
+  try {
+    const [result] = await db
       .update(fancoinWallets)
       .set({
         balance: sql`${fancoinWallets.balance} + ${receiverAmount}`,
@@ -430,6 +440,34 @@ export async function transferToUser(fromUserId: string, toUserId: string, amoun
         updatedAt: new Date(),
       })
       .where(eq(fancoinWallets.userId, toUserId))
+      .returning({ balance: fancoinWallets.balance })
+    creditResult = result
+
+    if (!creditResult) {
+      await getWallet(toUserId)
+      const [retryResult] = await db
+        .update(fancoinWallets)
+        .set({
+          balance: sql`${fancoinWallets.balance} + ${receiverAmount}`,
+          totalEarned: sql`${fancoinWallets.totalEarned} + ${receiverAmount}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(fancoinWallets.userId, toUserId))
+        .returning({ balance: fancoinWallets.balance })
+      creditResult = retryResult
+    }
+  } catch (creditError) {
+    // COMPENSATION: If credit fails after debit, refund the sender to prevent fund loss
+    console.error('CRITICAL: Transfer credit failed after debit. Compensating sender.', creditError)
+    await db
+      .update(fancoinWallets)
+      .set({
+        balance: sql`${fancoinWallets.balance} + ${amount}`,
+        totalSpent: sql`GREATEST(0, ${fancoinWallets.totalSpent} - ${amount})`,
+        updatedAt: new Date(),
+      })
+      .where(eq(fancoinWallets.userId, fromUserId))
+    throw new AppError('TRANSFER_FAILED', 'Falha ao creditar destinatario. Saldo restaurado.', 500)
   }
 
   const newReceiverBalance = Number(creditResult?.balance ?? receiverAmount)

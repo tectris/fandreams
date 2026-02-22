@@ -15,6 +15,21 @@ import { rateLimit } from '../middleware/rateLimit'
 
 const shareRateLimit = rateLimit({ requests: 10, window: '1 m', prefix: 'share' })
 
+async function extractOptionalUserId(c: any): Promise<string | undefined> {
+  const authHeader = c.req.header('Authorization')
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const jwt = await import('jsonwebtoken')
+      const { env } = await import('../config/env')
+      const payload = jwt.default.verify(authHeader.slice(7), env.JWT_SECRET) as { sub: string; type?: string }
+      if (!payload.type || payload.type === 'access') {
+        return payload.sub
+      }
+    } catch {}
+  }
+  return undefined
+}
+
 const postsRoute = new Hono()
 
 postsRoute.post('/', authMiddleware, creatorMiddleware, validateBody(createPostSchema), async (c) => {
@@ -29,29 +44,13 @@ postsRoute.post('/', authMiddleware, creatorMiddleware, validateBody(createPostS
   }
 })
 
-// Debug: check raw post counts by visibility for a creator
-postsRoute.get('/creator/:creatorId/debug', async (c) => {
-  const creatorId = c.req.param('creatorId')
-  const result = await postService.getCreatorPostsDebug(creatorId)
-  return success(c, result)
-})
-
 postsRoute.get('/creator/:creatorId', async (c) => {
   try {
     const creatorId = c.req.param('creatorId')
     const page = Number(c.req.query('page') || 1)
     const limit = Number(c.req.query('limit') || 20)
 
-    let viewerId: string | undefined
-    const authHeader = c.req.header('Authorization')
-    if (authHeader?.startsWith('Bearer ')) {
-      try {
-        const jwt = await import('jsonwebtoken')
-        const { env } = await import('../config/env')
-        const payload = jwt.default.verify(authHeader.slice(7), env.JWT_SECRET) as { sub: string }
-        viewerId = payload.sub
-      } catch {}
-    }
+    const viewerId = await extractOptionalUserId(c)
 
     const result = await postService.getCreatorPosts(creatorId, viewerId, page, limit)
     return success(c, result)
@@ -64,17 +63,7 @@ postsRoute.get('/creator/:creatorId', async (c) => {
 postsRoute.get('/:id', async (c) => {
   try {
     const param = c.req.param('id')
-    const authHeader = c.req.header('Authorization')
-    let viewerId: string | undefined
-
-    if (authHeader?.startsWith('Bearer ')) {
-      try {
-        const jwt = await import('jsonwebtoken')
-        const { env } = await import('../config/env')
-        const payload = jwt.default.verify(authHeader.slice(7), env.JWT_SECRET) as { sub: string }
-        viewerId = payload.sub
-      } catch {}
-    }
+    const viewerId = await extractOptionalUserId(c)
 
     // Detect UUID format vs shortCode
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param)
@@ -201,16 +190,7 @@ postsRoute.post('/:id/view', async (c) => {
   const postId = c.req.param('id')
   try {
     // Optional auth - extract userId if available
-    let userId: string | undefined
-    const authHeader = c.req.header('Authorization')
-    if (authHeader?.startsWith('Bearer ')) {
-      try {
-        const jwt = await import('jsonwebtoken')
-        const { env } = await import('../config/env')
-        const payload = jwt.default.verify(authHeader.slice(7), env.JWT_SECRET) as { sub: string }
-        userId = payload.sub
-      } catch {}
-    }
+    const userId = await extractOptionalUserId(c)
 
     const ipAddress = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
       || c.req.header('x-real-ip')

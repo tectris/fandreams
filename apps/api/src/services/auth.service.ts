@@ -20,24 +20,20 @@ function getPasswordResetSecret(): string {
 }
 
 export async function register(input: RegisterInput) {
-  const existing = await db
+  const [existingEmail] = await db
     .select({ id: users.id })
     .from(users)
     .where(eq(users.email, input.email))
     .limit(1)
 
-  if (existing.length > 0) {
-    throw new AppError('EMAIL_EXISTS', 'Este email ja esta cadastrado', 409)
-  }
-
-  const existingUsername = await db
+  const [existingUsername] = await db
     .select({ id: users.id })
     .from(users)
     .where(eq(users.username, input.username))
     .limit(1)
 
-  if (existingUsername.length > 0) {
-    throw new AppError('USERNAME_EXISTS', 'Este username ja esta em uso', 409)
+  if (existingEmail || existingUsername) {
+    throw new AppError('USER_EXISTS', 'Email ou username ja esta em uso', 409)
   }
 
   const passwordHash = await hashPassword(input.password)
@@ -170,18 +166,15 @@ export async function login(input: LoginInput) {
     }
   }
 
-  if (!user) {
-    recordFailedLogin(input.email)
-    throw new AppError('INVALID_CREDENTIALS', 'Email ou senha incorretos', 401)
-  }
-
   // Permanently deleted accounts cannot login
-  if (!user.isActive && user.passwordHash === 'DELETED') {
+  if (user && !user.isActive && user.passwordHash === 'DELETED') {
     throw new AppError('ACCOUNT_DELETED', 'Esta conta foi excluida permanentemente', 403)
   }
 
-  const valid = await verifyPassword(input.password, user.passwordHash)
-  if (!valid) {
+  // Always compute password hash to prevent timing-based user enumeration
+  const dummyHash = '$2b$12$LJ3m4ys3LgDEgONkMJvxOOtXnGKfWxPPAI8R8hKbx3yQ.5GzXMwSe'
+  const valid = await verifyPassword(input.password, user?.passwordHash || dummyHash)
+  if (!user || !valid) {
     recordFailedLogin(input.email)
     throw new AppError('INVALID_CREDENTIALS', 'Email ou senha incorretos', 401)
   }
@@ -413,6 +406,10 @@ export async function resetPassword(token: string, newPassword: string) {
     .update(users)
     .set({ passwordHash, updatedAt: new Date() })
     .where(eq(users.id, user.id))
+
+  // Blacklist the reset token to prevent reuse
+  const { blacklistRefreshToken } = await import('../utils/tokens')
+  blacklistRefreshToken(token)
 
   return { reset: true }
 }

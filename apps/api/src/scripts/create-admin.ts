@@ -12,7 +12,11 @@ if (!process.env.DATABASE_URL) {
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@fandreams.app'
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin'
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@2024!'
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD
+if (!ADMIN_PASSWORD) {
+  console.error('ADMIN_PASSWORD environment variable is required.')
+  process.exit(1)
+}
 const ADMIN_DISPLAY_NAME = process.env.ADMIN_DISPLAY_NAME || 'FanDreams Admin'
 
 const sql = neon(process.env.DATABASE_URL)
@@ -84,7 +88,6 @@ async function createAdmin() {
   console.log('=== Superadmin created! ===')
   console.log(`Email:    ${ADMIN_EMAIL}`)
   console.log(`Username: ${ADMIN_USERNAME}`)
-  console.log(`Password: ${ADMIN_PASSWORD}`)
   console.log('')
   console.log('IMPORTANTE: Troque a senha após o primeiro login!')
   console.log('')

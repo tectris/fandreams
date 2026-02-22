@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken'
 import { env } from '../config/env'
 
 export function generateAccessToken(userId: string, role: string): string {
-  return jwt.sign({ sub: userId, role }, env.JWT_SECRET, { expiresIn: '15m' })
+  return jwt.sign({ sub: userId, role, type: 'access', aud: 'fandreams-api' }, env.JWT_SECRET, { expiresIn: '15m' })
 }
 
 export function generateRefreshToken(userId: string): string {

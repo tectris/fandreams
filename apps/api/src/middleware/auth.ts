@@ -23,7 +23,10 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
   const token = header.slice(7)
 
   try {
-    const payload = jwt.verify(token, env.JWT_SECRET) as { sub: string; role: string }
+    const payload = jwt.verify(token, env.JWT_SECRET) as { sub: string; role: string; type?: string }
+    if (payload.type && payload.type !== 'access') {
+      return c.json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Tipo de token invalido' } }, 401)
+    }
     c.set('user', { userId: payload.sub, role: payload.role })
     await next()
   } catch {
@@ -46,6 +49,19 @@ export const creatorMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
       { success: false, error: { code: 'FORBIDDEN', message: 'Apenas criadores podem acessar' } },
       403,
     )
+  }
+  await next()
+})
+
+export const optionalAuthMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
+  const header = c.req.header('Authorization')
+  if (header?.startsWith('Bearer ')) {
+    try {
+      const payload = jwt.verify(header.slice(7), env.JWT_SECRET) as { sub: string; role: string; type?: string }
+      if (!payload.type || payload.type === 'access') {
+        c.set('user', { userId: payload.sub, role: payload.role })
+      }
+    } catch {}
   }
   await next()
 })

@@ -73,7 +73,7 @@ export async function createContactMessage(data: {
   if (!data.name || data.name.length < 2 || data.name.length > 100) {
     throw new AppError('INVALID_NAME', 'Nome deve ter entre 2 e 100 caracteres', 400)
   }
-  if (!data.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+  if (!data.email || !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(data.email) || /[\r\n]/.test(data.email)) {
     throw new AppError('INVALID_EMAIL', 'Email invalido', 400)
   }
   if (!data.message || data.message.length < 10 || data.message.length > 2000) {
@@ -128,12 +128,9 @@ export async function markContactMessageRead(messageId: string) {
 // ── OTP Codes ──
 
 function generateOtp(): string {
-  const digits = '0123456789'
-  let code = ''
-  for (let i = 0; i < 6; i++) {
-    code += digits[Math.floor(Math.random() * digits.length)]
-  }
-  return code
+  // Use crypto.randomInt for cryptographically secure OTP generation
+  const crypto = require('crypto') as typeof import('crypto')
+  return String(crypto.randomInt(100000, 999999))
 }
 
 export async function createOtpCode(userId: string, purpose: string): Promise<string> {
@@ -218,6 +215,17 @@ export async function verifyOtpCode(userId: string, code: string, purpose: strin
 // ── Terms & Privacy Content ──
 
 export async function getPageContent(key: string): Promise<{ title: string; content: string; updatedAt: string } | null> {
+  const allowedKeys = [
+    'terms_and_conditions', 'privacy_policy', 'cookie_policy', 'dmca',
+    'compliance', 'acceptable_use_policy', 'age_verification',
+    'creator_contract', 'subscription_terms', 'refund_policy',
+    'safety_center', 'community_guidelines', 'complaints',
+    'anti_trafficking', 'transparency_report',
+    'tax_guide', 'accessibility',
+  ]
+  if (!allowedKeys.includes(key)) {
+    throw new AppError('INVALID_KEY', 'Chave de pagina invalida', 400)
+  }
   const data = await getSetting<{ title: string; content: string; updatedAt: string } | null>(key, null)
   return data
 }

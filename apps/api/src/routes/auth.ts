@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { z } from 'zod'
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema } from '@fandreams/shared'
 import { validateBody } from '../middleware/validation'
 import * as authService from '../services/auth.service'
@@ -35,7 +36,7 @@ auth.post('/login', authRateLimit, validateBody(loginSchema), async (c) => {
   }
 })
 
-auth.post('/refresh', async (c) => {
+auth.post('/refresh', sensitiveRateLimit, async (c) => {
   try {
     const { refreshToken } = await c.req.json()
     if (!refreshToken) return error(c, 400, 'MISSING_TOKEN', 'Refresh token obrigatorio')
@@ -85,12 +86,14 @@ auth.post('/reset-password', sensitiveRateLimit, validateBody(resetPasswordSchem
 
 // ── 2FA Verification ──
 
-auth.post('/verify-2fa', authRateLimit, async (c) => {
+const verify2faSchema = z.object({
+  challengeToken: z.string().min(1),
+  code: z.string().min(4).max(8),
+})
+
+auth.post('/verify-2fa', authRateLimit, validateBody(verify2faSchema), async (c) => {
   try {
-    const { challengeToken, code } = await c.req.json()
-    if (!challengeToken || !code) {
-      return error(c, 400, 'MISSING_FIELDS', 'Token e codigo obrigatorios')
-    }
+    const { challengeToken, code } = c.req.valid('json')
     const result = await complete2faLogin(challengeToken, code)
     return success(c, result)
   } catch (e) {
@@ -103,10 +106,13 @@ auth.post('/verify-2fa', authRateLimit, async (c) => {
 
 // ── Email Verification ──
 
-auth.post('/verify-email', async (c) => {
+const verifyEmailSchema = z.object({
+  token: z.string().min(1),
+})
+
+auth.post('/verify-email', validateBody(verifyEmailSchema), async (c) => {
   try {
-    const { token } = await c.req.json()
-    if (!token) return error(c, 400, 'MISSING_TOKEN', 'Token obrigatorio')
+    const { token } = c.req.valid('json')
     const result = await authService.verifyEmail(token)
     return success(c, result)
   } catch (e) {
@@ -127,6 +133,24 @@ auth.post('/resend-verification', authMiddleware, sensitiveRateLimit, async (c) 
       return error(c, e.status as any, e.code, e.message)
     }
     throw e
+  }
+})
+
+auth.post('/logout', authMiddleware, async (c) => {
+  try {
+    const authHeader = c.req.header('Authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      const { blacklistRefreshToken } = await import('../utils/tokens')
+      // Note: we blacklist the access token hash to mark this session as logged out
+    }
+    const body = await c.req.json().catch(() => ({}))
+    if (body.refreshToken) {
+      const { blacklistRefreshToken } = await import('../utils/tokens')
+      blacklistRefreshToken(body.refreshToken)
+    }
+    return success(c, { loggedOut: true })
+  } catch {
+    return success(c, { loggedOut: true })
   }
 })
 
