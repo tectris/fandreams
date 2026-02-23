@@ -64,9 +64,9 @@ if (parsed.data.NODE_ENV === 'production') {
     fatal.push('OPENPIX_WEBHOOK_SECRET (required when OPENPIX_APP_ID is set)')
   }
 
-  // Auth secrets required in production
-  if (!parsed.data.EMAIL_VERIFY_SECRET) fatal.push('EMAIL_VERIFY_SECRET')
-  if (!parsed.data.PASSWORD_RESET_SECRET) fatal.push('PASSWORD_RESET_SECRET')
+  // Auth secrets: recommended but have safe fallbacks derived from JWT_SECRET (see auth.service.ts)
+  if (!parsed.data.EMAIL_VERIFY_SECRET) warnings.push('EMAIL_VERIFY_SECRET')
+  if (!parsed.data.PASSWORD_RESET_SECRET) warnings.push('PASSWORD_RESET_SECRET')
 
   // Critical: Redis needed for rate limiting in production
   if (!parsed.data.UPSTASH_REDIS_REST_URL) warnings.push('UPSTASH_REDIS_REST_URL')
