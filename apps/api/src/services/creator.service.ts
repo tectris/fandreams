@@ -90,6 +90,10 @@ export async function updateCreatorProfile(
   return updated
 }
 
+function stripHtml(str: string): string {
+  return str.replace(/[<>]/g, '').trim()
+}
+
 export async function createTier(creatorId: string, input: CreateTierInput) {
   const existing = await db
     .select()
@@ -104,10 +108,10 @@ export async function createTier(creatorId: string, input: CreateTierInput) {
     .insert(subscriptionTiers)
     .values({
       creatorId,
-      name: input.name,
+      name: stripHtml(input.name),
       price: String(input.price),
-      description: input.description,
-      benefits: input.benefits || [],
+      description: input.description ? stripHtml(input.description) : input.description,
+      benefits: input.benefits ? input.benefits.map(b => stripHtml(b)) : [],
       maxSlots: input.maxSlots,
       sortOrder: existing.length,
     })
