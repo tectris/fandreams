@@ -27,7 +27,7 @@ export default function SettingsPage() {
   const [editingAvatarFile, setEditingAvatarFile] = useState<File | null>(null)
   const [editingCoverFile, setEditingCoverFile] = useState<File | null>(null)
 
-  const { data: profile } = useQuery({
+  const { data: profile, error: profileError } = useQuery({
     queryKey: ['my-profile'],
     queryFn: async () => {
       const res = await api.get<any>('/users/me')
@@ -211,6 +211,15 @@ export default function SettingsPage() {
         <Settings className="w-6 h-6 text-primary" />
         <h1 className="text-xl font-bold">Configuracoes</h1>
       </div>
+
+      {/* Profile load error */}
+      {profileError && (
+        <Card className="mb-6 border-error/20">
+          <CardContent className="py-4">
+            <p className="text-sm text-error">Erro ao carregar perfil: {(profileError as any)?.message || 'Erro desconhecido'}</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Profile card with image uploads */}
       {profile && (

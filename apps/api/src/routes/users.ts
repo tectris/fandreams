@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { updateProfileSchema, updateSettingsSchema } from '@fandreams/shared'
 import { validateBody } from '../middleware/validation'
-import { authMiddleware } from '../middleware/auth'
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth'
 import { sensitiveRateLimit } from '../middleware/rateLimit'
 import { eq } from 'drizzle-orm'
 import { users } from '@fandreams/database'
@@ -184,21 +184,11 @@ usersRoute.get('/:userId/follow', authMiddleware, async (c) => {
   }
 })
 
-usersRoute.get('/:username', async (c) => {
+usersRoute.get('/:username', optionalAuthMiddleware, async (c) => {
   try {
     const username = c.req.param('username')
-
-    // Optional auth for view dedup
-    let viewerUserId: string | undefined
-    const authHeader = c.req.header('Authorization')
-    if (authHeader?.startsWith('Bearer ')) {
-      try {
-        const jwt = await import('jsonwebtoken')
-        const { env } = await import('../config/env')
-        const payload = jwt.default.verify(authHeader.slice(7), env.JWT_SECRET) as { sub: string }
-        viewerUserId = payload.sub
-      } catch {}
-    }
+    const viewer = c.get('user')
+    const viewerUserId = viewer?.userId
 
     const ipAddress = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
       || c.req.header('x-real-ip')
