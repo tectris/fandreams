@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
+import { api, API_BASE_URL } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,8 @@ import { Badge } from '@/components/ui/badge'
 import {
   FileText, Save, Eye, Cookie, MessageSquare, ArrowLeft, ShieldCheck, Scale,
   Users, ScrollText, Shield, BookOpen, AlertTriangle, Heart, BarChart3,
-  Calculator, Accessibility, ChevronDown, ChevronRight, X, CheckCircle2
+  Calculator, Accessibility, ChevronDown, ChevronRight, X, CheckCircle2,
+  Trash2, Download
 } from 'lucide-react'
 import { HtmlEditor } from '@/components/html-editor'
 import { toast } from 'sonner'
@@ -237,6 +238,15 @@ export default function AdminContentPage() {
     },
   })
 
+  const deleteMessageMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/platform/admin/contact-messages/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'contact-messages'] })
+      toast.success('Mensagem excluida com sucesso')
+    },
+    onError: (e: any) => toast.error(e.message || 'Erro ao excluir mensagem'),
+  })
+
   // ─── Helpers ───
   const getTitle = (key: string, defaultTitle: string) => pageTitles[key] ?? defaultTitle
   const getContent = (key: string) => pageContents[key] ?? ''
@@ -410,7 +420,34 @@ export default function AdminContentPage() {
           {activeTab === 'cookies_stats' && (
             <Card>
               <CardHeader>
-                <h2 className="font-bold">Rastreabilidade de Cookies</h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="font-bold">Rastreabilidade de Cookies</h2>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        const token = api.getToken()
+                        const res = await fetch(`${API_BASE_URL}/api/v1/platform/admin/cookie-consents/export`, {
+                          headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        })
+                        if (!res.ok) throw new Error('Falha ao exportar')
+                        const blob = await res.blob()
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `cookie-consents-lgpd-${new Date().toISOString().slice(0, 10)}.csv`
+                        a.click()
+                        URL.revokeObjectURL(url)
+                        toast.success('Relatorio exportado com sucesso')
+                      } catch {
+                        toast.error('Erro ao exportar relatorio')
+                      }
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-1" /> Exportar CSV (LGPD)
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {cookieStats ? (
@@ -470,15 +507,30 @@ export default function AdminContentPage() {
                               {new Date(msg.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </p>
                           </div>
-                          {!msg.isRead && (
+                          <div className="flex flex-col gap-1 shrink-0">
+                            {!msg.isRead && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => markReadMutation.mutate(msg.id)}
+                              >
+                                Marcar como lida
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => markReadMutation.mutate(msg.id)}
+                              className="text-error hover:text-error hover:bg-error/10"
+                              onClick={() => {
+                                if (confirm('Tem certeza que deseja excluir esta mensagem?')) {
+                                  deleteMessageMutation.mutate(msg.id)
+                                }
+                              }}
+                              loading={deleteMessageMutation.isPending && deleteMessageMutation.variables === msg.id}
                             >
-                              Marcar como lida
+                              <Trash2 className="w-3.5 h-3.5 mr-1" /> Excluir
                             </Button>
-                          )}
+                          </div>
                         </div>
                       </div>
                     ))}

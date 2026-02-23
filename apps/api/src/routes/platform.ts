@@ -269,6 +269,31 @@ platform.get('/admin/cookie-consents/stats', authMiddleware, adminMiddleware, as
   }
 })
 
+// Cookie consent export (CSV for LGPD)
+platform.get('/admin/cookie-consents/export', authMiddleware, adminMiddleware, async (c) => {
+  try {
+    const items = await platformService.exportCookieConsents()
+
+    const header = 'id,ip_address,user_agent,accepted,created_at'
+    const rows = items.map((item) => {
+      const ua = (item.userAgent || '').replace(/"/g, '""')
+      const accepted = item.accepted ? 'Sim' : 'Nao'
+      const date = new Date(item.createdAt).toISOString()
+      return `${item.id},"${item.ipAddress}","${ua}",${accepted},${date}`
+    })
+
+    const csv = [header, ...rows].join('\n')
+    const now = new Date().toISOString().slice(0, 10)
+
+    c.header('Content-Type', 'text/csv; charset=utf-8')
+    c.header('Content-Disposition', `attachment; filename="cookie-consents-lgpd-${now}.csv"`)
+    return c.body(csv)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
 // Cookie consent list
 platform.get('/admin/cookie-consents', authMiddleware, adminMiddleware, async (c) => {
   try {
@@ -320,6 +345,18 @@ platform.patch('/admin/contact-messages/:id/read', authMiddleware, adminMiddlewa
   try {
     const messageId = c.req.param('id')
     const result = await platformService.markContactMessageRead(messageId)
+    return success(c, result)
+  } catch (e) {
+    if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
+    throw e
+  }
+})
+
+// Delete contact message
+platform.delete('/admin/contact-messages/:id', authMiddleware, adminMiddleware, async (c) => {
+  try {
+    const messageId = c.req.param('id')
+    const result = await platformService.deleteContactMessage(messageId)
     return success(c, result)
   } catch (e) {
     if (e instanceof AppError) return error(c, e.status as any, e.code, e.message)
