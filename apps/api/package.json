@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsx src/scripts/db-push.ts && tsup",
+    "build": "tsup",
     "start": "node dist/index.js",
     "type-check": "tsc --noEmit",
     "db:push": "tsx src/scripts/db-push.ts",
