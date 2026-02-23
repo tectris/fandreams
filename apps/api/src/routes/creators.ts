@@ -124,7 +124,11 @@ creators.delete('/me/promos/:id', authMiddleware, creatorMiddleware, async (c) =
 // ── Promos for a creator (requires auth to prevent competitor scraping) ──
 
 creators.get('/:creatorId/promos', authMiddleware, async (c) => {
+  const { userId, role } = c.get('user')
   const creatorId = c.req.param('creatorId')
+  if (role === 'creator' && userId !== creatorId) {
+    return error(c, 403, 'FORBIDDEN', 'Acesso restrito')
+  }
   const promos = await creatorService.getActivePromos(creatorId)
   return success(c, promos)
 })
