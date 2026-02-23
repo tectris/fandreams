@@ -125,6 +125,25 @@ export async function markContactMessageRead(messageId: string) {
   return updated
 }
 
+export async function deleteContactMessage(messageId: string) {
+  const [deleted] = await db
+    .delete(contactMessages)
+    .where(eq(contactMessages.id, messageId))
+    .returning({ id: contactMessages.id })
+
+  if (!deleted) throw new AppError('NOT_FOUND', 'Mensagem nao encontrada', 404)
+  return deleted
+}
+
+export async function exportCookieConsents() {
+  const items = await db
+    .select()
+    .from(cookieConsents)
+    .orderBy(desc(cookieConsents.createdAt))
+
+  return items
+}
+
 // ── OTP Codes ──
 
 function generateOtp(): string {
