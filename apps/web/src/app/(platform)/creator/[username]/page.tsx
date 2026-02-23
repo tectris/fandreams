@@ -59,7 +59,7 @@ export default function CreatorProfilePage() {
     }
   }, [refCode])
 
-  const { data: profile } = useQuery({
+  const { data: profile, error: profileError } = useQuery({
     queryKey: ['profile', username],
     queryFn: async () => {
       const res = await api.get<any>(`/users/${username}`)
@@ -390,6 +390,17 @@ export default function CreatorProfilePage() {
       window.open(shareUrl, '_blank', 'noopener,noreferrer,width=600,height=500')
       setShowShareModal(false)
     }
+  }
+
+  if (profileError) {
+    const errMsg = (profileError as any)?.message || 'Erro desconhecido'
+    const isNotFound = (profileError as any)?.code === 'NOT_FOUND' || (profileError as any)?.status === 404
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-12 text-center">
+        <p className="text-lg font-bold mb-2">{isNotFound ? 'Perfil nao encontrado' : 'Erro ao carregar perfil'}</p>
+        <p className="text-muted text-sm">{isNotFound ? `O usuario @${username} nao existe ou foi removido.` : errMsg}</p>
+      </div>
+    )
   }
 
   if (!profile) {

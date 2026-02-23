@@ -14,6 +14,7 @@ type ApiResponse<T> = {
 
 class ApiClient {
   private accessToken: string | null = null
+  private refreshPromise: Promise<boolean> | null = null
 
   setToken(token: string | null) {
     this.accessToken = token
@@ -59,7 +60,11 @@ class ApiClient {
         if (refreshed) {
           headers['Authorization'] = `Bearer ${this.accessToken}`
           const retryRes = await fetch(`${API_URL}/api/v1${path}`, { ...options, headers })
-          return retryRes.json()
+          const retryJson = await retryRes.json()
+          if (!retryRes.ok) {
+            throw new ApiError(retryJson.error?.code || 'UNKNOWN', retryJson.error?.message || 'Erro desconhecido', retryRes.status)
+          }
+          return retryJson
         }
         this.logout()
       }
@@ -70,6 +75,24 @@ class ApiClient {
   }
 
   private async refreshToken(): Promise<boolean> {
+    // Deduplicate concurrent refresh calls: when multiple requests get 401
+    // simultaneously, they all try to refresh. With token rotation (the
+    // server blacklists the old refresh token), only the first succeeds.
+    // Subsequent attempts would fail and trigger logout. By deduplicating,
+    // all callers share a single refresh request.
+    if (this.refreshPromise) {
+      return this.refreshPromise
+    }
+
+    this.refreshPromise = this.doRefreshToken()
+    try {
+      return await this.refreshPromise
+    } finally {
+      this.refreshPromise = null
+    }
+  }
+
+  private async doRefreshToken(): Promise<boolean> {
     try {
       const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refreshToken') : null
       if (!refreshToken) return false
