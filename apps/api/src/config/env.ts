@@ -56,12 +56,20 @@ if (parsed.data.NODE_ENV === 'production') {
   const warnings: string[] = []
   const fatal: string[] = []
 
-  // Webhook secrets are REQUIRED when their corresponding provider is configured
+  // Webhook secrets are REQUIRED when their corresponding provider is configured in live mode (not sandbox)
   if (parsed.data.MERCADOPAGO_ACCESS_TOKEN && !parsed.data.MERCADOPAGO_WEBHOOK_SECRET) {
-    fatal.push('MERCADOPAGO_WEBHOOK_SECRET (required when MERCADOPAGO_ACCESS_TOKEN is set)')
+    if (parsed.data.MERCADOPAGO_SANDBOX === 'true') {
+      warnings.push('MERCADOPAGO_WEBHOOK_SECRET (recommended even in sandbox mode)')
+    } else {
+      fatal.push('MERCADOPAGO_WEBHOOK_SECRET (required when MERCADOPAGO_ACCESS_TOKEN is set in live mode)')
+    }
   }
   if (parsed.data.OPENPIX_APP_ID && !parsed.data.OPENPIX_WEBHOOK_SECRET) {
-    fatal.push('OPENPIX_WEBHOOK_SECRET (required when OPENPIX_APP_ID is set)')
+    if (parsed.data.OPENPIX_SANDBOX === 'true') {
+      warnings.push('OPENPIX_WEBHOOK_SECRET (recommended even in sandbox mode)')
+    } else {
+      fatal.push('OPENPIX_WEBHOOK_SECRET (required when OPENPIX_APP_ID is set in live mode)')
+    }
   }
 
   // Auth secrets: recommended but have safe fallbacks derived from JWT_SECRET (see auth.service.ts)
