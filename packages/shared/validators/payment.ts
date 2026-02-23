@@ -27,11 +27,14 @@ export const customPurchaseSchema = z.object({
   provider: z.string().default('mercadopago'),
 })
 
+const noHtml = (val: string) => !/[<>]/.test(val)
+const noHtmlMsg = { message: 'Caracteres HTML nao permitidos' }
+
 export const createTierSchema = z.object({
-  name: z.string().min(1).max(100),
+  name: z.string().min(1).max(100).refine(noHtml, noHtmlMsg),
   price: z.number().min(5).max(5000),
-  description: z.string().max(500).optional(),
-  benefits: z.array(z.string()).optional(),
+  description: z.string().max(500).refine(noHtml, noHtmlMsg).optional(),
+  benefits: z.array(z.string().refine(noHtml, noHtmlMsg)).optional(),
   maxSlots: z.number().int().positive().optional(),
 })
 
