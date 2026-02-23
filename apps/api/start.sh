@@ -1,19 +1,18 @@
 #!/bin/sh
 
-# Run SQL migrations BEFORE starting the server to avoid
-# queries referencing columns that don't exist yet in the database
+# Run database migrations BEFORE starting the server.
+# Uses migrate.mjs (plain ESM, no tsx needed) to avoid drizzle-kit
+# interactive prompts that block non-interactively.
+
 echo "=== Running database migrations ==="
-cd /app/apps/api
-timeout 60 npx tsx src/scripts/migrate.ts 2>&1
+node /app/apps/api/migrate.mjs 2>&1
 MIGRATE_EXIT=$?
 if [ $MIGRATE_EXIT -ne 0 ]; then
-  echo "WARNING: Database migrations failed (exit $MIGRATE_EXIT). Falling back to drizzle-kit push..."
-  cd /app/packages/database
-  timeout 60 npx drizzle-kit push --force 2>&1 || echo "WARNING: drizzle-kit push also failed"
+  echo "WARNING: Migrations failed (exit $MIGRATE_EXIT) - server may have issues"
 fi
 echo "=== Database setup complete ==="
 
-if [ -n "$ADMIN_EMAIL" ]; then
+if [ -n "$ADMIN_EMAIL" ] && [ -n "$ADMIN_PASSWORD" ]; then
   echo "=== Creating admin user ==="
   cd /app/apps/api
   timeout 30 npx tsx src/scripts/create-admin.ts 2>&1 || echo "WARNING: Admin setup failed or timed out"
