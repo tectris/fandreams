@@ -1,11 +1,17 @@
 #!/bin/sh
 
-# Run database schema push BEFORE starting the server to avoid
+# Run SQL migrations BEFORE starting the server to avoid
 # queries referencing columns that don't exist yet in the database
-echo "=== Running database schema push ==="
-cd /app/packages/database
-timeout 60 npx drizzle-kit push --force 2>&1 || echo "WARNING: Database schema push failed or timed out"
-echo "=== Database schema push complete ==="
+echo "=== Running database migrations ==="
+cd /app/apps/api
+timeout 60 npx tsx src/scripts/migrate.ts 2>&1
+MIGRATE_EXIT=$?
+if [ $MIGRATE_EXIT -ne 0 ]; then
+  echo "WARNING: Database migrations failed (exit $MIGRATE_EXIT). Falling back to drizzle-kit push..."
+  cd /app/packages/database
+  timeout 60 npx drizzle-kit push --force 2>&1 || echo "WARNING: drizzle-kit push also failed"
+fi
+echo "=== Database setup complete ==="
 
 if [ -n "$ADMIN_EMAIL" ]; then
   echo "=== Creating admin user ==="
