@@ -26,4 +26,5 @@ EXPOSE 3001
 ENV PORT=3001
 ENV NODE_ENV=production
 
-CMD ["node", "dist/index.js"]
+WORKDIR /app
+CMD ["sh", "apps/api/start.sh"]
