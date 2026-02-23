@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { createSubscriptionSchema } from '@fandreams/shared'
 import { validateBody } from '../middleware/validation'
-import { authMiddleware } from '../middleware/auth'
+import { authMiddleware, adminMiddleware } from '../middleware/auth'
 import { eq } from 'drizzle-orm'
 import { users } from '@fandreams/database'
 import * as subscriptionService from '../services/subscription.service'
@@ -92,8 +92,8 @@ subscriptionsRoute.get('/status/:creatorId', authMiddleware, async (c) => {
   return success(c, result)
 })
 
-// Expire overdue subscriptions (can be called by cron or admin)
-subscriptionsRoute.post('/expire', async (c) => {
+// Expire overdue subscriptions (admin only — cron runs internally via setInterval)
+subscriptionsRoute.post('/expire', authMiddleware, adminMiddleware, async (c) => {
   const expired = await subscriptionService.expireOverdueSubscriptions()
   return success(c, { expired: expired.length })
 })

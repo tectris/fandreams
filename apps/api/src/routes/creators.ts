@@ -121,9 +121,9 @@ creators.delete('/me/promos/:id', authMiddleware, creatorMiddleware, async (c) =
   }
 })
 
-// ── Public promos for a creator (used by fans) ──
+// ── Promos for a creator (requires auth to prevent competitor scraping) ──
 
-creators.get('/:creatorId/promos', async (c) => {
+creators.get('/:creatorId/promos', authMiddleware, async (c) => {
   const creatorId = c.req.param('creatorId')
   const promos = await creatorService.getActivePromos(creatorId)
   return success(c, promos)
